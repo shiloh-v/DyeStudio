@@ -1023,7 +1023,7 @@
                         </div>
                         
                         {/* Calendar grid */}
-                        <div className="grid grid-cols-7 gap-2">
+                        <div className="grid grid-cols-7 gap-2" style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)'}}>
                             {days.map((date, idx) => {
                                 if (!date) {
                                     return <div key={`empty-${idx}`} className="min-h-24"></div>;
@@ -1964,7 +1964,7 @@
 
                                 <div>
                                     <h4 className="font-medium text-sm text-gray-700 mb-2">Colors in Kit:</h4>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-2 gap-3" style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)'}}>
                                         {kit.colors.flatMap((color, colorIdx) => {
                                             const qty = parseInt(color.quantity || 1);
                                             const recipe = recipes.find(r => r.name === color.colorwayName);
