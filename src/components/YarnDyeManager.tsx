@@ -1,21 +1,36 @@
-import { useState, useEffect } from 'react';
-import { Dashboard } from './Dashboard';
-import { Calendar } from './Calendar';
-import { Recipes } from './Recipes';
-import { ColorLab } from './ColorLab';
-import { Kits } from './Kits';
-import { DyeSessions } from './DyeSessions';
-import { UpNext } from './UpNext';
-import { Inventory } from './Inventory';
-import { Pipeline } from './Pipeline';
-import { Sales } from './Sales';
-import { Gradients } from './Gradients';
-import { Settings } from './Settings';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { StorageManager } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 
+// Code-split each tab — its JS loads on demand instead of in the initial bundle.
+const named = (p, name) => lazy(() => p().then((m) => ({ default: m[name] })));
+const Dashboard = named(() => import('./Dashboard'), 'Dashboard');
+const Calendar = named(() => import('./Calendar'), 'Calendar');
+const Recipes = named(() => import('./Recipes'), 'Recipes');
+const ColorLab = named(() => import('./ColorLab'), 'ColorLab');
+const Kits = named(() => import('./Kits'), 'Kits');
+const DyeSessions = named(() => import('./DyeSessions'), 'DyeSessions');
+const UpNext = named(() => import('./UpNext'), 'UpNext');
+const Inventory = named(() => import('./Inventory'), 'Inventory');
+const Pipeline = named(() => import('./Pipeline'), 'Pipeline');
+const Sales = named(() => import('./Sales'), 'Sales');
+const Gradients = named(() => import('./Gradients'), 'Gradients');
+const Settings = named(() => import('./Settings'), 'Settings');
+
+const VALID_TABS = [
+    'dashboard', 'calendar', 'recipes', 'gradients', 'kits', 'colorlab',
+    'sessions', 'queue', 'inventory', 'pipeline', 'sales', 'settings',
+];
+
 export function YarnDyeManager() {
-    const [activeTab, setActiveTab] = useState('dashboard');
+    // Active tab is backed by the URL (e.g. /recipes) so refresh stays put,
+    // tabs are bookmarkable, and back/forward work.
+    const navigate = useNavigate();
+    const location = useLocation();
+    const rawTab = location.pathname.slice(1);
+    const activeTab = VALID_TABS.includes(rawTab) ? rawTab : 'dashboard';
+    const setActiveTab = (tab) => navigate('/' + tab);
     const [recipes, setRecipes] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [batches, setBatches] = useState([]);
@@ -414,6 +429,11 @@ export function YarnDyeManager() {
 
             {/* Main Content */}
             <main className="container mx-auto px-4 py-8">
+                <Suspense fallback={
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto"></div>
+                    </div>
+                }>
                 {activeTab === 'dashboard' && (
                     <Dashboard 
                         recipes={recipes} 
@@ -487,12 +507,13 @@ export function YarnDyeManager() {
                     />
                 )}
                 {activeTab === 'settings' && (
-                    <Settings 
+                    <Settings
                         settings={settings}
                         saveSettings={saveSettings}
                         inventory={inventory}
                     />
                 )}
+                </Suspense>
             </main>
         </div>
     );
