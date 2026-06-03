@@ -203,7 +203,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                 </div>
                 <button
                     onClick={() => { setShowForm(!showForm); if (showForm) resetForm(); }}
-                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ New Gradient'}
                 </button>
@@ -216,13 +216,13 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="🔍 Search gradients..."
-                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 flex-1 min-w-0"
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 flex-1 min-w-0"
                     style={{maxWidth: '300px'}}
                 />
                 <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value)}
-                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                 >
                     <option value="all">All Types</option>
                     <option value="dos">DOS Gradients</option>
@@ -244,7 +244,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                     onClick={() => setFormData({ ...formData, type: 'dos' })}
                                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                                         formData.type === 'dos' 
-                                            ? 'bg-purple-600 text-white' 
+                                            ? 'bg-teal-600 text-white' 
                                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                                 >
@@ -255,7 +255,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                     onClick={() => setFormData({ ...formData, type: 'dyeSquare' })}
                                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                                         formData.type === 'dyeSquare' 
-                                            ? 'bg-purple-600 text-white' 
+                                            ? 'bg-teal-600 text-white' 
                                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                                 >
@@ -270,7 +270,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder={formData.type === 'dos' ? 'e.g. Teal DOS Gradient' : 'e.g. Black × Blue Dye Square'}
                                 required
                             />
@@ -283,7 +283,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                 <select
                                     value={formData.dyeColor}
                                     onChange={(e) => setFormData({ ...formData, dyeColor: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     required
                                 >
                                     <option value="">Select dye color...</option>
@@ -299,7 +299,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                     <select
                                         value={formData.colorA}
                                         onChange={(e) => setFormData({ ...formData, colorA: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         required
                                     >
                                         <option value="">Select Color A...</option>
@@ -313,7 +313,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                     <select
                                         value={formData.colorB}
                                         onChange={(e) => setFormData({ ...formData, colorB: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         required
                                     >
                                         <option value="">Select Color B...</option>
@@ -332,7 +332,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                 <select
                                     value={formData.yarnBase}
                                     onChange={(e) => setFormData({ ...formData, yarnBase: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     required
                                 >
                                     <option value="">Select yarn base...</option>
@@ -347,7 +347,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                     type="number"
                                     value={formData.skeinWeight}
                                     onChange={(e) => setFormData({ ...formData, skeinWeight: parseFloat(e.target.value) || 10 })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     min="1"
                                     step="1"
                                 />
@@ -360,21 +360,21 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                 {formData.type === 'dos' ? '📊 DOS Shade Reference' : '📊 Dye Square Grid Preview'}
                             </label>
                             {formData.type === 'dos' ? (
-                                <div className="bg-purple-50 rounded-lg p-3 overflow-x-auto">
+                                <div className="bg-teal-50 rounded-lg p-3 overflow-x-auto">
                                     <table className="w-full text-xs">
                                         <thead>
-                                            <tr className="border-b border-purple-200">
-                                                <th className="text-left py-1 px-2 text-purple-700">Shade</th>
-                                                <th className="text-right py-1 px-2 text-purple-700">DOS %</th>
-                                                <th className="text-right py-1 px-2 text-purple-700">mL needed</th>
+                                            <tr className="border-b border-teal-200">
+                                                <th className="text-left py-1 px-2 text-teal-700">Shade</th>
+                                                <th className="text-right py-1 px-2 text-teal-700">DOS %</th>
+                                                <th className="text-right py-1 px-2 text-teal-700">mL needed</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {DOS_LEVELS.map((dos, i) => (
-                                                <tr key={dos} className={i % 2 === 0 ? 'bg-purple-50' : 'bg-white'}>
+                                                <tr key={dos} className={i % 2 === 0 ? 'bg-teal-50' : 'bg-white'}>
                                                     <td className="py-1 px-2 text-gray-700">Shade {i + 1}</td>
                                                     <td className="py-1 px-2 text-right text-gray-700">{dos}%</td>
-                                                    <td className="py-1 px-2 text-right font-medium text-purple-700">{calculateDosML(dos, Number(formData.skeinWeight) || 10)} mL</td>
+                                                    <td className="py-1 px-2 text-right font-medium text-teal-700">{calculateDosML(dos, Number(formData.skeinWeight) || 10)} mL</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -414,14 +414,14 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                         {/* Photos */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Photos {formData.photos?.length > 0 && <span className="text-purple-600">({formData.photos.length})</span>}
+                                Photos {formData.photos?.length > 0 && <span className="text-teal-600">({formData.photos.length})</span>}
                             </label>
                             <input
                                 ref={fileInputRef}
                                 type="file"
                                 accept="image/*"
                                 onChange={handlePhotoUpload}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                             />
                             <p className="text-xs text-gray-500 mt-1">Add photos of your gradient skeins</p>
                             {formData.photos && formData.photos.length > 0 && (
@@ -433,7 +433,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                                 <select
                                                     value={photo.label}
                                                     onChange={(e) => updatePhotoLabel(photo.id, e.target.value)}
-                                                    className="w-full text-sm px-2 py-1 border rounded focus:ring-1 focus:ring-purple-500"
+                                                    className="w-full text-sm px-2 py-1 border rounded focus:ring-1 focus:ring-teal-500"
                                                 >
                                                     {getPhotoLabels(formData.type).map(label => (
                                                         <option key={label} value={label}>{label}</option>
@@ -443,9 +443,9 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                             </div>
                                             <div className="flex flex-col gap-1 flex-shrink-0">
                                                 <button type="button" onClick={() => movePhoto(index, -1)} disabled={index === 0}
-                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === 0 ? 'text-gray-300' : 'text-purple-600 hover:bg-purple-50'}`}>▲</button>
+                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === 0 ? 'text-gray-300' : 'text-teal-600 hover:bg-teal-50'}`}>▲</button>
                                                 <button type="button" onClick={() => movePhoto(index, 1)} disabled={index === formData.photos.length - 1}
-                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === formData.photos.length - 1 ? 'text-gray-300' : 'text-purple-600 hover:bg-purple-50'}`}>▼</button>
+                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === formData.photos.length - 1 ? 'text-gray-300' : 'text-teal-600 hover:bg-teal-50'}`}>▼</button>
                                             </div>
                                             <button type="button" onClick={() => removePhoto(photo.id)}
                                                 className="text-red-500 hover:text-red-700 text-sm flex-shrink-0 px-1" title="Remove photo">✕</button>
@@ -462,13 +462,13 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={3}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Observations, results, or plans for this gradient..."
                             />
                         </div>
 
                         <div className="flex gap-3 pt-4">
-                            <button type="submit" className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium">
+                            <button type="submit" className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
                                 {editingId ? 'Update Gradient' : 'Save Gradient'}
                             </button>
                             <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium">

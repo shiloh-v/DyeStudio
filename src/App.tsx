@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './lib/supabase';
 import { YarnDyeManager } from './components/YarnDyeManager';
 import { LoginScreen } from './components/LoginScreen';
+import { ResetPassword } from './components/ResetPassword';
 
 // App wrapper — real auth via Supabase. Shows the login screen until there's
 // a session; swaps to the app on sign-in and back on sign-out.
@@ -25,18 +27,20 @@ function App() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
                     <p className="text-gray-600">Loading...</p>
                 </div>
             </div>
         );
     }
 
-    if (!session) {
-        return <LoginScreen />;
-    }
-
-    return <YarnDyeManager />;
+    return (
+        <Routes>
+            {/* Always reachable — the recovery email links here even mid-session */}
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/*" element={session ? <YarnDyeManager /> : <LoginScreen />} />
+        </Routes>
+    );
 }
 
 export default App;

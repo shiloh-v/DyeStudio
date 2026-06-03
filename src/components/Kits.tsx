@@ -92,7 +92,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ New Kit'}
                 </button>
@@ -111,7 +111,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., Autumn Kit"
                                 />
                             </div>
@@ -121,7 +121,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                     type="text"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., Fall-themed colorways"
                                 />
                             </div>
@@ -134,7 +134,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                     required
                                     value={formData.bundleType || '6-color DK set'}
                                     onChange={(e) => setFormData({ ...formData, bundleType: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     <option value="6-color DK set">6-color DK set</option>
                                     <option value="sock set">Sock set</option>
@@ -154,7 +154,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                             placeholder="Colorway name"
                                             value={color.colorwayName}
                                             onChange={(e) => updateColor(idx, 'colorwayName', e.target.value)}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             list={`colorway-list-${idx}`}
                                         />
                                         <datalist id={`colorway-list-${idx}`}>
@@ -170,7 +170,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                             placeholder="Qty"
                                             value={color.quantity}
                                             onChange={(e) => updateColor(idx, 'quantity', e.target.value)}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
                                     {formData.colors.length > 1 && (
@@ -189,7 +189,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                             <button
                                 type="button"
                                 onClick={addColor}
-                                className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                                className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                             >
                                 + Add Color
                             </button>
@@ -201,7 +201,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={2}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Any additional notes about this kit..."
                             />
                         </div>
@@ -209,7 +209,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 {editingId ? 'Update Kit' : 'Save Kit'}
                             </button>
@@ -262,7 +262,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                     const qty = parseInt(color.quantity || 1);
                                     const recipe = recipes.find(r => r.name === color.colorwayName);
                                     return Array.from({ length: qty }, (_, i) => (
-                                        <div key={`${colorIdx}-${i}`} className="p-2 bg-purple-50 rounded border">
+                                        <div key={`${colorIdx}-${i}`} className="p-2 bg-teal-50 rounded border">
                                             <div className="flex items-center gap-2">
                                                 {recipe && recipe.photo && (
                                                     <img 

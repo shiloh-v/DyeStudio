@@ -629,7 +629,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                         setSelectedSessionId(e.target.value);
                                         setCurrentPanIndex(0);
                                     }}
-                                    className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 text-lg font-medium"
+                                    className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-teal-500 text-lg font-medium"
                                 >
                                     {upcomingSessions.map(session => (
                                         <option key={session.id} value={session.id}>
@@ -661,14 +661,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-3">
                                     <div 
-                                        className="bg-purple-600 h-3 rounded-full transition-all"
+                                        className="bg-teal-600 h-3 rounded-full transition-all"
                                         style={{ width: `${((currentPanIndex + 1) / selectedSession.pans.length) * 100}%` }}
                                     />
                                 </div>
                             </div>
 
                             {/* Current Pan/Tray Details */}
-                            <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg card-shadow p-6 border-2 border-purple-300">
+                            <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-lg card-shadow p-6 border-2 border-teal-300">
                                 {currentPan.type === 'gradientTray' ? (
                                     // Gradient Tray Display
                                     <>
@@ -695,7 +695,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     <h3 className="text-2xl font-bold text-gray-900 mb-1">
                                                         🎨 Gradient Tray - {currentPan.gradientDye}
                                                     </h3>
-                                                    <p className="text-purple-700 font-medium mb-2">
+                                                    <p className="text-teal-700 font-medium mb-2">
                                                         Tray #{currentPanIndex + 1} • 10 colors • {currentPan.gradientYarnBase} ({currentPan.gradientHankSize}g)
                                                     </p>
                                                     <div className="flex gap-1 mt-2 flex-wrap">
@@ -755,7 +755,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     <h3 className="text-2xl font-bold text-gray-900 mb-1">
                                                         🔲 Dye Square - {currentPan.squareColorA} × {currentPan.squareColorB}
                                                     </h3>
-                                                    <p className="text-purple-700 font-medium mb-2">
+                                                    <p className="text-teal-700 font-medium mb-2">
                                                         Tray #{currentPanIndex + 1} • 25 squares • {currentPan.gradientYarnBase} ({currentPan.gradientHankSize}g)
                                                     </p>
                                                     <p className="text-sm text-gray-600">
@@ -970,7 +970,7 @@ Examples:
                                                 <img 
                                                     src={currentRecipe.photo} 
                                                     alt={currentPan.colorway}
-                                                    className="rounded-lg border-2 border-purple-300 shadow-md flex-shrink-0"
+                                                    className="rounded-lg border-2 border-teal-300 shadow-md flex-shrink-0"
                                                     style={{width: '120px', height: '120px', objectFit: 'cover'}}
                                                 />
                                             )}
@@ -978,7 +978,7 @@ Examples:
                                                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
                                                     🎨 {currentPan.colorway}
                                                 </h3>
-                                                <p className="text-purple-700 font-medium mb-2">
+                                                <p className="text-teal-700 font-medium mb-2">
                                                     Pan #{currentPanIndex + 1} • {currentPan.totalWeight}g total
                                                 </p>
                                                 {currentRecipe?.colorType && (
@@ -1046,11 +1046,11 @@ Examples:
                                     <h4 className="font-semibold text-gray-900 mb-3">Yarns in This Pan:</h4>
                                     <div className="space-y-2">
                                         {currentPan.yarns.map((yarn, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-3 bg-purple-50 rounded border-l-4 border-purple-500">
+                                            <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
                                                 <span className="font-medium">
                                                     {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
                                                 </span>
-                                                <span className="text-purple-700 font-semibold">
+                                                <span className="text-teal-700 font-semibold">
                                                     {yarn.quantity * parseFloat(yarn.hankSize)}g total
                                                 </span>
                                             </div>
@@ -1082,8 +1082,8 @@ Examples:
                                             {(currentColorSketch?.type === 'variegated' || currentRecipe?.colorType === 'variegated') ? (
                                                 // Display scaled color solutions or variegated sections
                                                 scaleIngredients(currentRecipe, currentPan.totalWeight, currentColorSketch).map((solution, idx) => (
-                                                    <div key={idx} className="border-2 border-purple-200 rounded-lg p-3 bg-purple-50">
-                                                        <div className="font-semibold text-purple-900 mb-2">
+                                                    <div key={idx} className="border-2 border-teal-200 rounded-lg p-3 bg-teal-50">
+                                                        <div className="font-semibold text-teal-900 mb-2">
                                                             {solution.name || `Solution ${idx + 1}`}
                                                             {solution.scaledTargetMl && (
                                                                 <span className="text-sm font-normal text-gray-600 ml-2">
@@ -1134,8 +1134,8 @@ Examples:
 
                                 {/* Editable Notes Section for Color Lab */}
                                 {currentColorSketch && (
-                                    <div className="bg-purple-50 border-2 border-purple-300 rounded-lg p-4 mt-4">
-                                        <h4 className="font-semibold text-purple-900 mb-2">📝 Experiment Notes</h4>
+                                    <div className="bg-teal-50 border-2 border-teal-300 rounded-lg p-4 mt-4">
+                                        <h4 className="font-semibold text-teal-900 mb-2">📝 Experiment Notes</h4>
                                         <textarea
                                             value={currentPan.experimentNotes || ''}
                                             onChange={(e) => {
@@ -1167,7 +1167,7 @@ Examples:
                                                     saveColorSketches(updatedSketches);
                                                 }
                                             }}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 resize-y"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 resize-y"
                                             rows={4}
                                             placeholder="Add notes about this color experiment...
 Examples:
@@ -1176,7 +1176,7 @@ Examples:
 - Adjustments made during dyeing
 - Ideas for next iteration"
                                         />
-                                        <p className="text-xs text-purple-600 mt-2">
+                                        <p className="text-xs text-teal-600 mt-2">
                                             💡 Use this to track what works and what doesn't for future reference
                                         </p>
                                     </div>

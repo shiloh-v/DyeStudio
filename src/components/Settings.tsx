@@ -97,7 +97,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                             onClick={() => setActiveSection(key)}
                             className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${
                                 activeSection === key 
-                                    ? 'bg-purple-600 text-white' 
+                                    ? 'bg-teal-600 text-white' 
                                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                             }`}
                         >
@@ -118,12 +118,12 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 value={newItem}
                                 onChange={(e) => setNewItem(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && addItem()}
-                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder={`Enter new ${sections[activeSection].label.toLowerCase()}...`}
                             />
                             <button
                                 onClick={addItem}
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 Add
                             </button>
@@ -142,20 +142,20 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 type="text"
                                 value={newMapping.supplierName}
                                 onChange={(e) => setNewMapping({ ...newMapping, supplierName: e.target.value })}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Supplier name (e.g., W2D4 SW DK)"
                             />
                             <input
                                 type="text"
                                 value={newMapping.myName}
                                 onChange={(e) => setNewMapping({ ...newMapping, myName: e.target.value })}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Your name (e.g., Luna DK)"
                             />
                         </div>
                         <button
                             onClick={addYarnBaseMapping}
-                            className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                            className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                         >
                             Add Mapping
                         </button>
@@ -174,20 +174,20 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 type="number"
                                 value={newSizeMapping.grams}
                                 onChange={(e) => setNewSizeMapping({ ...newSizeMapping, grams: e.target.value })}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Size in grams (e.g., 100)"
                             />
                             <input
                                 type="text"
                                 value={newSizeMapping.name}
                                 onChange={(e) => setNewSizeMapping({ ...newSizeMapping, name: e.target.value })}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Display name (e.g., Full skein)"
                             />
                         </div>
                         <button
                             onClick={addSizeMapping}
-                            className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                            className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                         >
                             Add Mapping
                         </button>
@@ -232,7 +232,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                     <div className="flex-1">
                                         <span className="font-medium">{mapping.supplierName}</span>
                                         <span className="mx-2">→</span>
-                                        <span className="text-purple-600">{mapping.myName}</span>
+                                        <span className="text-teal-600">{mapping.myName}</span>
                                     </div>
                                     <button
                                         onClick={() => removeYarnBaseMapping(idx)}
@@ -260,7 +260,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                     <div className="flex-1">
                                         <span className="font-medium">{mapping.grams}g</span>
                                         <span className="mx-2">→</span>
-                                        <span className="text-purple-600">{mapping.name}</span>
+                                        <span className="text-teal-600">{mapping.name}</span>
                                     </div>
                                     <button
                                         onClick={() => removeSizeMapping(idx)}

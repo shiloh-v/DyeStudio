@@ -290,7 +290,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 <h2 className="text-2xl font-bold text-gray-900">Production Pipeline</h2>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ New Batch'}
                 </button>
@@ -307,7 +307,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                 <select
                                     value={formData.recipeId}
                                     onChange={(e) => setFormData({ ...formData, recipeId: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     <option value="">Select a recipe (optional)</option>
                                     {recipes.map(r => (
@@ -323,7 +323,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                     type="text"
                                     value={formData.customColorway}
                                     onChange={(e) => setFormData({ ...formData, customColorway: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="Override colorway name"
                                 />
                             </div>
@@ -337,7 +337,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                     required
                                     value={formData.skeins}
                                     onChange={(e) => setFormData({ ...formData, skeins: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 />
                             </div>
                             <div>
@@ -345,7 +345,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                 <select
                                     value={formData.status}
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     {statuses.filter(s => s !== 'sold').map(status => (
                                         <option key={status} value={status} className="capitalize">
@@ -360,7 +360,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                     type="date"
                                     value={formData.startDate}
                                     onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 />
                             </div>
                         </div>
@@ -371,7 +371,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={2}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Any special notes about this batch..."
                             />
                         </div>
@@ -379,7 +379,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 Start Batch
                             </button>
@@ -402,7 +402,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                     const statusInfo = statusLabels[status];
                     
                     return (
-                        <div key={status} className="bg-white rounded-lg card-shadow p-4">
+                        <div key={status} className="bg-white rounded-lg card-shadow border border-gray-200 p-4">
                             <div className="flex items-center justify-between mb-2">
                                 <h3 className="font-semibold text-gray-900">
                                     {statusInfo.emoji} {statusInfo.label}
@@ -485,7 +485,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                         )}
                                         
                                         {batch.experimentNotes && (
-                                            <div className="text-xs text-purple-600 mb-2 italic">
+                                            <div className="text-xs text-teal-600 mb-2 italic">
                                                 🧪 Experiment: {batch.experimentNotes}
                                             </div>
                                         )}
@@ -522,7 +522,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                                     <button
                                                         key={s}
                                                         onClick={() => updateStatus(batch.id, s, batch.status)}
-                                                        className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50"
+                                                        className="text-xs px-2 py-1 bg-white border border-gray-300 shadow-sm rounded hover:bg-gray-50"
                                                         title={`Move to ${targetStatus.label}`}
                                                     >
                                                         {targetStatus.emoji}
@@ -531,7 +531,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                             })}
                                             <button
                                                 onClick={() => deleteBatch(batch.id)}
-                                                className="text-xs px-2 py-1 bg-white border rounded hover:bg-red-50 ml-auto"
+                                                className="text-xs px-2 py-1 bg-white border border-gray-300 shadow-sm rounded hover:bg-red-50 ml-auto"
                                                 title="Delete batch"
                                             >
                                                 🗑️

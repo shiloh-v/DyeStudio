@@ -52,7 +52,7 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                     </button>
                     <button
                         onClick={() => setCurrentDate(new Date())}
-                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                        className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
                     >
                         Today
                     </button>
@@ -65,7 +65,7 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                 </div>
             </div>
             
-            <div className="bg-white rounded-lg card-shadow p-6">
+            <div className="bg-gray-50 rounded-lg card-shadow border border-gray-200 p-6">
                 <h3 className="text-xl font-semibold mb-4 text-center">{monthNames[month]} {year}</h3>
                 
                 {/* Day headers */}
@@ -120,7 +120,7 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                                 finish: 'bg-gray-200 text-gray-600'
                             } : {
                                 prep: 'bg-yellow-100 text-yellow-800',
-                                dye: 'bg-purple-100 text-purple-800',
+                                dye: 'bg-teal-100 text-teal-800',
                                 rinse: 'bg-blue-100 text-blue-800',
                                 dry: 'bg-orange-100 text-orange-800',
                                 finish: 'bg-green-100 text-green-800'
@@ -152,12 +152,12 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                                 key={idx}
                                 className={`p-2 border rounded-lg overflow-y-auto ${
                                     isCurrentMonth ? 'bg-white' : 'bg-gray-50'
-                                } ${isToday ? 'border-purple-500 border-2' : 'border-gray-200'}`}
+                                } ${isToday ? 'border-teal-500 border-2' : 'border-gray-200'}`}
                                 style={{height: '128px'}}
                             >
                                 <div className={`text-sm font-medium ${
                                     isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
-                                } ${isToday ? 'text-purple-600 font-bold' : ''}`}>
+                                } ${isToday ? 'text-teal-600 font-bold' : ''}`}>
                                     {date.getDate()}
                                 </div>
                                 {cycleInfo.length > 0 && (

@@ -325,7 +325,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                     </button>
                     <button
                         onClick={() => setShowForm(!showForm)}
-                        className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                        className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                     >
                         {showForm ? '✕ Cancel' : '+ New Color Sketch'}
                     </button>
@@ -343,7 +343,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 <select
                                     value={formData.type}
                                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                 >
                                     <option value="tonal">Tonal</option>
                                     <option value="variegated">Variegated</option>
@@ -357,7 +357,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                     required
                                     value={formData.yarnWeight}
                                     onChange={(e) => setFormData({ ...formData, yarnWeight: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="100"
                                 />
                             </div>
@@ -369,7 +369,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 type="text"
                                 value={formData.customName}
                                 onChange={(e) => setFormData({ ...formData, customName: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="e.g., Ocean Waves, Sunset Dreams"
                             />
                             <p className="text-xs text-gray-500 mt-1">
@@ -388,7 +388,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                             value={dye.color}
                                             onChange={(e) => updateDye(idx, 'color', e.target.value)}
                                             placeholder="Type or select dye..."
-                                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         />
                                         <datalist id={`dye-list-${idx}`}>
                                             {availableDyes.map(dyeName => (
@@ -401,12 +401,12 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                             placeholder="Amount"
                                             value={dye.amount}
                                             onChange={(e) => updateDye(idx, 'amount', e.target.value)}
-                                            className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         />
                                         <select
                                             value={dye.unit}
                                             onChange={(e) => updateDye(idx, 'unit', e.target.value)}
-                                            className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                            className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         >
                                             <option value="ml">ml</option>
                                             <option value="g">g</option>
@@ -425,7 +425,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 <button
                                     type="button"
                                     onClick={addDye}
-                                    className="text-sm text-purple-600 hover:text-purple-800"
+                                    className="text-sm text-teal-600 hover:text-teal-800"
                                 >
                                     + Add Another Dye
                                 </button>
@@ -444,7 +444,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                 value={base.color}
                                                 onChange={(e) => updateBaseColor(idx, 'color', e.target.value)}
                                                 placeholder="Type or select dye..."
-                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             />
                                             <datalist id={`base-list-${idx}`}>
                                                 {availableDyes.map(dyeName => (
@@ -457,12 +457,12 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                 placeholder="Amount"
                                                 value={base.amount}
                                                 onChange={(e) => updateBaseColor(idx, 'amount', e.target.value)}
-                                                className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             />
                                             <select
                                                 value={base.unit}
                                                 onChange={(e) => updateBaseColor(idx, 'unit', e.target.value)}
-                                                className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="ml">ml</option>
                                             </select>
@@ -480,7 +480,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                     <button
                                         type="button"
                                         onClick={addBaseColor}
-                                        className="text-sm text-purple-600 hover:text-purple-800"
+                                        className="text-sm text-teal-600 hover:text-teal-800"
                                     >
                                         + Add Base Color
                                     </button>
@@ -495,7 +495,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                 value={speckle.color}
                                                 onChange={(e) => updateSpeckle(idx, 'color', e.target.value)}
                                                 placeholder="Type or select dye..."
-                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             />
                                             <datalist id={`speckle-list-${idx}`}>
                                                 {availableDyes.map(dyeName => (
@@ -508,12 +508,12 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                 placeholder="Amount"
                                                 value={speckle.amount}
                                                 onChange={(e) => updateSpeckle(idx, 'amount', e.target.value)}
-                                                className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             />
                                             <select
                                                 value={speckle.unit}
                                                 onChange={(e) => updateSpeckle(idx, 'unit', e.target.value)}
-                                                className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="g">g</option>
                                                 <option value="tsp">tsp</option>
@@ -532,7 +532,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                     <button
                                         type="button"
                                         onClick={addSpeckle}
-                                        className="text-sm text-purple-600 hover:text-purple-800"
+                                        className="text-sm text-teal-600 hover:text-teal-800"
                                     >
                                         + Add Speckle
                                     </button>
@@ -551,7 +551,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                 type="text"
                                                 value={section.name}
                                                 onChange={(e) => updateSectionName(sectionIdx, e.target.value)}
-                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 font-medium"
+                                                className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 font-medium"
                                                 placeholder="Section name"
                                             />
                                             {formData.sections.length > 1 && (
@@ -571,7 +571,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                     value={dye.color}
                                                     onChange={(e) => updateSectionDye(sectionIdx, dyeIdx, 'color', e.target.value)}
                                                     placeholder="Type or select dye..."
-                                                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <datalist id={`section-dye-list-${sectionIdx}-${dyeIdx}`}>
                                                     {availableDyes.map(dyeName => (
@@ -584,12 +584,12 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                     placeholder="Amount"
                                                     value={dye.amount}
                                                     onChange={(e) => updateSectionDye(sectionIdx, dyeIdx, 'amount', e.target.value)}
-                                                    className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                    className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                                 />
                                                 <select
                                                     value={dye.unit}
                                                     onChange={(e) => updateSectionDye(sectionIdx, dyeIdx, 'unit', e.target.value)}
-                                                    className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="ml">ml</option>
                                                     <option value="g">g</option>
@@ -608,7 +608,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                         <button
                                             type="button"
                                             onClick={() => addSectionDye(sectionIdx)}
-                                            className="text-sm text-purple-600 hover:text-purple-800"
+                                            className="text-sm text-teal-600 hover:text-teal-800"
                                         >
                                             + Add Dye to Section
                                         </button>
@@ -617,7 +617,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 <button
                                     type="button"
                                     onClick={addSection}
-                                    className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                                    className="text-sm text-teal-600 hover:text-teal-800 font-medium"
                                 >
                                     + Add Section
                                 </button>
@@ -631,7 +631,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={3}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Ideas, inspiration, adjustments..."
                             />
                         </div>
@@ -639,7 +639,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 {editingId ? 'Update' : 'Save'} Sketch
                             </button>
@@ -666,7 +666,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                     {sketch.customName && ` - ${sketch.customName}`}
                                 </h3>
                                 <div className="mt-1 flex gap-2">
-                                    <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded">
+                                    <span className="inline-block px-2 py-1 bg-teal-100 text-teal-700 text-xs rounded">
                                         {sketch.type}
                                     </span>
                                     {sketch.yarnWeight && (
@@ -686,7 +686,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 </button>
                                 <button
                                     onClick={() => duplicateSketch(sketch)}
-                                    className="text-purple-600 hover:bg-purple-50 px-2 py-1 rounded"
+                                    className="text-teal-600 hover:bg-teal-50 px-2 py-1 rounded"
                                     title="Duplicate"
                                 >
                                     📑
@@ -718,7 +718,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 <>
                                     <h4 className="text-sm font-medium text-gray-700">Sections:</h4>
                                     {sketch.sections?.map((section, idx) => (
-                                        <div key={idx} className="pl-2 border-l-2 border-purple-300">
+                                        <div key={idx} className="pl-2 border-l-2 border-teal-300">
                                             <div className="text-sm font-medium text-gray-700">{section.name}</div>
                                             {section.dyes.map((dye, dyeIdx) => (
                                                 <div key={dyeIdx} className="text-sm text-gray-600 flex justify-between pl-2">
@@ -774,9 +774,9 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                         )}
                         
                         {sketch.experimentNotes && (
-                            <div className="mt-3 pt-3 border-t border-purple-200 bg-purple-50 rounded p-2">
-                                <h4 className="text-xs font-semibold text-purple-900 mb-1">🧪 Experiment Notes:</h4>
-                                <p className="text-sm text-purple-700 whitespace-pre-line">{sketch.experimentNotes}</p>
+                            <div className="mt-3 pt-3 border-t border-teal-200 bg-teal-50 rounded p-2">
+                                <h4 className="text-xs font-semibold text-teal-900 mb-1">🧪 Experiment Notes:</h4>
+                                <p className="text-sm text-teal-700 whitespace-pre-line">{sketch.experimentNotes}</p>
                             </div>
                         )}
                     </div>

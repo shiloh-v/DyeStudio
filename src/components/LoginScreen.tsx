@@ -6,12 +6,14 @@ export function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [info, setInfo] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
         setError('');
+        setInfo('');
         const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
         if (authError) {
             setError(authError.message || 'Sign in failed');
@@ -19,6 +21,17 @@ export function LoginScreen() {
             setSubmitting(false);
         }
         // On success, onAuthStateChange in App swaps to the app — no further action here.
+    };
+
+    const handleForgot = async () => {
+        setError('');
+        setInfo('');
+        if (!email) { setError('Enter your email above first, then click "Forgot password?".'); return; }
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (resetError) setError(resetError.message || 'Could not send reset email.');
+        else setInfo('If an account exists for that email, a password-reset link is on its way.');
     };
 
     return (
@@ -38,7 +51,7 @@ export function LoginScreen() {
                                 required
                                 value={email}
                                 onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="you@example.com"
                                 autoFocus
                                 autoComplete="email"
@@ -52,7 +65,7 @@ export function LoginScreen() {
                                 required
                                 value={password}
                                 onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Enter password"
                                 autoComplete="current-password"
                             />
@@ -63,13 +76,26 @@ export function LoginScreen() {
                                 {error}
                             </div>
                         )}
+                        {info && (
+                            <div className="p-3 rounded-lg text-sm bg-green-50 text-green-700">
+                                {info}
+                            </div>
+                        )}
 
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-60"
+                            className="w-full bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-60"
                         >
                             {submitting ? 'Signing in…' : 'Sign In'}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleForgot}
+                            className="w-full text-sm text-teal-600 hover:underline bg-transparent border-0 cursor-pointer"
+                        >
+                            Forgot password?
                         </button>
                     </form>
                 </div>
