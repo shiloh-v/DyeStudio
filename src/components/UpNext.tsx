@@ -683,7 +683,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                             </div>
 
                             {/* Current Pan/Tray Details */}
-                            <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-lg card-shadow p-6 border-2 border-teal-300">
+                            <div className="queue-pan-card bg-gradient-to-br from-teal-50 to-blue-50 rounded-lg card-shadow p-6 border-2 border-teal-300">
                                 {currentPan.type === 'gradientTray' ? (
                                     // Gradient Tray Display
                                     <>
@@ -1005,46 +1005,47 @@ Examples:
                                         </div>
                                     </div>
                                     
-                                    {/* Navigation Buttons - Full Width Row */}
-                                    <div className="flex gap-3 w-full">
+                                    {/* Navigation: Back / Skip / Next */}
+                                    <div className="flex gap-2 w-full">
                                         <button
                                             onClick={goToPreviousPan}
                                             disabled={currentPanIndex === 0}
-                                            style={{
-                                                backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
-                                                color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
-                                                cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
-                                            }}
-                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            onMouseEnter={(e) => {
-                                                if (currentPanIndex !== 0) {
-                                                    e.currentTarget.style.backgroundColor = '#7e22ce';
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                if (currentPanIndex !== 0) {
-                                                    e.currentTarget.style.backgroundColor = '#9333ea';
-                                                }
-                                            }}
+                                            className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            ← Previous Pan
+                                            ← Back
+                                        </button>
+                                        <button
+                                            onClick={() => currentPanIndex < selectedSession.pans.length - 1 && setCurrentPanIndex(currentPanIndex + 1)}
+                                            disabled={currentPanIndex >= selectedSession.pans.length - 1}
+                                            title="Skip for now — come back via the pan numbers below"
+                                            className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Skip ⏭
                                         </button>
                                         <button
                                             onClick={markPanComplete}
-                                            style={{
-                                                backgroundColor: '#16a34a',
-                                                color: '#ffffff'
-                                            }}
-                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#15803d';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#16a34a';
-                                            }}
+                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
                                         >
                                             {currentPanIndex < selectedSession.pans.length - 1 ? 'Next Pan →' : 'Complete Session ✓'}
                                         </button>
+                                    </div>
+
+                                    {/* Jump to any pan (skip ahead / come back) */}
+                                    <div className="flex gap-1.5 overflow-x-auto mt-3 pb-1">
+                                        {selectedSession.pans.map((p, i) => (
+                                            <button
+                                                key={i}
+                                                onClick={() => setCurrentPanIndex(i)}
+                                                title={`Go to pan ${i + 1}`}
+                                                className={`flex-shrink-0 w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
+                                                    i === currentPanIndex
+                                                        ? 'bg-teal-600 text-white'
+                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                }`}
+                                            >
+                                                {i + 1}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
 
