@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DateUtils } from '../lib/dates';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
-    const [selectedSessionId, setSelectedSessionId] = useState('');
-    const [currentPanIndex, setCurrentPanIndex] = useState(0);
+    const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
+    const [currentPanIndex, setCurrentPanIndex] = useState(() => Number(localStorage.getItem('queue_pan')) || 0);
 
     // Unique yarn bases and their available hank sizes from inventory.
     // (Used by the ad-hoc pan editor; previously referenced but never defined,
@@ -29,16 +29,31 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         .filter(s => !s.archived && s.pans.length > 0)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    // Auto-select first session if none selected
+    // Restore the saved session if it's still active; otherwise auto-select the
+    // first one (or clear if none). Keeps the Queue on the same session when you
+    // navigate away and come back.
     React.useEffect(() => {
-        if (!selectedSessionId && upcomingSessions.length > 0) {
-            setSelectedSessionId(upcomingSessions[0].id.toString());
-            setCurrentPanIndex(0);
+        const stillActive = upcomingSessions.some(s => s.id.toString() === selectedSessionId);
+        if (!stillActive) {
+            if (upcomingSessions.length > 0) {
+                setSelectedSessionId(upcomingSessions[0].id.toString());
+                setCurrentPanIndex(0);
+            } else if (selectedSessionId) {
+                setSelectedSessionId('');
+            }
         }
-    }, [upcomingSessions.length]);
+    }, [upcomingSessions.length, selectedSessionId]);
 
     const selectedSession = dyeSessions.find(s => s.id === parseInt(selectedSessionId));
     const currentPan = selectedSession?.pans[currentPanIndex];
+
+    // Persist the Queue position so it survives navigating away/back.
+    useEffect(() => { localStorage.setItem('queue_session', selectedSessionId); }, [selectedSessionId]);
+    useEffect(() => { localStorage.setItem('queue_pan', String(currentPanIndex)); }, [currentPanIndex]);
+    // Clamp a stale pan index (e.g. a saved index beyond a now-shorter session).
+    useEffect(() => {
+        if (selectedSession && currentPanIndex >= selectedSession.pans.length) setCurrentPanIndex(0);
+    }, [selectedSessionId, selectedSession, currentPanIndex]);
     
     // Get fresh recipe data if pan has a recipe OR color sketch
     const currentRecipe = currentPan?.recipeId 
