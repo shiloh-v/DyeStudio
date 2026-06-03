@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import type { InventoryItem } from '../types';
 
 export function Inventory({ inventory, saveInventory, settings }) {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [filterCategory, setFilterCategory] = useState('all');
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<Partial<InventoryItem>>({
         name: '',
         category: 'dye',
         quantity: '',
@@ -329,7 +330,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             onChange={(e) => setFormData({ ...formData, wpi: e.target.value })}
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                             placeholder="10"
-                                            maxLength="2"
+                                            maxLength={2}
                                         />
                                     </div>
                                     <div className="col-span-2">
@@ -340,7 +341,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             onChange={(e) => setFormData({ ...formData, plies: e.target.value })}
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                             placeholder="3"
-                                            maxLength="2"
+                                            maxLength={2}
                                         />
                                     </div>
                                 </div>
@@ -359,7 +360,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             src={formData.image} 
                                             alt="Yarn preview" 
                                             className="mt-2 h-6 w-auto border rounded"
-                                            onError={(e) => e.target.style.display = 'none'}
+                                            onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
                                         />
                                     )}
                                 </div>
@@ -418,7 +419,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         
                                         // Convert between oz/lb/g for dyes
                                         if (formData.category === 'dye' && formData.quantity) {
-                                            const qty = parseFloat(formData.quantity);
+                                            const qty = parseFloat(String(formData.quantity));
                                             const oldUnit = formData.unit;
                                             
                                             // Convert to grams first
@@ -473,7 +474,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                 setFormData({ ...formData, purchasePrice: price });
                                                 // Auto-calculate cost per gram if both fields are filled
                                                 if (price && formData.purchaseOunces) {
-                                                    const costPerOz = parseFloat(price) / parseFloat(formData.purchaseOunces);
+                                                    const costPerOz = parseFloat(price) / parseFloat(String(formData.purchaseOunces));
                                                     const costPerGram = costPerOz / 28.3495;
                                                     setFormData({ 
                                                         ...formData, 
@@ -497,7 +498,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                 setFormData({ ...formData, purchaseOunces: ounces });
                                                 // Auto-calculate cost per gram if both fields are filled
                                                 if (formData.purchasePrice && ounces) {
-                                                    const costPerOz = parseFloat(formData.purchasePrice) / parseFloat(ounces);
+                                                    const costPerOz = parseFloat(String(formData.purchasePrice)) / parseFloat(ounces);
                                                     const costPerGram = costPerOz / 28.3495;
                                                     setFormData({ 
                                                         ...formData, 
@@ -574,7 +575,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="2"
+                                rows={2}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                             />
                         </div>
@@ -646,7 +647,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                             border: '1px solid #d1d5db',
                                                             flexShrink: 0
                                                         }}
-                                                        onError={(e) => e.target.style.display = 'none'}
+                                                        onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
                                                     />
                                                 )}
                                                 <div>

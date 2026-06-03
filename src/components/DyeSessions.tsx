@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { DateUtils } from '../lib/dates';
+import type { Pan } from '../types';
 
 export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, settings, kits, colorSketches }) {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [expandedSessions, setExpandedSessions] = useState({});
     const [showArchived, setShowArchived] = useState(false);
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<{ name: string; date: string; pans: Pan[]; notes: string }>({
         name: '',
         date: DateUtils.getTodayEST(),
         pans: [],
         notes: ''
     });
-    const [currentPan, setCurrentPan] = useState({
+    const [currentPan, setCurrentPan] = useState<Pan>({
         type: 'pan', // 'pan', 'gradientTray', 'dyeSquareTray', 'kit', or 'colorLab'
         colorway: '',
         recipeId: '',
@@ -50,9 +51,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     // Used both for per-session shortage checks AND for accumulating commitments
     // across multiple planned (non-archived) sessions so we can warn earlier.
     const calculatePanNeeds = (pans) => {
-        const yarnNeeded = {};
-        const ballBandsNeeded = {};
-        const dyesNeeded = {};
+        const yarnNeeded: Record<string, number> = {};
+        const ballBandsNeeded: Record<string, number> = {};
+        const dyesNeeded: Record<string, boolean> = {};
 
         (pans || []).forEach(pan => {
             if (pan.type === 'gradientTray') {
@@ -99,7 +100,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     // This lets us subtract already-spoken-for yarn from on-hand inventory
     // so a second planned session correctly shows a shortage warning.
     const calculateCommittedNeeds = (excludeSessionId = null) => {
-        const committed = { yarnNeeded: {}, ballBandsNeeded: {} };
+        const committed: { yarnNeeded: Record<string, number>; ballBandsNeeded: Record<string, number> } = { yarnNeeded: {}, ballBandsNeeded: {} };
         dyeSessions.forEach(s => {
             if (s.archived) return;
             if (excludeSessionId != null && s.id === excludeSessionId) return;
@@ -277,7 +278,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         } else {
             currentPan.yarns.forEach(yarn => {
                 const available = getEffectiveAvailable(yarn.base, yarn.hankSize);
-                const needed = parseInt(yarn.quantity);
+                const needed = parseInt(String(yarn.quantity));
                 if (available < needed) {
                     inventoryWarnings.push(`${yarn.base} (${yarn.hankSize}g): need ${needed}, have ${available} available after other planned sessions`);
                 }
@@ -304,7 +305,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             });
         } else if (currentPan.type === 'pan' || currentPan.type === 'colorLab') {
             const totalWeight = currentPan.yarns.reduce((sum, y) => {
-                return sum + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0);
+                return sum + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0);
             }, 0);
             
             const recipe = currentPan.recipeId ? recipes.find(r => r.id === parseInt(currentPan.recipeId)) : null;
@@ -1468,7 +1469,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="3"
+                                rows={3}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Any notes about this dye session..."
                             />
@@ -1497,7 +1498,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             <div className="space-y-4">
                 {dyeSessions
                     .filter(session => showArchived ? session.archived : !session.archived) // Filter by archive status
-                    .sort((a, b) => new Date(a.date) - new Date(b.date)) // Sort by date, earliest first
+                    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // Sort by date, earliest first
                     .map(session => (
                     <div key={session.id} className={`bg-white rounded-lg card-shadow p-6 ${session.archived ? 'opacity-75 border-2 border-gray-300' : ''}`}>
                         <div className="flex justify-between items-start mb-4">
@@ -1794,7 +1795,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     
                                     // Calculate expected revenue based on typical prices
                                     let expectedRevenue = 0;
-                                    const yarnGroups = {};
+                                    const yarnGroups: Record<string, number> = {};
                                     session.pans.forEach(pan => {
                                         if (pan.type === 'gradientTray') {
                                             const key = `${pan.gradientYarnBase}-${pan.gradientHankSize}`;

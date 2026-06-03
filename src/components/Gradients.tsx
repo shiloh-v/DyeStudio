@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { GradientCard } from './GradientCard';
+import type { Gradient } from '../types';
 
 export function Gradients({ gradients, saveGradients, inventory }) {
     const [showForm, setShowForm] = useState(false);
@@ -44,7 +45,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
         created: new Date().toISOString()
     };
 
-    const [formData, setFormData] = useState(emptyForm);
+    const [formData, setFormData] = useState<Partial<Gradient>>(emptyForm);
 
     const availableDyes = inventory
         .filter(item => item.category === 'dye')
@@ -87,7 +88,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
         } else {
             gradientData.squares = [];
             let squareNum = 1;
-            const sw = formData.skeinWeight || 10;
+            const sw = Number(formData.skeinWeight) || 10;
             SQUARE_AMOUNTS.forEach(colorA_ml => {
                 SQUARE_AMOUNTS.forEach(colorB_ml => {
                     gradientData.squares.push({
@@ -157,7 +158,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                     const current = formData.photos || [];
                     setFormData({ ...formData, photos: [...current, newPhoto], photo: current.length === 0 ? compressed : formData.photo });
                 };
-                img.src = reader.result;
+                img.src = reader.result as string;
             };
             reader.readAsDataURL(file);
         }
@@ -191,7 +192,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                    g.colorB?.toLowerCase().includes(term) ||
                    g.gradientId?.toLowerCase().includes(term);
         })
-        .sort((a, b) => new Date(b.created) - new Date(a.created));
+        .sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
 
     return (
         <div className="space-y-6">
@@ -373,7 +374,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                                 <tr key={dos} className={i % 2 === 0 ? 'bg-purple-50' : 'bg-white'}>
                                                     <td className="py-1 px-2 text-gray-700">Shade {i + 1}</td>
                                                     <td className="py-1 px-2 text-right text-gray-700">{dos}%</td>
-                                                    <td className="py-1 px-2 text-right font-medium text-purple-700">{calculateDosML(dos, formData.skeinWeight || 10)} mL</td>
+                                                    <td className="py-1 px-2 text-right font-medium text-purple-700">{calculateDosML(dos, Number(formData.skeinWeight) || 10)} mL</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -395,7 +396,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                                                 <tr key={a} className={ri % 2 === 0 ? 'bg-blue-50' : 'bg-white'}>
                                                     <td className="py-1 px-1 font-medium text-blue-700">{a} mL</td>
                                                     {SQUARE_AMOUNTS.map(b => {
-                                                        const dos = ((a + b) / (formData.skeinWeight || 10)).toFixed(formData.skeinWeight === 10 ? 2 : 4);
+                                                        const dos = ((a + b) / (Number(formData.skeinWeight) || 10)).toFixed(formData.skeinWeight === 10 ? 2 : 4);
                                                         return (
                                                             <td key={b} className="py-1 px-1 text-center text-gray-700">
                                                                 {dos}%
@@ -460,7 +461,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="3"
+                                rows={3}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Observations, results, or plans for this gradient..."
                             />

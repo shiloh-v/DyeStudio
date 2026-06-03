@@ -12,14 +12,14 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     const avgSale = soldBatches.length > 0 ? totalRevenue / soldBatches.length : 0;
 
     // Sales by month from sold batches
-    const salesByMonth = soldBatches.reduce((acc, batch) => {
+    const salesByMonth: Record<string, number> = soldBatches.reduce((acc, batch) => {
         const month = new Date(batch.soldDate || batch.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
         acc[month] = (acc[month] || 0) + (batch.salePrice || 0);
         return acc;
-    }, {});
+    }, {} as Record<string, number>);
     
     // Top selling bases (by revenue)
-    const baseStats = {};
+    const baseStats: Record<string, { count: number; revenue: number }> = {};
     soldBatches.forEach(batch => {
         if (batch.yarnDetails) {
             batch.yarnDetails.forEach(yarn => {
@@ -41,7 +41,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
         .slice(0, 5);
     
     // Top selling colorways (by revenue)
-    const colorwayStats = {};
+    const colorwayStats: Record<string, { count: number; revenue: number }> = {};
     soldBatches.forEach(batch => {
         const key = batch.colorway;
         if (!colorwayStats[key]) {
@@ -55,7 +55,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
         .slice(0, 5);
     
     // Top base + colorway combos
-    const comboStats = {};
+    const comboStats: Record<string, { count: number; revenue: number }> = {};
     soldBatches.forEach(batch => {
         if (batch.yarnDetails) {
             batch.yarnDetails.forEach(yarn => {
@@ -76,7 +76,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
         .slice(0, 5);
     
     // Performance over time (last 6 months)
-    const monthlyPerformance = {};
+    const monthlyPerformance: Record<string, { sales: number; revenue: number; profit: number; totalRevenue: number }> = {};
     soldBatches.forEach(batch => {
         const month = new Date(batch.soldDate || batch.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
         if (!monthlyPerformance[month]) {
@@ -89,7 +89,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     });
     
     const performanceData = Object.entries(monthlyPerformance)
-        .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+        .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
         .slice(-6) // Last 6 months
         .map(([month, data]) => ({
             month,
@@ -260,7 +260,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                 <div className="bg-white rounded-lg card-shadow p-6">
                     <h3 className="text-lg font-semibold mb-4">Revenue by Month</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                        {Object.entries(salesByMonth).sort((a, b) => new Date(b[0]) - new Date(a[0])).map(([month, amount]) => (
+                        {Object.entries(salesByMonth).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([month, amount]) => (
                             <div key={month} className="text-center p-3 bg-purple-50 rounded-lg">
                                 <div className="text-sm text-gray-600 mb-1">{month}</div>
                                 <div className="text-lg font-bold text-purple-600">${amount.toFixed(2)}</div>

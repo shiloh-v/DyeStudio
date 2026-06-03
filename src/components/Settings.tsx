@@ -289,7 +289,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 inventory: StorageManager.get('inventory'),
                                 batches: StorageManager.get('batches'),
                                 sales: StorageManager.get('sales'),
-                                dyeSessions: StorageManager.get('dyeSessions'),
+                                dyeSessions: StorageManager.get('dye_sessions'),
                                 kits: StorageManager.get('kits'),
                                 settings: StorageManager.get('settings')
                             };

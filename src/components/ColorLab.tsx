@@ -630,7 +630,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="3"
+                                rows={3}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Ideas, inspiration, adjustments..."
                             />

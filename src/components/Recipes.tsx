@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import type { Recipe } from '../types';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory }) {
     const [showForm, setShowForm] = useState(false);
@@ -7,7 +8,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
     const [filterColorType, setFilterColorType] = useState('all');
     const [sortBy, setSortBy] = useState('name');
     const fileInputRef = React.useRef(null);
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<Partial<Recipe>>({
         recipeId: '',
         name: '',
         yarnWeight: '',
@@ -171,7 +172,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                     const currentPhotos = formData.photos || [];
                     setFormData({ ...formData, photos: [...currentPhotos, newPhoto], photo: currentPhotos.length === 0 ? compressedDataUrl : formData.photo });
                 };
-                img.src = reader.result;
+                img.src = reader.result as string;
             };
             reader.readAsDataURL(file);
         }
@@ -553,7 +554,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                             <textarea
                                 value={formData.instructions}
                                 onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
-                                rows="4"
+                                rows={4}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Step-by-step dyeing process..."
                             />
@@ -626,7 +627,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="3"
+                                rows={3}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Any tips, variations, or notes about this colorway..."
                             />

@@ -200,7 +200,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="2"
+                                rows={2}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Any additional notes about this kit..."
                             />

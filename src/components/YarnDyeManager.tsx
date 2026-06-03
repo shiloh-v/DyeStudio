@@ -204,7 +204,7 @@ export function YarnDyeManager() {
                                     input.type = 'file';
                                     input.accept = '.json';
                                     input.onchange = async (e) => {
-                                        const file = e.target.files[0];
+                                        const file = (e.target as HTMLInputElement).files[0];
                                         if (file) {
                                             try {
                                                 const text = await file.text();

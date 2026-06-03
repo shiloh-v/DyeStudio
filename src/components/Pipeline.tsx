@@ -370,7 +370,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                             <textarea
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                rows="2"
+                                rows={2}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
                                 placeholder="Any special notes about this batch..."
                             />
@@ -452,7 +452,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                                 alt={batch.colorway}
                                                 className="rounded object-cover flex-shrink-0"
                                                 style={{ width: '60px', height: '60px', minWidth: '60px', minHeight: '60px', maxWidth: '60px', maxHeight: '60px' }}
-                                                onError={(e) => e.target.style.display = 'none'}
+                                                onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
                                             />
                                         )}
                                         

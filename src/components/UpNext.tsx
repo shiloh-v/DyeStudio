@@ -27,7 +27,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     // Get all non-archived sessions with pans
     const upcomingSessions = dyeSessions
         .filter(s => !s.archived && s.pans.length > 0)
-        .sort((a, b) => new Date(a.date) - new Date(b.date));
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Auto-select first session if none selected
     React.useEffect(() => {
@@ -922,7 +922,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                         value={currentPan.experimentNotes || ''}
                                                         onChange={(e) => updateAdHocPan({ experimentNotes: e.target.value })}
                                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 resize-y bg-white"
-                                                        rows="5"
+                                                        rows={5}
                                                         placeholder="What did you do? Capture it now so you can recreate it (or avoid it) later.
 Examples:
 - Dyes used and approximate amounts
@@ -1003,12 +1003,12 @@ Examples:
                                             className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
                                             onMouseEnter={(e) => {
                                                 if (currentPanIndex !== 0) {
-                                                    e.target.style.backgroundColor = '#7e22ce';
+                                                    e.currentTarget.style.backgroundColor = '#7e22ce';
                                                 }
                                             }}
                                             onMouseLeave={(e) => {
                                                 if (currentPanIndex !== 0) {
-                                                    e.target.style.backgroundColor = '#9333ea';
+                                                    e.currentTarget.style.backgroundColor = '#9333ea';
                                                 }
                                             }}
                                         >
@@ -1022,10 +1022,10 @@ Examples:
                                             }}
                                             className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
                                             onMouseEnter={(e) => {
-                                                e.target.style.backgroundColor = '#15803d';
+                                                e.currentTarget.style.backgroundColor = '#15803d';
                                             }}
                                             onMouseLeave={(e) => {
-                                                e.target.style.backgroundColor = '#16a34a';
+                                                e.currentTarget.style.backgroundColor = '#16a34a';
                                             }}
                                         >
                                             {currentPanIndex < selectedSession.pans.length - 1 ? 'Next Pan →' : 'Complete Session ✓'}
@@ -1168,7 +1168,7 @@ Examples:
                                                 }
                                             }}
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 resize-y"
-                                            rows="4"
+                                            rows={4}
                                             placeholder="Add notes about this color experiment...
 Examples:
 - Dye absorption observations
@@ -1225,7 +1225,7 @@ Examples:
                                                 {/* Per-skein details grouped by base+size */}
                                                 {costs.skeinDetails && costs.skeinDetails.length > 0 && (() => {
                                                     // Group by base+hankSize
-                                                    const grouped = costs.skeinDetails.reduce((acc, skein) => {
+                                                    const grouped = costs.skeinDetails.reduce<Record<string, { count: number; cost: number }>>((acc, skein) => {
                                                         const key = `${skein.base} ${skein.hankSize}g`;
                                                         if (!acc[key]) {
                                                             acc[key] = { count: 0, cost: skein.cost };
