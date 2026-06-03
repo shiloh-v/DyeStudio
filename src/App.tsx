@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from './lib/supabase';
 import { YarnDyeManager } from './components/YarnDyeManager';
-import { PasswordScreen } from './components/PasswordScreen';
+import { LoginScreen } from './components/LoginScreen';
 
-// App Wrapper with Password Protection
+// App wrapper — real auth via Supabase. Shows the login screen until there's
+// a session; swaps to the app on sign-in and back on sign-out.
 function App() {
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const auth = sessionStorage.getItem('dyestudio_auth');
-        if (auth === 'true') {
-            setIsAuthenticated(true);
-        }
-        setLoading(false);
+        supabase.auth.getSession().then(({ data }) => {
+            setSession(data.session);
+            setLoading(false);
+        });
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+            setSession(newSession);
+        });
+        return () => subscription.unsubscribe();
     }, []);
 
     if (loading) {
@@ -26,8 +32,8 @@ function App() {
         );
     }
 
-    if (!isAuthenticated) {
-        return <PasswordScreen onAuthenticated={() => setIsAuthenticated(true)} />;
+    if (!session) {
+        return <LoginScreen />;
     }
 
     return <YarnDyeManager />;

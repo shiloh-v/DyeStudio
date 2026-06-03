@@ -5,5 +5,9 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-// Fixed user id — single-user app, no auth yet.
-export const USER_ID = 'default-user';
+// Current authenticated user's id (UUID). Reads the locally-cached session
+// (no network round-trip). Returns null when not signed in.
+export async function getUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? null;
+}
