@@ -65,7 +65,7 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                 </div>
             </div>
             
-            <div className="bg-white rounded-lg card-shadow p-6">
+            <div className="bg-gray-50 rounded-lg card-shadow border border-gray-200 p-6">
                 <h3 className="text-xl font-semibold mb-4 text-center">{monthNames[month]} {year}</h3>
                 
                 {/* Day headers */}

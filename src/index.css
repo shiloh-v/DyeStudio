@@ -51,6 +51,16 @@
 .dark .text-gray-500 { color: #94a3b8; }
 .dark .text-gray-400 { color: #64748b; }
 
+/* Accent text — the default shades are dark; lighten them so they're readable
+   on dark backgrounds (recipe IDs, headers, table values, links, etc.). */
+.dark .text-teal-600 { color: #2dd4bf; }
+.dark .text-teal-700 { color: #5eead4; }
+.dark .text-teal-800 { color: #99f6e4; }
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { color: #60a5fa; }
+.dark .text-red-600, .dark .text-red-800 { color: #f87171; }
+.dark .text-green-600, .dark .text-green-700 { color: #34d399; }
+.dark .text-yellow-600, .dark .text-yellow-700 { color: #fbbf24; }
+
 /* Form controls (preflight is disabled, so style them explicitly) */
 .dark input, .dark select, .dark textarea {
     background-color: #334155; color: #f1f5f9; border-color: #475569;
