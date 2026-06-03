@@ -83,6 +83,60 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         setCompletedPans(next);
         saveCompleted(next);
     };
+
+    // Shared pan navigation (Back / Skip / Mark Dyed + jump dots + unmark),
+    // used by every pan type. Returns elements (closes over current state).
+    const panNav = () => (
+        <>
+            <div className="flex gap-2 w-full">
+                <button
+                    onClick={goToPreviousPan}
+                    disabled={currentPanIndex === 0}
+                    className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    ← Back
+                </button>
+                <button
+                    onClick={() => currentPanIndex < selectedSession.pans.length - 1 && setCurrentPanIndex(currentPanIndex + 1)}
+                    disabled={currentPanIndex >= selectedSession.pans.length - 1}
+                    title="Skip for now — come back via the pan numbers below"
+                    className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Skip ⏭
+                </button>
+                <button
+                    onClick={completePan}
+                    className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
+                >
+                    {completedPans.has(currentPanIndex) ? 'Next Pan →' : '✓ Mark Dyed'}
+                </button>
+            </div>
+            <div className="flex gap-1.5 overflow-x-auto mt-3 px-1 py-2">
+                {selectedSession.pans.map((p, i) => (
+                    <button
+                        key={i}
+                        onClick={() => setCurrentPanIndex(i)}
+                        title={`Pan ${i + 1}${completedPans.has(i) ? ' — dyed' : ''}`}
+                        className={`flex-shrink-0 w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
+                            completedPans.has(i)
+                                ? 'bg-teal-600 text-white'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        } ${i === currentPanIndex ? 'ring-2 ring-teal-400' : ''}`}
+                    >
+                        {i + 1}
+                    </button>
+                ))}
+            </div>
+            {completedPans.has(currentPanIndex) && (
+                <button
+                    onClick={() => unmarkPan(currentPanIndex)}
+                    className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline bg-transparent"
+                >
+                    ↩ Unmark this pan as dyed
+                </button>
+            )}
+        </>
+    );
     
     // Get fresh recipe data if pan has a recipe OR color sketch
     const currentRecipe = currentPan?.recipeId 
@@ -753,28 +807,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                             </div>
                                         </div>
                                         
-                                        {/* Navigation buttons for gradient tray */}
-                                        <div className="flex gap-3 w-full">
-                                            <button
-                                                onClick={goToPreviousPan}
-                                                disabled={currentPanIndex === 0}
-                                                style={{
-                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
-                                                    color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
-                                                    cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
-                                                }}
-                                                className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            >
-                                                ← Previous
-                                            </button>
-                                            <button
-                                                onClick={markPanComplete}
-                                                style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
-                                                className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            >
-                                                {currentPanIndex < selectedSession.pans.length - 1 ? 'Next →' : 'Complete Session ✓'}
-                                            </button>
-                                        </div>
+                                        {panNav()}
                                     </>
                                 ) : currentPan.type === 'dyeSquareTray' ? (
                                     // Dye Square Tray Display
@@ -809,28 +842,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                             </div>
                                         </div>
                                         
-                                        {/* Navigation buttons for dye square tray */}
-                                        <div className="flex gap-3 w-full">
-                                            <button
-                                                onClick={goToPreviousPan}
-                                                disabled={currentPanIndex === 0}
-                                                style={{
-                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
-                                                    color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
-                                                    cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
-                                                }}
-                                                className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            >
-                                                ← Previous
-                                            </button>
-                                            <button
-                                                onClick={markPanComplete}
-                                                style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
-                                                className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            >
-                                                {currentPanIndex < selectedSession.pans.length - 1 ? 'Next →' : 'Complete Session ✓'}
-                                            </button>
-                                        </div>
+                                        {panNav()}
                                     </>
                                 ) : currentPan.type === 'adHoc' ? (
                                     // Ad Hoc Pan Display - editable everything
@@ -979,28 +991,7 @@ Examples:
                                                     </p>
                                                 </div>
 
-                                                {/* Navigation buttons */}
-                                                <div className="flex gap-3 w-full">
-                                                    <button
-                                                        onClick={goToPreviousPan}
-                                                        disabled={currentPanIndex === 0}
-                                                        style={{
-                                                            backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
-                                                            color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
-                                                            cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
-                                                        }}
-                                                        className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                                    >
-                                                        ← Previous
-                                                    </button>
-                                                    <button
-                                                        onClick={markPanComplete}
-                                                        style={{ backgroundColor: '#16a34a', color: '#ffffff' }}
-                                                        className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                                    >
-                                                        {currentPanIndex < selectedSession.pans.length - 1 ? 'Next →' : 'Complete Session ✓'}
-                                                    </button>
-                                                </div>
+                                                {panNav()}
                                             </>
                                         );
                                     })()
@@ -1034,58 +1025,7 @@ Examples:
                                         </div>
                                     </div>
                                     
-                                    {/* Navigation: Back / Skip / Next */}
-                                    <div className="flex gap-2 w-full">
-                                        <button
-                                            onClick={goToPreviousPan}
-                                            disabled={currentPanIndex === 0}
-                                            className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            ← Back
-                                        </button>
-                                        <button
-                                            onClick={() => currentPanIndex < selectedSession.pans.length - 1 && setCurrentPanIndex(currentPanIndex + 1)}
-                                            disabled={currentPanIndex >= selectedSession.pans.length - 1}
-                                            title="Skip for now — come back via the pan numbers below"
-                                            className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            Skip ⏭
-                                        </button>
-                                        <button
-                                            onClick={completePan}
-                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
-                                        >
-                                            {completedPans.has(currentPanIndex) ? 'Next Pan →' : '✓ Mark Dyed'}
-                                        </button>
-                                    </div>
-
-                                    {/* Jump to any pan — filled = dyed, ring = where you are */}
-                                    <div className="flex gap-1.5 overflow-x-auto mt-3 pb-1">
-                                        {selectedSession.pans.map((p, i) => (
-                                            <button
-                                                key={i}
-                                                onClick={() => setCurrentPanIndex(i)}
-                                                title={`Pan ${i + 1}${completedPans.has(i) ? ' — dyed' : ''}`}
-                                                className={`flex-shrink-0 w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
-                                                    completedPans.has(i)
-                                                        ? 'bg-teal-600 text-white'
-                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                } ${i === currentPanIndex ? 'ring-2 ring-teal-400' : ''}`}
-                                            >
-                                                {i + 1}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    {/* Undo "dyed" for the current pan if marked by mistake */}
-                                    {completedPans.has(currentPanIndex) && (
-                                        <button
-                                            onClick={() => unmarkPan(currentPanIndex)}
-                                            className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline bg-transparent"
-                                        >
-                                            ↩ Unmark this pan as dyed
-                                        </button>
-                                    )}
+                                    {panNav()}
                                 </div>
 
                                 {/* Recipe & Scaled Ingredients (scaled dye amounts — the
@@ -1240,72 +1180,6 @@ Examples:
                                 </>
                                 )}
 
-                                {/* Cost Breakdown */}
-                                {(() => {
-                                    const costs = calculatePanCosts(currentPan, currentRecipe);
-                                    return (
-                                        <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 mt-4">
-                                            <h4 className="font-semibold text-green-900 mb-3">💰 Cost Breakdown</h4>
-                                            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-700">Yarn:</span>
-                                                    <span className="font-medium">${costs.yarn.toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-700">Dye:</span>
-                                                    <span className="font-medium">${costs.dye.toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-700">Chemicals:</span>
-                                                    <span className="font-medium">${costs.chemicals.toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-700">Ball Bands:</span>
-                                                    <span className="font-medium">${costs.ballBands.toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-700">Labels:</span>
-                                                    <span className="font-medium">${costs.labels.toFixed(2)}</span>
-                                                </div>
-                                            </div>
-                                            <div className="border-t-2 border-green-400 pt-2">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-green-900">Total Cost:</span>
-                                                    <span className="font-bold text-xl text-green-900">${costs.total.toFixed(2)}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center mt-1">
-                                                    <span className="text-sm text-gray-700">Average ({costs.skeins} skeins):</span>
-                                                    <span className="font-semibold text-green-800">${costs.perSkein.toFixed(2)}/skein</span>
-                                                </div>
-                                                
-                                                {/* Per-skein details grouped by base+size */}
-                                                {costs.skeinDetails && costs.skeinDetails.length > 0 && (() => {
-                                                    // Group by base+hankSize
-                                                    const grouped = costs.skeinDetails.reduce<Record<string, { count: number; cost: number }>>((acc, skein) => {
-                                                        const key = `${skein.base} ${skein.hankSize}g`;
-                                                        if (!acc[key]) {
-                                                            acc[key] = { count: 0, cost: skein.cost };
-                                                        }
-                                                        acc[key].count++;
-                                                        return acc;
-                                                    }, {});
-                                                    
-                                                    return (
-                                                        <div className="mt-3 pt-2 border-t border-green-300">
-                                                            <div className="text-xs font-semibold text-green-900 mb-1">Cost per skein type:</div>
-                                                            {Object.entries(grouped).map(([key, {count, cost}]) => (
-                                                                <div key={key} className="flex justify-between text-xs text-gray-700">
-                                                                    <span>{count}x {key}:</span>
-                                                                    <span className="font-medium">${cost.toFixed(2)} each</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
                             </div>
 
                             {/* Upcoming Pans Preview */}
@@ -1328,6 +1202,73 @@ Examples:
                                     </div>
                                 </div>
                             )}
+
+                            {/* Cost Breakdown */}
+                            {(() => {
+                                const costs = calculatePanCosts(currentPan, currentRecipe);
+                                return (
+                                    <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 mt-4">
+                                        <h4 className="font-semibold text-green-900 mb-3">💰 Cost Breakdown</h4>
+                                        <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-700">Yarn:</span>
+                                                <span className="font-medium">${costs.yarn.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-700">Dye:</span>
+                                                <span className="font-medium">${costs.dye.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-700">Chemicals:</span>
+                                                <span className="font-medium">${costs.chemicals.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-700">Ball Bands:</span>
+                                                <span className="font-medium">${costs.ballBands.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-gray-700">Labels:</span>
+                                                <span className="font-medium">${costs.labels.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="border-t-2 border-green-400 pt-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-bold text-green-900">Total Cost:</span>
+                                                <span className="font-bold text-xl text-green-900">${costs.total.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center mt-1">
+                                                <span className="text-sm text-gray-700">Average ({costs.skeins} skeins):</span>
+                                                <span className="font-semibold text-green-800">${costs.perSkein.toFixed(2)}/skein</span>
+                                            </div>
+                                            
+                                            {/* Per-skein details grouped by base+size */}
+                                            {costs.skeinDetails && costs.skeinDetails.length > 0 && (() => {
+                                                // Group by base+hankSize
+                                                const grouped = costs.skeinDetails.reduce<Record<string, { count: number; cost: number }>>((acc, skein) => {
+                                                    const key = `${skein.base} ${skein.hankSize}g`;
+                                                    if (!acc[key]) {
+                                                        acc[key] = { count: 0, cost: skein.cost };
+                                                    }
+                                                    acc[key].count++;
+                                                    return acc;
+                                                }, {});
+                                                
+                                                return (
+                                                    <div className="mt-3 pt-2 border-t border-green-300">
+                                                        <div className="text-xs font-semibold text-green-900 mb-1">Cost per skein type:</div>
+                                                        {Object.entries(grouped).map(([key, {count, cost}]) => (
+                                                            <div key={key} className="flex justify-between text-xs text-gray-700">
+                                                                <span>{count}x {key}:</span>
+                                                                <span className="font-medium">${cost.toFixed(2)} each</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </>
                     )}
                 </>
