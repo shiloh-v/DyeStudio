@@ -4,6 +4,8 @@ import { DateUtils } from '../lib/dates';
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
     const [currentPanIndex, setCurrentPanIndex] = useState(() => Number(localStorage.getItem('queue_pan')) || 0);
+    // Pan indices marked "dyed" this session (fills the progress dots).
+    const [completedPans, setCompletedPans] = useState(() => new Set<number>());
 
     // Unique yarn bases and their available hank sizes from inventory.
     // (Used by the ad-hoc pan editor; previously referenced but never defined,
@@ -54,6 +56,22 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     useEffect(() => {
         if (selectedSession && currentPanIndex >= selectedSession.pans.length) setCurrentPanIndex(0);
     }, [selectedSessionId, selectedSession, currentPanIndex]);
+
+    // Load which pans are marked dyed for this session (persisted per session).
+    useEffect(() => {
+        try {
+            setCompletedPans(new Set(JSON.parse(localStorage.getItem('queue_done_' + selectedSessionId) || '[]')));
+        } catch { setCompletedPans(new Set()); }
+    }, [selectedSessionId]);
+
+    // Mark the current pan dyed (fills its dot) and advance to the next.
+    const completePan = () => {
+        const next = new Set(completedPans);
+        next.add(currentPanIndex);
+        setCompletedPans(next);
+        localStorage.setItem('queue_done_' + selectedSessionId, JSON.stringify([...next]));
+        if (currentPanIndex < selectedSession.pans.length - 1) setCurrentPanIndex(currentPanIndex + 1);
+    };
     
     // Get fresh recipe data if pan has a recipe OR color sketch
     const currentRecipe = currentPan?.recipeId 
@@ -671,13 +689,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                         Pan {currentPanIndex + 1} of {selectedSession.pans.length}
                                     </span>
                                     <span className="text-sm text-gray-500">
-                                        {Math.round(((currentPanIndex + 1) / selectedSession.pans.length) * 100)}% Complete
+                                        {completedPans.size} of {selectedSession.pans.length} dyed ({Math.round((completedPans.size / selectedSession.pans.length) * 100)}%)
                                     </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-3">
-                                    <div 
+                                    <div
                                         className="bg-teal-600 h-3 rounded-full transition-all"
-                                        style={{ width: `${((currentPanIndex + 1) / selectedSession.pans.length) * 100}%` }}
+                                        style={{ width: `${(completedPans.size / selectedSession.pans.length) * 100}%` }}
                                     />
                                 </div>
                             </div>
@@ -1023,25 +1041,25 @@ Examples:
                                             Skip ⏭
                                         </button>
                                         <button
-                                            onClick={markPanComplete}
+                                            onClick={completePan}
                                             className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
                                         >
-                                            {currentPanIndex < selectedSession.pans.length - 1 ? 'Next Pan →' : 'Complete Session ✓'}
+                                            {completedPans.has(currentPanIndex) ? 'Next Pan →' : '✓ Mark Dyed'}
                                         </button>
                                     </div>
 
-                                    {/* Jump to any pan (skip ahead / come back) */}
+                                    {/* Jump to any pan — filled = dyed, ring = where you are */}
                                     <div className="flex gap-1.5 overflow-x-auto mt-3 pb-1">
                                         {selectedSession.pans.map((p, i) => (
                                             <button
                                                 key={i}
                                                 onClick={() => setCurrentPanIndex(i)}
-                                                title={`Go to pan ${i + 1}`}
+                                                title={`Pan ${i + 1}${completedPans.has(i) ? ' — dyed' : ''}`}
                                                 className={`flex-shrink-0 w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
-                                                    i === currentPanIndex
+                                                    completedPans.has(i)
                                                         ? 'bg-teal-600 text-white'
                                                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                                }`}
+                                                } ${i === currentPanIndex ? 'ring-2 ring-teal-400' : ''}`}
                                             >
                                                 {i + 1}
                                             </button>
