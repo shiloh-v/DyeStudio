@@ -5,6 +5,25 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const [selectedSessionId, setSelectedSessionId] = useState('');
     const [currentPanIndex, setCurrentPanIndex] = useState(0);
 
+    // Unique yarn bases and their available hank sizes from inventory.
+    // (Used by the ad-hoc pan editor; previously referenced but never defined,
+    // which threw a ReferenceError when that UI opened. Mirrors DyeSessions.)
+    const yarnBases = inventory
+        .filter(item => item.category === 'yarn base')
+        .reduce((acc, item) => {
+            if (!acc[item.name]) {
+                acc[item.name] = [];
+            }
+            if (item.hankSize && !acc[item.name].includes(item.hankSize)) {
+                acc[item.name].push(item.hankSize);
+            }
+            return acc;
+        }, {});
+
+    const getAvailableHankSizes = (baseName) => {
+        return yarnBases[baseName] || [];
+    };
+
     // Get all non-archived sessions with pans
     const upcomingSessions = dyeSessions
         .filter(s => !s.archived && s.pans.length > 0)
