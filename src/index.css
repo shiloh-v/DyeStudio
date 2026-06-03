@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Base reset preserved verbatim from the original single-file app.
+ * Tailwind preflight is disabled (see tailwind.config.js) so this is the
+ * authoritative base layer — keeps the migrated app pixel-identical.
+ */
+@layer base {
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+        line-height: 1.5;
+    }
+    table { border-collapse: collapse; }
+}
+
+/*
+ * Custom (non-utility) classes that real Tailwind doesn't provide.
+ * These were hand-written in the original app and must be preserved.
+ */
+@layer components {
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+    .tab-active { border-bottom: 3px solid #667eea; color: #667eea; }
+    .subtab-active { background-color: #f3f0ff; color: #7c3aed; border-radius: 0.5rem; font-weight: 600; }
+    .status-dyeing { background-color: #fef3c7; color: #92400e; }
+    .status-drying { background-color: #dbeafe; color: #1e40af; }
+    .status-ready { background-color: #d1fae5; color: #065f46; }
+    .status-sold { background-color: #e5e7eb; color: #374151; }
+    .low-stock { background-color: #fee2e2; border-left: 4px solid #ef4444; }
+}
