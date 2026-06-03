@@ -177,7 +177,7 @@ export function YarnDyeManager() {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
                     <p className="text-gray-600">Loading your studio...</p>
                 </div>
             </div>
@@ -192,7 +192,7 @@ export function YarnDyeManager() {
                     <div className="flex justify-between items-center">
                         <div>
                             <h1 className="text-3xl font-bold">🧶 Celestial Dyeworks Studio Manager</h1>
-                            <p className="text-purple-100 mt-1">Professional dyeing business management</p>
+                            <p className="text-teal-100 mt-1">Professional dyeing business management</p>
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -340,7 +340,7 @@ export function YarnDyeManager() {
                             </button>
                             <button
                                 onClick={() => { supabase.auth.signOut(); }}
-                                className="bg-white text-purple-700 px-4 py-2 rounded-lg hover:bg-purple-50 transition-colors font-medium border border-purple-200"
+                                className="bg-white text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors font-medium border border-teal-200"
                             >
                                 Sign Out
                             </button>
@@ -379,10 +379,10 @@ export function YarnDyeManager() {
                                             setActiveTab(tab.id);
                                         }
                                     }}
-                                    className={`px-6 py-4 font-medium whitespace-nowrap transition-colors ${
-                                        isGroupActive 
-                                            ? 'tab-active' 
-                                            : 'text-gray-600 hover:text-gray-900'
+                                    className={`px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                                        isGroupActive
+                                            ? 'bg-teal-600 text-white'
+                                            : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                                 >
                                     {tab.label}
@@ -445,7 +445,7 @@ export function YarnDyeManager() {
             <main className="container mx-auto px-4 py-8">
                 <Suspense fallback={
                     <div className="text-center py-12">
-                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600 mx-auto"></div>
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600 mx-auto"></div>
                     </div>
                 }>
                 {activeTab === 'dashboard' && (

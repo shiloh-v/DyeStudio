@@ -16,13 +16,13 @@ export function GradientCard({ gradient, editGradient, deleteGradient, DOS_LEVEL
             <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
                     {gradient.gradientId && (
-                        <p className="text-xs font-semibold text-purple-600 mb-1">{gradient.gradientId}</p>
+                        <p className="text-xs font-semibold text-teal-600 mb-1">{gradient.gradientId}</p>
                     )}
                     <h3 className="text-lg font-semibold text-gray-900">{gradient.name}</h3>
                     <div className="flex flex-wrap gap-2 items-center mt-1">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                             gradient.type === 'dos' 
-                                ? 'bg-purple-100 text-purple-700' 
+                                ? 'bg-teal-100 text-teal-700' 
                                 : 'bg-blue-100 text-blue-700'
                         }`}>
                             {gradient.type === 'dos' ? '🎨 DOS' : '🔲 Dye Square'}
@@ -72,7 +72,7 @@ export function GradientCard({ gradient, editGradient, deleteGradient, DOS_LEVEL
                         <div className="flex items-center justify-center gap-1 mt-1.5">
                             {photos.map((p, i) => (
                                 <button key={p.id || i} onClick={() => setPhotoIndex(i)}
-                                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentIdx ? 'bg-purple-600' : 'bg-gray-300 hover:bg-gray-400'}`} />
+                                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentIdx ? 'bg-teal-600' : 'bg-gray-300 hover:bg-gray-400'}`} />
                             ))}
                         </div>
                     )}
@@ -85,28 +85,28 @@ export function GradientCard({ gradient, editGradient, deleteGradient, DOS_LEVEL
             {/* Expandable Details */}
             <button
                 onClick={() => setExpanded(!expanded)}
-                className="w-full text-left text-sm text-purple-600 hover:text-purple-700 font-medium mt-1 mb-1"
+                className="w-full text-left text-sm text-teal-600 hover:text-teal-700 font-medium mt-1 mb-1"
             >
                 {expanded ? '▼ Hide' : '▶ Show'} {gradient.type === 'dos' ? 'Shade Table' : 'Grid'} 
                 {gradient.type === 'dos' ? ' (10 shades)' : ' (25 squares)'}
             </button>
 
             {expanded && gradient.type === 'dos' && (
-                <div className="bg-purple-50 rounded-lg p-2 mt-1 overflow-x-auto">
+                <div className="bg-teal-50 rounded-lg p-2 mt-1 overflow-x-auto">
                     <table className="w-full text-xs">
                         <thead>
-                            <tr className="border-b border-purple-200">
-                                <th className="text-left py-1 px-1 text-purple-700">Shade</th>
-                                <th className="text-right py-1 px-1 text-purple-700">DOS %</th>
-                                <th className="text-right py-1 px-1 text-purple-700">mL</th>
+                            <tr className="border-b border-teal-200">
+                                <th className="text-left py-1 px-1 text-teal-700">Shade</th>
+                                <th className="text-right py-1 px-1 text-teal-700">DOS %</th>
+                                <th className="text-right py-1 px-1 text-teal-700">mL</th>
                             </tr>
                         </thead>
                         <tbody>
                             {(gradient.shades || DOS_LEVELS.map(dos => ({ dos, ml: calculateDosML(dos, gradient.skeinWeight || 10) }))).map((shade, i) => (
-                                <tr key={i} className={i % 2 === 0 ? 'bg-purple-50' : 'bg-white'}>
+                                <tr key={i} className={i % 2 === 0 ? 'bg-teal-50' : 'bg-white'}>
                                     <td className="py-0.5 px-1 text-gray-700">Shade {i + 1}</td>
                                     <td className="py-0.5 px-1 text-right text-gray-700">{shade.dos}%</td>
-                                    <td className="py-0.5 px-1 text-right font-medium text-purple-700">{shade.ml} mL</td>
+                                    <td className="py-0.5 px-1 text-right font-medium text-teal-700">{shade.ml} mL</td>
                                 </tr>
                             ))}
                         </tbody>

@@ -21,10 +21,10 @@
  * These were hand-written in the original app and must be preserved.
  */
 @layer components {
-    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .gradient-bg { background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); }
     .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
-    .tab-active { border-bottom: 3px solid #667eea; color: #667eea; }
-    .subtab-active { background-color: #f3f0ff; color: #7c3aed; border-radius: 0.5rem; font-weight: 600; }
+    .tab-active { border-bottom: 3px solid #0d9488; color: #0d9488; }
+    .subtab-active { background-color: #ccfbf1; color: #0f766e; border-radius: 0.5rem; font-weight: 600; }
     .status-dyeing { background-color: #fef3c7; color: #92400e; }
     .status-drying { background-color: #dbeafe; color: #1e40af; }
     .status-ready { background-color: #d1fae5; color: #065f46; }
@@ -62,13 +62,20 @@
 .dark .border-gray-200, .dark .border-gray-300 { border-color: #334155; }
 
 /* Light accent tints -> muted dark tints */
-.dark .bg-purple-50 { background-color: #2e1065; }
+.dark .bg-teal-50 { background-color: #134e4a; }
 .dark .bg-blue-50 { background-color: #172554; }
 .dark .bg-green-50 { background-color: #052e16; }
 .dark .bg-yellow-50 { background-color: #422006; }
 .dark .bg-red-50 { background-color: #450a0a; }
-.dark .bg-purple-100 { background-color: #3b0764; }
-.dark .subtab-active { background-color: #3b0764; color: #e9d5ff; }
+.dark .bg-teal-100 { background-color: #115e59; }
+.dark .subtab-active { background-color: #134e4a; color: #99f6e4; }
+
+/* Pipeline status tiles — dark variants (light text on dark tint; the tile's
+   border-2 inherits this color, so tiles stay clearly outlined in dark). */
+.dark .status-dyeing { background-color: #422006; color: #fcd34d; }
+.dark .status-drying { background-color: #172554; color: #93c5fd; }
+.dark .status-ready  { background-color: #052e16; color: #6ee7b7; }
+.dark .status-sold   { background-color: #334155; color: #cbd5e1; }
 
 /* Slightly deeper shadows read better on dark */
 .dark .card-shadow { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.5), 0 2px 4px -1px rgba(0,0,0,0.4); }

@@ -51,7 +51,7 @@ export function LoginScreen() {
                                 required
                                 value={email}
                                 onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="you@example.com"
                                 autoFocus
                                 autoComplete="email"
@@ -65,7 +65,7 @@ export function LoginScreen() {
                                 required
                                 value={password}
                                 onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Enter password"
                                 autoComplete="current-password"
                             />
@@ -85,7 +85,7 @@ export function LoginScreen() {
                         <button
                             type="submit"
                             disabled={submitting}
-                            className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-60"
+                            className="w-full bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-60"
                         >
                             {submitting ? 'Signing in…' : 'Sign In'}
                         </button>
@@ -93,7 +93,7 @@ export function LoginScreen() {
                         <button
                             type="button"
                             onClick={handleForgot}
-                            className="w-full text-sm text-purple-600 hover:underline bg-transparent border-0 cursor-pointer"
+                            className="w-full text-sm text-teal-600 hover:underline bg-transparent border-0 cursor-pointer"
                         >
                             Forgot password?
                         </button>

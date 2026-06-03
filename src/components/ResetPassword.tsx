@@ -53,7 +53,7 @@ export function ResetPassword() {
                             </div>
                             <button
                                 onClick={() => navigate('/')}
-                                className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="w-full bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 Go to your studio
                             </button>
@@ -65,7 +65,7 @@ export function ResetPassword() {
                             </div>
                             <button
                                 onClick={() => navigate('/')}
-                                className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="w-full bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 Back to login
                             </button>
@@ -79,7 +79,7 @@ export function ResetPassword() {
                                     required
                                     value={password}
                                     onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="At least 6 characters"
                                     autoComplete="new-password"
                                     autoFocus
@@ -92,7 +92,7 @@ export function ResetPassword() {
                                     required
                                     value={confirm}
                                     onChange={(e) => { setConfirm(e.target.value); setError(''); }}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="Re-enter password"
                                     autoComplete="new-password"
                                 />
@@ -103,7 +103,7 @@ export function ResetPassword() {
                             <button
                                 type="submit"
                                 disabled={submitting}
-                                className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-60"
+                                className="w-full bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-60"
                             >
                                 {submitting ? 'Updating…' : 'Update Password'}
                             </button>

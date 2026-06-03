@@ -450,7 +450,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ Plan Session'}
                 </button>
@@ -469,7 +469,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., Weekend Batch #1"
                                 />
                             </div>
@@ -480,13 +480,13 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     required
                                     value={formData.date}
                                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 />
                             </div>
                         </div>
 
                         {/* Current Pan/Tray Builder */}
-                        <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
+                        <div className="border-2 border-teal-200 rounded-lg p-4 bg-teal-50">
                             <div className="flex justify-between items-center mb-3">
                                 <h4 className="font-semibold text-gray-900">Add to Session</h4>
                                 <div className="text-sm text-gray-600">
@@ -517,7 +517,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         colorSketchId: '',
                                         adHocLabel: ''
                                     })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                 >
                                     <option value="pan">Pan (1 space)</option>
                                     <option value="gradientTray">DOS Gradient Tray (2 spaces)</option>
@@ -538,7 +538,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 type="text"
                                                 value={currentPan.colorway}
                                                 onChange={(e) => setCurrentPan({ ...currentPan, colorway: e.target.value })}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 placeholder="e.g., Cranberry Spice"
                                             />
                                         </div>
@@ -554,7 +554,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         colorway: recipe ? recipe.name : currentPan.colorway
                                                     });
                                                 }}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select recipe...</option>
                                                 {recipes.map(r => (
@@ -570,7 +570,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             type="number"
                                             value={currentPan.capacity}
                                             onChange={(e) => setCurrentPan({ ...currentPan, capacity: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         />
                                     </div>
 
@@ -596,7 +596,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         newYarns[idx] = { ...newYarns[idx], base: baseName, hankSize: hankSize };
                                                         setCurrentPan({ ...currentPan, yarns: newYarns });
                                                     }}
-                                                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select yarn base...</option>
                                                     {Object.keys(yarnBases).map(baseName => (
@@ -606,7 +606,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <select
                                                     value={yarn.hankSize || ''}
                                                     onChange={(e) => updateYarn(idx, 'hankSize', e.target.value)}
-                                                    className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                     disabled={!yarn.base}
                                                 >
                                                     <option value="">Size (g)</option>
@@ -619,7 +619,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     placeholder="Qty"
                                                     value={yarn.quantity || ''}
                                                     onChange={(e) => updateYarn(idx, 'quantity', e.target.value)}
-                                                    className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 />
                                                 {currentPan.yarns.length > 1 && (
                                                     <button
@@ -635,7 +635,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <button
                                             type="button"
                                             onClick={addYarnToPan}
-                                            className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                                            className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                                         >
                                             + Add Yarn
                                         </button>
@@ -650,7 +650,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <button
                                             type="button"
                                             onClick={addPanToSession}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                            className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
                                             Add Pan
                                         </button>
@@ -667,7 +667,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             <select
                                                 value={currentPan.gradientDye}
                                                 onChange={(e) => setCurrentPan({ ...currentPan, gradientDye: e.target.value })}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select dye...</option>
                                                 {inventory.filter(item => item.category === 'dye').map(dye => (
@@ -688,7 +688,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         gradientHankSize: sizes.length > 0 ? sizes[0] : ''
                                                     });
                                                 }}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select yarn base...</option>
                                                 {Object.keys(yarnBases).map(baseName => (
@@ -701,7 +701,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             <select
                                                 value={currentPan.gradientHankSize}
                                                 onChange={(e) => setCurrentPan({ ...currentPan, gradientHankSize: e.target.value })}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 disabled={!currentPan.gradientYarnBase}
                                             >
                                                 <option value="">Select size...</option>
@@ -721,7 +721,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <button
                                             type="button"
                                             onClick={addPanToSession}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                            className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
                                             Add Gradient Tray
                                         </button>
@@ -739,7 +739,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <select
                                                     value={currentPan.squareColorA}
                                                     onChange={(e) => setCurrentPan({ ...currentPan, squareColorA: e.target.value })}
-                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select dye...</option>
                                                     {inventory.filter(item => item.category === 'dye').map(dye => (
@@ -752,7 +752,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <select
                                                     value={currentPan.squareColorB}
                                                     onChange={(e) => setCurrentPan({ ...currentPan, squareColorB: e.target.value })}
-                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select dye...</option>
                                                     {inventory.filter(item => item.category === 'dye').map(dye => (
@@ -774,7 +774,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         gradientHankSize: sizes.length > 0 ? sizes[0] : ''
                                                     });
                                                 }}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select yarn base...</option>
                                                 {Object.keys(yarnBases).map(baseName => (
@@ -787,7 +787,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             <select
                                                 value={currentPan.gradientHankSize}
                                                 onChange={(e) => setCurrentPan({ ...currentPan, gradientHankSize: e.target.value })}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 disabled={!currentPan.gradientYarnBase}
                                             >
                                                 <option value="">Select size...</option>
@@ -807,7 +807,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <button
                                             type="button"
                                             onClick={addPanToSession}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                            className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
                                             Add Dye Square Tray
                                         </button>
@@ -844,7 +844,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     });
                                                 }
                                             }}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         >
                                             <option value="">Choose a kit...</option>
                                             {kits.map(kit => (
@@ -866,7 +866,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                 ...currentPan,
                                                                 kitSelectedColorIds: currentPan.kitColors.map((_, idx) => idx)
                                                             })}
-                                                            className="text-purple-600 hover:text-purple-800"
+                                                            className="text-teal-600 hover:text-teal-800"
                                                         >
                                                             Select all
                                                         </button>
@@ -877,7 +877,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                 ...currentPan,
                                                                 kitSelectedColorIds: []
                                                             })}
-                                                            className="text-purple-600 hover:text-purple-800"
+                                                            className="text-teal-600 hover:text-teal-800"
                                                         >
                                                             Clear
                                                         </button>
@@ -890,7 +890,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                             <label
                                                                 key={idx}
                                                                 className={`flex items-center gap-2 text-sm border rounded px-2 py-1 cursor-pointer transition-colors ${
-                                                                    isSelected ? 'bg-purple-50 border-purple-300' : 'bg-white border-gray-200 opacity-60'
+                                                                    isSelected ? 'bg-teal-50 border-teal-300' : 'bg-white border-gray-200 opacity-60'
                                                                 }`}
                                                             >
                                                                 <input
@@ -937,7 +937,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                 newYarns[idx] = { ...newYarns[idx], base: baseName, hankSize: hankSize };
                                                                 setCurrentPan({ ...currentPan, kitYarns: newYarns });
                                                             }}
-                                                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                            className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                         >
                                                             <option value="">Select yarn base...</option>
                                                             {Object.keys(yarnBases).map(baseName => (
@@ -951,7 +951,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                 newYarns[idx] = { ...newYarns[idx], hankSize: e.target.value };
                                                                 setCurrentPan({ ...currentPan, kitYarns: newYarns });
                                                             }}
-                                                            className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                            className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                             disabled={!yarn.base}
                                                         >
                                                             <option value="">Size (g)</option>
@@ -968,7 +968,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                 newYarns[idx] = { ...newYarns[idx], quantity: e.target.value };
                                                                 setCurrentPan({ ...currentPan, kitYarns: newYarns });
                                                             }}
-                                                            className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                            className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                         />
                                                         {currentPan.kitYarns.length > 1 && (
                                                             <button
@@ -990,7 +990,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         ...currentPan,
                                                         kitYarns: [...currentPan.kitYarns, { base: '', hankSize: '', quantity: 1 }]
                                                     })}
-                                                    className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                                                    className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                                                 >
                                                     + Add Yarn
                                                 </button>
@@ -1056,7 +1056,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     kitYarns: [{ base: '', hankSize: '', quantity: 1 }]
                                                 });
                                             }}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                            className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
                                             Add Kit Pans ({(currentPan.kitSelectedColorIds || []).length} of {currentPan.kitColors?.length || 0})
                                         </button>
@@ -1079,7 +1079,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     colorway: selectedSketch ? (selectedSketch.customName || selectedSketch.colorId) : ''
                                                 });
                                             }}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         >
                                             <option value="">Select experiment...</option>
                                             {colorSketches.map(sketch => (
@@ -1120,7 +1120,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         newYarns[idx] = { ...newYarns[idx], base: baseName, hankSize: hankSize };
                                                         setCurrentPan({ ...currentPan, yarns: newYarns });
                                                     }}
-                                                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select yarn base...</option>
                                                     {Object.keys(yarnBases).map(baseName => (
@@ -1131,7 +1131,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <select
                                                     value={yarn.hankSize || ''}
                                                     onChange={(e) => updateYarn(idx, 'hankSize', e.target.value)}
-                                                    className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                                                    className="w-32 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                     disabled={!yarn.base}
                                                 >
                                                     <option value="">Size (g)</option>
@@ -1145,7 +1145,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     min="1"
                                                     value={yarn.quantity}
                                                     onChange={(e) => updateYarn(idx, 'quantity', e.target.value)}
-                                                    className="w-16 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                    className="w-16 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                                     placeholder="Qty"
                                                 />
 
@@ -1163,7 +1163,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <button
                                             type="button"
                                             onClick={addYarnToPan}
-                                            className="text-sm text-purple-600 hover:text-purple-800"
+                                            className="text-sm text-teal-600 hover:text-teal-800"
                                         >
                                             + Add Another Yarn
                                         </button>
@@ -1178,7 +1178,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <button
                                             type="button"
                                             onClick={addPanToSession}
-                                            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
+                                            className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
                                             Add Pan
                                         </button>
@@ -1200,7 +1200,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             type="text"
                                             value={currentPan.adHocLabel || ''}
                                             onChange={(e) => setCurrentPan({ ...currentPan, adHocLabel: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., Pink mystery, Leftover dyes experiment"
                                         />
                                         <p className="text-xs text-gray-500 mt-1">
@@ -1363,7 +1363,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                         </span>
                                                                     )}
                                                                     {pan.fromKit && (
-                                                                        <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                                                        <span className="ml-2 text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded">
                                                                             from {pan.fromKit}
                                                                         </span>
                                                                     )}
@@ -1470,7 +1470,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={3}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Any notes about this dye session..."
                             />
                         </div>
@@ -1478,7 +1478,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 {editingId ? 'Update Session' : 'Save Session'}
                             </button>
@@ -1524,7 +1524,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                 <p className="text-sm text-gray-500 ml-8">
                                     {session.date} • {session.pans.filter(p => p.type !== 'gradientTray' && p.type !== 'dyeSquareTray').length} pan(s) • {session.pans.filter(p => p.type === 'gradientTray' || p.type === 'dyeSquareTray').length} tray(s)
                                 </p>
-                                <p className="text-xs text-purple-600 mt-1 ml-8">
+                                <p className="text-xs text-teal-600 mt-1 ml-8">
                                     Yarn bases needed: {(() => {
                                         const bases = {};
                                         session.pans.forEach(pan => {
@@ -1545,7 +1545,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     })()}
                                 </p>
                                 <div className="text-xs text-blue-600 mt-1 ml-8">
-                                    <div className="text-xs text-purple-600">
+                                    <div className="text-xs text-teal-600">
                                         {(() => {
                                             const stockSolutions = new Set();
                                             const dyePowders = new Set();
@@ -1885,7 +1885,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     {session.pans.map((pan, idx) => (
       <div
 key={pan.id}
-className="border-l-4 border-purple-500 bg-purple-50 rounded p-3 flex gap-3"
+className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
       >
 {/* Recipe image or gradient icon */}
 {pan.type === "gradientTray" ? (
@@ -1974,7 +1974,7 @@ className="border-l-4 border-purple-500 bg-purple-50 rounded p-3 flex gap-3"
         ))}
       </div>
       {pan.experimentNotes && (
-        <div className="mt-2 text-xs text-purple-600 italic bg-purple-50 rounded p-2 border border-purple-200">
+        <div className="mt-2 text-xs text-teal-600 italic bg-teal-50 rounded p-2 border border-teal-200">
           🧪 Experiment Notes: {pan.experimentNotes}
         </div>
       )}

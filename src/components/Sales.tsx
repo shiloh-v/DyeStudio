@@ -119,7 +119,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                 </div>
                 <div className="bg-white rounded-lg card-shadow p-6">
                     <div className="text-sm text-gray-600 mb-1">Avg Margin</div>
-                    <div className="text-3xl font-bold text-purple-600">{avgProfitMargin.toFixed(1)}%</div>
+                    <div className="text-3xl font-bold text-teal-600">{avgProfitMargin.toFixed(1)}%</div>
                 </div>
             </div>
             
@@ -140,7 +140,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                                         </div>
                                         <div className="flex gap-2">
                                             <div 
-                                                className="h-6 bg-purple-500 rounded flex items-center justify-end pr-2 text-white text-xs"
+                                                className="h-6 bg-teal-500 rounded flex items-center justify-end pr-2 text-white text-xs"
                                                 style={{width: `${Math.max(10, (data.sales / Math.max(...performanceData.map(d => d.sales))) * 100)}%`}}
                                             >
                                                 {data.sales}
@@ -175,7 +175,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                                                 ${data.profit.toFixed(0)}
                                             </div>
                                             <div 
-                                                className="h-6 bg-purple-500 rounded flex items-center justify-end pr-2 text-white text-xs"
+                                                className="h-6 bg-teal-500 rounded flex items-center justify-end pr-2 text-white text-xs"
                                                 style={{width: `${Math.max(10, data.margin)}%`}}
                                             >
                                                 {data.margin.toFixed(1)}%
@@ -261,9 +261,9 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                     <h3 className="text-lg font-semibold mb-4">Revenue by Month</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {Object.entries(salesByMonth).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([month, amount]) => (
-                            <div key={month} className="text-center p-3 bg-purple-50 rounded-lg">
+                            <div key={month} className="text-center p-3 bg-teal-50 rounded-lg">
                                 <div className="text-sm text-gray-600 mb-1">{month}</div>
-                                <div className="text-lg font-bold text-purple-600">${amount.toFixed(2)}</div>
+                                <div className="text-lg font-bold text-teal-600">${amount.toFixed(2)}</div>
                             </div>
                         ))}
                     </div>
@@ -311,7 +311,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm">
-                                        <span className={batch.profitMargin >= 0 ? 'text-purple-600 font-semibold' : 'text-red-600 font-semibold'}>
+                                        <span className={batch.profitMargin >= 0 ? 'text-teal-600 font-semibold' : 'text-red-600 font-semibold'}>
                                             {(batch.profitMargin || 0).toFixed(1)}%
                                         </span>
                                     </td>

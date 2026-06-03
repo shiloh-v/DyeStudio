@@ -2,7 +2,7 @@
 
 export function StatCard({ title, value, icon, color }) {
     const colors = {
-        purple: 'bg-purple-50 text-purple-700',
+        purple: 'bg-teal-50 text-teal-700',
         blue: 'bg-blue-50 text-blue-700',
         green: 'bg-green-50 text-green-700',
         red: 'bg-red-50 text-red-700'

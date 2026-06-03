@@ -223,7 +223,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                 </div>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ New Recipe'}
                 </button>
@@ -235,7 +235,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                 placeholder="🔍 Search recipes..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
             />
 
             {/* Filter and Sort */}
@@ -245,7 +245,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                     <select
                         value={filterColorType}
                         onChange={(e) => setFilterColorType(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                     >
                         <option value="all">All Color Types</option>
                         {(settings.colorTypes || ['tonal', 'variegated', 'speckled']).map(type => (
@@ -258,7 +258,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                     >
                         <option value="name">Colorway Name</option>
                         <option value="colorType">Color Type</option>
@@ -279,7 +279,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., Deep Ocean Blue"
                                 />
                             </div>
@@ -291,7 +291,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                     required
                                     value={formData.yarnWeight}
                                     onChange={(e) => setFormData({ ...formData, yarnWeight: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., 100"
                                 />
                             </div>
@@ -303,7 +303,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                 required
                                 value={formData.colorType}
                                 onChange={(e) => setFormData({ ...formData, colorType: e.target.value })}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                             >
                                 {(settings.colorTypes || ['tonal', 'variegated', 'speckled']).map(type => (
                                     <option key={type} value={type} className="capitalize">{type}</option>
@@ -323,7 +323,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                 placeholder="Dye/ingredient name"
                                                 value={ing.name}
                                                 onChange={(e) => updateIngredient(idx, 'name', e.target.value)}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                                 list={`dye-list-${idx}`}
                                             />
                                             <datalist id={`dye-list-${idx}`}>
@@ -338,12 +338,12 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                             placeholder="Amount"
                                             value={ing.amount}
                                             onChange={(e) => updateIngredient(idx, 'amount', e.target.value)}
-                                            className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         />
                                         <select
                                             value={ing.unit}
                                             onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
-                                            className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         >
                                             <option value="ml">ml</option>
                                             <option value="g">g</option>
@@ -362,7 +362,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                 <button
                                     type="button"
                                     onClick={addIngredient}
-                                    className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                                    className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                                 >
                                     + Add Ingredient
                                 </button>
@@ -372,14 +372,14 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                         {/* Variegated Color Solutions */}
                         {formData.colorType === 'variegated' && (
                             <div className="space-y-4">
-                                <div className="grid md:grid-cols-3 gap-4 bg-purple-50 p-4 rounded-lg">
+                                <div className="grid md:grid-cols-3 gap-4 bg-teal-50 p-4 rounded-lg">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Total ml Needed</label>
                                         <input
                                             type="number"
                                             value={formData.totalMl}
                                             onChange={(e) => setFormData({ ...formData, totalMl: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="2400"
                                         />
                                     </div>
@@ -390,7 +390,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                             step="0.1"
                                             value={formData.stockSolutionPercent}
                                             onChange={(e) => setFormData({ ...formData, stockSolutionPercent: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="1"
                                         />
                                         <p className="text-xs text-gray-500 mt-1">1g powder per 100ml water</p>
@@ -402,7 +402,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                             step="0.1"
                                             value={formData.citricAcidPerBatch}
                                             onChange={(e) => setFormData({ ...formData, citricAcidPerBatch: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="1"
                                         />
                                         <p className="text-xs text-gray-500 mt-1">Per 300g yarn</p>
@@ -412,7 +412,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Color Solutions</label>
                                     {formData.colorSolutions.map((solution, sIdx) => (
-                                        <div key={sIdx} className="border-2 border-purple-200 rounded-lg p-4 mb-4">
+                                        <div key={sIdx} className="border-2 border-teal-200 rounded-lg p-4 mb-4">
                                             <div className="flex justify-between items-center mb-3">
                                                 <h4 className="font-medium text-gray-900">Solution {sIdx + 1}</h4>
                                                 <button
@@ -439,7 +439,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                             newSolutions[sIdx].name = e.target.value;
                                                             setFormData({ ...formData, colorSolutions: newSolutions });
                                                         }}
-                                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                                     />
                                                 </div>
                                                 <div>
@@ -453,7 +453,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                             newSolutions[sIdx].targetMl = e.target.value;
                                                             setFormData({ ...formData, colorSolutions: newSolutions });
                                                         }}
-                                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                                     />
                                                 </div>
                                             </div>
@@ -471,7 +471,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                                 newSolutions[sIdx].dyes[dIdx].name = e.target.value;
                                                                 setFormData({ ...formData, colorSolutions: newSolutions });
                                                             }}
-                                                            className="w-full px-2 py-1 border rounded focus:ring-2 focus:ring-purple-500 text-sm"
+                                                            className="w-full px-2 py-1 border rounded focus:ring-2 focus:ring-teal-500 text-sm"
                                                             list={`var-dye-list-${sIdx}-${dIdx}`}
                                                         />
                                                         <datalist id={`var-dye-list-${sIdx}-${dIdx}`}>
@@ -490,7 +490,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                             newSolutions[sIdx].dyes[dIdx].amount = e.target.value;
                                                             setFormData({ ...formData, colorSolutions: newSolutions });
                                                         }}
-                                                        className="w-20 px-2 py-1 border rounded focus:ring-2 focus:ring-purple-500 text-sm"
+                                                        className="w-20 px-2 py-1 border rounded focus:ring-2 focus:ring-teal-500 text-sm"
                                                     />
                                                     <select
                                                         value={dye.unit}
@@ -499,7 +499,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                             newSolutions[sIdx].dyes[dIdx].unit = e.target.value;
                                                             setFormData({ ...formData, colorSolutions: newSolutions });
                                                         }}
-                                                        className="w-16 px-2 py-1 border rounded focus:ring-2 focus:ring-purple-500 text-sm"
+                                                        className="w-16 px-2 py-1 border rounded focus:ring-2 focus:ring-teal-500 text-sm"
                                                     >
                                                         <option value="g">g</option>
                                                         <option value="ml">ml</option>
@@ -524,7 +524,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                     newSolutions[sIdx].dyes.push({ name: '', amount: '', unit: 'g' });
                                                     setFormData({ ...formData, colorSolutions: newSolutions });
                                                 }}
-                                                className="text-purple-600 hover:text-purple-700 text-xs font-medium"
+                                                className="text-teal-600 hover:text-teal-700 text-xs font-medium"
                                             >
                                                 + Add Dye
                                             </button>
@@ -541,7 +541,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                 ]
                                             });
                                         }}
-                                        className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                                        className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                                     >
                                         + Add Color Solution
                                     </button>
@@ -555,21 +555,21 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                 value={formData.instructions}
                                 onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
                                 rows={4}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Step-by-step dyeing process..."
                             />
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Photos {formData.photos?.length > 0 && <span className="text-purple-600">({formData.photos.length})</span>}
+                                Photos {formData.photos?.length > 0 && <span className="text-teal-600">({formData.photos.length})</span>}
                             </label>
                             <input
                                 ref={fileInputRef}
                                 type="file"
                                 accept="image/*"
                                 onChange={handlePhotoUpload}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                             />
                             <p className="text-xs text-gray-500 mt-1">Add multiple photos — pan shots, dry skeins, finished product, etc.</p>
                             
@@ -582,7 +582,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                 <select
                                                     value={photo.label}
                                                     onChange={(e) => updatePhotoLabel(photo.id, e.target.value)}
-                                                    className="w-full text-sm px-2 py-1 border rounded focus:ring-1 focus:ring-purple-500"
+                                                    className="w-full text-sm px-2 py-1 border rounded focus:ring-1 focus:ring-teal-500"
                                                 >
                                                     {PHOTO_LABELS.map(label => (
                                                         <option key={label} value={label}>{label}</option>
@@ -595,7 +595,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                     type="button"
                                                     onClick={() => movePhoto(index, -1)}
                                                     disabled={index === 0}
-                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === 0 ? 'text-gray-300' : 'text-purple-600 hover:bg-purple-50'}`}
+                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === 0 ? 'text-gray-300' : 'text-teal-600 hover:bg-teal-50'}`}
                                                 >
                                                     ▲
                                                 </button>
@@ -603,7 +603,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                     type="button"
                                                     onClick={() => movePhoto(index, 1)}
                                                     disabled={index === formData.photos.length - 1}
-                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === formData.photos.length - 1 ? 'text-gray-300' : 'text-purple-600 hover:bg-purple-50'}`}
+                                                    className={`text-xs px-1.5 py-0.5 rounded ${index === formData.photos.length - 1 ? 'text-gray-300' : 'text-teal-600 hover:bg-teal-50'}`}
                                                 >
                                                     ▼
                                                 </button>
@@ -628,7 +628,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={3}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Any tips, variations, or notes about this colorway..."
                             />
                         </div>
@@ -636,7 +636,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 {editingId ? 'Update Recipe' : 'Save Recipe'}
                             </button>
@@ -671,11 +671,11 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                         <div className="flex justify-between items-start mb-3">
                             <div className="flex-1">
                                 {recipe.recipeId && (
-                                    <p className="text-xs font-semibold text-purple-600 mb-1">{recipe.recipeId}</p>
+                                    <p className="text-xs font-semibold text-teal-600 mb-1">{recipe.recipeId}</p>
                                 )}
                                 <h3 className="text-lg font-semibold text-gray-900">{recipe.name}</h3>
                                 <div className="flex gap-2 items-center mt-1">
-                                    <p className="text-xs text-purple-600 font-medium">{recipe.yarnWeight}g</p>
+                                    <p className="text-xs text-teal-600 font-medium">{recipe.yarnWeight}g</p>
                                     <span className="text-gray-400">•</span>
                                     <p className="text-xs text-gray-600 capitalize">{recipe.colorType}</p>
                                 </div>
@@ -724,7 +724,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                         <button
                                             key={p.id || i}
                                             onClick={() => setPhotoIndex(i)}
-                                            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentIdx ? 'bg-purple-600' : 'bg-gray-300 hover:bg-gray-400'}`}
+                                            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentIdx ? 'bg-teal-600' : 'bg-gray-300 hover:bg-gray-400'}`}
                                         />
                                     ))}
                                 </div>
@@ -737,7 +737,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                         {/* Collapsible Ingredients & Instructions */}
                         <button
                             onClick={() => setExpanded(!expanded)}
-                            className="w-full text-left text-sm text-purple-600 hover:text-purple-700 font-medium mt-2 mb-2"
+                            className="w-full text-left text-sm text-teal-600 hover:text-teal-700 font-medium mt-2 mb-2"
                         >
                             {expanded ? '▼' : '▶'} {expanded ? 'Hide' : 'Show'} Details
                         </button>
@@ -748,8 +748,8 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                     <div>
                                         <h4 className="font-medium text-gray-700 mb-1">Color Solutions:</h4>
                                         {recipe.colorSolutions.map((solution, idx) => (
-                                            <div key={idx} className="mb-2 pl-2 border-l-2 border-purple-300">
-                                                <div className="font-medium text-purple-700">{solution.name || `Solution ${idx + 1}`}</div>
+                                            <div key={idx} className="mb-2 pl-2 border-l-2 border-teal-300">
+                                                <div className="font-medium text-teal-700">{solution.name || `Solution ${idx + 1}`}</div>
                                                 <div className="text-gray-600">Target: {solution.targetMl}ml</div>
                                                 <ul className="space-y-1 mt-1">
                                                     {solution.dyes.map((dye, dIdx) => (

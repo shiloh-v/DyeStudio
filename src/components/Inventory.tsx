@@ -111,7 +111,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                 <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
                 <button
                     onClick={() => setShowForm(!showForm)}
-                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ Add Item'}
                 </button>
@@ -130,7 +130,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                     onClick={() => setFilterCategory('all')}
                     className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${
                         filterCategory === 'all' 
-                            ? 'bg-purple-600 text-white' 
+                            ? 'bg-teal-600 text-white' 
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                 >
@@ -142,7 +142,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                         onClick={() => setFilterCategory(cat)}
                         className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap capitalize ${
                             filterCategory === cat 
-                                ? 'bg-purple-600 text-white' 
+                                ? 'bg-teal-600 text-white' 
                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
                     >
@@ -174,7 +174,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., Acid Blue 113 or Luna DK"
                                 />
                             </div>
@@ -196,7 +196,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         
                                         setFormData({ ...formData, category: newCategory, unit: defaultUnit });
                                     }}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     {categories.map(cat => (
                                         <option key={cat} value={cat} className="capitalize">{cat}</option>
@@ -214,7 +214,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.name}
                                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., W2D4 Merino DK SW"
                                         />
                                     </div>
@@ -224,7 +224,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.myYarnName}
                                             onChange={(e) => setFormData({ ...formData, myYarnName: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., Luna DK"
                                         />
                                     </div>
@@ -237,7 +237,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         step="0.1"
                                         value={formData.hankSize}
                                         onChange={(e) => setFormData({ ...formData, hankSize: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         placeholder="e.g., 20, 50, 100"
                                     />
                                 </div>
@@ -249,7 +249,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         step="0.01"
                                         value={formData.typicalPrice}
                                         onChange={(e) => setFormData({ ...formData, typicalPrice: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         placeholder="e.g., 25.00"
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Default selling price for this yarn/size combination</p>
@@ -262,7 +262,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.fiberContent}
                                             onChange={(e) => setFormData({ ...formData, fiberContent: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 100% Superwash Merino Wool"
                                         />
                                     </div>
@@ -272,7 +272,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.yardage}
                                             onChange={(e) => setFormData({ ...formData, yardage: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 109yds per skein"
                                         />
                                     </div>
@@ -285,7 +285,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.presentation}
                                             onChange={(e) => setFormData({ ...formData, presentation: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 10 x 100g skeins"
                                         />
                                     </div>
@@ -295,7 +295,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.weight}
                                             onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., Bulky, DK, Fingering"
                                         />
                                     </div>
@@ -308,7 +308,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.needleSize}
                                             onChange={(e) => setFormData({ ...formData, needleSize: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="#9"
                                         />
                                     </div>
@@ -318,7 +318,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.gauge}
                                             onChange={(e) => setFormData({ ...formData, gauge: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="14 sts & 24 rows"
                                         />
                                     </div>
@@ -328,7 +328,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.wpi}
                                             onChange={(e) => setFormData({ ...formData, wpi: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="10"
                                             maxLength={2}
                                         />
@@ -339,7 +339,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="text"
                                             value={formData.plies}
                                             onChange={(e) => setFormData({ ...formData, plies: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="3"
                                             maxLength={2}
                                         />
@@ -352,7 +352,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         type="text"
                                         value={formData.image}
                                         onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         placeholder="https://example.com/yarn-image.jpg"
                                     />
                                     {formData.image && (
@@ -375,7 +375,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         <select
                                             value={formData.forYarnBase || ''}
                                             onChange={(e) => setFormData({ ...formData, forYarnBase: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         >
                                             <option value="">Select yarn base...</option>
                                             {inventory.filter(i => i.category === 'yarn base').map(yarn => (
@@ -389,7 +389,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="number"
                                             value={formData.hankSize || ''}
                                             onChange={(e) => setFormData({ ...formData, hankSize: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 20, 50, 100"
                                         />
                                     </div>
@@ -406,7 +406,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                     required
                                     value={formData.quantity}
                                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 />
                             </div>
                             <div>
@@ -435,7 +435,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         
                                         setFormData({ ...formData, unit: newUnit, quantity: newQuantity });
                                     }}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     <option value="g">grams (g)</option>
                                     <option value="oz">ounces (oz)</option>
@@ -454,7 +454,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                     step="0.01"
                                     value={formData.lowStockThreshold}
                                     onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="Min qty"
                                 />
                             </div>
@@ -483,7 +483,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                     });
                                                 }
                                             }}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 67.05"
                                         />
                                     </div>
@@ -507,7 +507,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                     });
                                                 }
                                             }}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 16"
                                         />
                                         {formData.purchasePrice && formData.purchaseOunces && (
@@ -525,7 +525,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         step="0.01"
                                         value={formData.cost}
                                         onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         placeholder="$"
                                     />
                                 </div>
@@ -535,7 +535,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                 <select
                                     value={formData.supplier}
                                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     <option value="">Select supplier...</option>
                                     {(settings.suppliers || ['Dharma', 'Wool2Dye4', 'Amazon']).map(supplier => (
@@ -556,7 +556,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         type="text"
                                         value={formData.color}
                                         onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                        className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         placeholder="#FF5733"
                                         pattern="^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
                                     />
@@ -576,14 +576,14 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 rows={2}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500"
+                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                             />
                         </div>
 
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                             >
                                 {editingId ? 'Update Item' : 'Add Item'}
                             </button>
@@ -661,7 +661,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                         <div className="text-xs text-gray-500">({item.name})</div>
                                                     )}
                                                     {item.hankSize && (
-                                                        <div className="text-sm text-purple-600">{item.hankSize}g hanks</div>
+                                                        <div className="text-sm text-teal-600">{item.hankSize}g hanks</div>
                                                     )}
                                                     {item.category === 'yarn base' && (
                                                         <div className="text-xs text-gray-600 mt-1 space-y-0.5">
