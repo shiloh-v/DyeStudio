@@ -12,6 +12,7 @@ import { Sales } from './Sales';
 import { Gradients } from './Gradients';
 import { Settings } from './Settings';
 import { StorageManager } from '../lib/storage';
+import { supabase } from '../lib/supabase';
 
 export function YarnDyeManager() {
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -309,10 +310,7 @@ export function YarnDyeManager() {
                                 🔄 Reload Batches
                             </button>
                             <button
-                                onClick={() => {
-                                    sessionStorage.removeItem('dyestudio_auth');
-                                    window.location.reload();
-                                }}
+                                onClick={() => { supabase.auth.signOut(); }}
                                 className="bg-white text-purple-700 px-4 py-2 rounded-lg hover:bg-purple-50 transition-colors font-medium border border-purple-200"
                             >
                                 Sign Out

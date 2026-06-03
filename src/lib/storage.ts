@@ -1,4 +1,4 @@
-import { supabase, USER_ID } from './supabase';
+import { supabase, getUserId } from './supabase';
 
 // Collections backed by their own table. `settings` is handled specially.
 export type CollectionKey =
@@ -17,9 +17,9 @@ type Row = Record<string, any>;
  * Convert empty-string / undefined fields to null and stamp the user id.
  * (Matches the original cleaning step so numeric columns accept the value.)
  */
-function clean(items: Row[]): Row[] {
+function clean(items: Row[], userId: string): Row[] {
   return items.map((item) => {
-    const cleaned: Row = { ...item, user_id: USER_ID };
+    const cleaned: Row = { ...item, user_id: userId };
     Object.keys(cleaned).forEach((k) => {
       if (cleaned[k] === '' || cleaned[k] === undefined) cleaned[k] = null;
     });
@@ -117,11 +117,13 @@ async function upsertWithRetry(key: CollectionKey, items: Row[]): Promise<boolea
 export const StorageManager = {
   async get(key: CollectionKey | 'settings'): Promise<any> {
     try {
+      const userId = await getUserId();
+      if (!userId) return key === 'settings' ? null : [];
       if (key === 'settings') {
         const { data, error } = await supabase
           .from('settings')
           .select('settings_data')
-          .eq('user_id', USER_ID)
+          .eq('user_id', userId)
           .maybeSingle();
         if (error) {
           console.error('Error fetching settings:', error);
@@ -130,7 +132,7 @@ export const StorageManager = {
         return data?.settings_data || null;
       }
 
-      const { data, error } = await supabase.from(key).select('*').eq('user_id', USER_ID);
+      const { data, error } = await supabase.from(key).select('*').eq('user_id', userId);
       if (error) {
         console.error(`Error fetching ${key}:`, error.message, error);
         return [];
@@ -183,10 +185,12 @@ export const StorageManager = {
 
   async set(key: CollectionKey | 'settings', value: any): Promise<boolean> {
     try {
+      const userId = await getUserId();
+      if (!userId) return false;
       if (key === 'settings') {
         const { error } = await supabase
           .from('settings')
-          .upsert({ user_id: USER_ID, settings_data: value }, { onConflict: 'user_id' });
+          .upsert({ user_id: userId, settings_data: value }, { onConflict: 'user_id' });
         if (error) {
           console.error('Error saving settings:', error);
           return false;
@@ -200,7 +204,7 @@ export const StorageManager = {
       // 1. Upsert all current rows (insert new, update existing) keyed on `id`.
       //    We never delete first, so a failed/interrupted write cannot wipe data
       //    — this is the core fix for the old delete-all-then-insert pattern.
-      const items = toDbShape(key, clean(value));
+      const items = toDbShape(key, clean(value, userId));
       if (items.length > 0) {
         const ok = await upsertWithRetry(key, items);
         if (!ok) return false;
@@ -214,7 +218,7 @@ export const StorageManager = {
       const { data: existing, error: exErr } = await supabase
         .from(key)
         .select('id')
-        .eq('user_id', USER_ID);
+        .eq('user_id', userId);
 
       if (exErr) {
         // The upsert already succeeded; a failed diff just leaves stale rows
@@ -228,7 +232,7 @@ export const StorageManager = {
           const { error: delErr } = await supabase
             .from(key)
             .delete()
-            .eq('user_id', USER_ID)
+            .eq('user_id', userId)
             .in('id', removedIds);
           if (delErr) console.error(`Error deleting removed ${key} rows:`, delErr.message);
           else console.log(`Removed ${removedIds.length} ${key} row(s)`);
