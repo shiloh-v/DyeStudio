@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { DateUtils } from '../lib/dates';
 import type { Pan } from '../types';
 
-export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, settings, kits, colorSketches }) {
+export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, settings, kits, colorSketches, gradients }) {
+    // Dyes already made into a saved gradient — excluded from the gradient-tray
+    // picker so you don't accidentally re-do a gradient you've already done.
+    const usedGradientDyes = new Set((gradients || []).map(g => g.dyeColor).filter(Boolean));
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [expandedSessions, setExpandedSessions] = useState({});
@@ -670,7 +673,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select dye...</option>
-                                                {inventory.filter(item => item.category === 'dye').map(dye => (
+                                                {inventory
+                                                    .filter(item => item.category === 'dye'
+                                                        && (!usedGradientDyes.has(item.name) || item.name === currentPan.gradientDye))
+                                                    .map(dye => (
                                                     <option key={dye.id} value={dye.name}>{dye.name}</option>
                                                 ))}
                                             </select>

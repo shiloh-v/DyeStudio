@@ -475,14 +475,15 @@ export function YarnDyeManager() {
                     <Kits kits={kits} saveKits={saveKits} recipes={recipes} inventory={inventory} />
                 )}
                 {activeTab === 'sessions' && (
-                    <DyeSessions 
-                        dyeSessions={dyeSessions} 
+                    <DyeSessions
+                        dyeSessions={dyeSessions}
                         saveDyeSessions={saveDyeSessions}
                         recipes={recipes}
                         inventory={inventory}
                         settings={settings}
                         kits={kits}
                         colorSketches={colorSketches}
+                        gradients={gradients}
                     />
                 )}
                 {activeTab === 'queue' && (
