@@ -64,13 +64,24 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         } catch { setCompletedPans(new Set()); }
     }, [selectedSessionId]);
 
+    const saveCompleted = (set) =>
+        localStorage.setItem('queue_done_' + selectedSessionId, JSON.stringify([...set]));
+
     // Mark the current pan dyed (fills its dot) and advance to the next.
     const completePan = () => {
         const next = new Set(completedPans);
         next.add(currentPanIndex);
         setCompletedPans(next);
-        localStorage.setItem('queue_done_' + selectedSessionId, JSON.stringify([...next]));
+        saveCompleted(next);
         if (currentPanIndex < selectedSession.pans.length - 1) setCurrentPanIndex(currentPanIndex + 1);
+    };
+
+    // Undo "dyed" for a pan (no navigation).
+    const unmarkPan = (idx) => {
+        const next = new Set(completedPans);
+        next.delete(idx);
+        setCompletedPans(next);
+        saveCompleted(next);
     };
     
     // Get fresh recipe data if pan has a recipe OR color sketch
@@ -1065,6 +1076,16 @@ Examples:
                                             </button>
                                         ))}
                                     </div>
+
+                                    {/* Undo "dyed" for the current pan if marked by mistake */}
+                                    {completedPans.has(currentPanIndex) && (
+                                        <button
+                                            onClick={() => unmarkPan(currentPanIndex)}
+                                            className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline bg-transparent"
+                                        >
+                                            ↩ Unmark this pan as dyed
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Recipe & Scaled Ingredients (scaled dye amounts — the
