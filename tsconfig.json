@@ -13,13 +13,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    "_comment": "Phase 1: loose types for parity. Strictness ramps up in Phase 3.",
     "strict": false,
     "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "allowJs": true
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src"]
 }
