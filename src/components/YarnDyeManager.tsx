@@ -40,6 +40,13 @@ export function YarnDyeManager() {
     const [colorSketches, setColorSketches] = useState([]);
     const [gradients, setGradients] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
+    const toggleDark = () => {
+        const next = !darkMode;
+        setDarkMode(next);
+        document.documentElement.classList.toggle('dark', next);
+        localStorage.setItem('theme', next ? 'dark' : 'light');
+    };
     const [settings, setSettings] = useState({
         colorTypes: ['tonal', 'variegated', 'speckled'],
         inventoryCategories: ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'other'],
@@ -323,6 +330,13 @@ export function YarnDyeManager() {
                                 className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm"
                             >
                                 🔄 Reload Batches
+                            </button>
+                            <button
+                                onClick={toggleDark}
+                                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                                className="bg-white/20 text-white px-3 py-2 rounded-lg hover:bg-white/30 transition-colors font-medium"
+                            >
+                                {darkMode ? '☀️' : '🌙'}
                             </button>
                             <button
                                 onClick={() => { supabase.auth.signOut(); }}
