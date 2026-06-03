@@ -1271,7 +1271,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             {pan.type === 'gradientTray' ? (
                                                 (() => {
                                                     const dye = inventory.find(i => i.name === pan.gradientDye);
-                                                    const baseColor = dye?.color || '#9333ea';
+                                                    const baseColor = dye?.color || '#0d9488';
                                                     return (
                                                         <div 
                                                             className="w-20 h-20 rounded border flex-shrink-0 flex items-center justify-center"
@@ -1897,7 +1897,7 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
 {pan.type === "gradientTray" ? (
   (() => {
     const dye = inventory.find(i => i.name === pan.gradientDye);
-    const baseColor = dye?.color || "#9333ea";
+    const baseColor = dye?.color || "#0d9488";
     return (
       <div
         className="w-12 h-12 rounded border flex-shrink-0 flex items-center justify-center"

@@ -694,13 +694,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     style={{
                                                         background: `linear-gradient(to right, ${(() => {
                                                             const dye = inventory.find(i => i.name === currentPan.gradientDye);
-                                                            return dye?.color || '#9333ea';
+                                                            return dye?.color || '#0d9488';
                                                         })()}15, ${(() => {
                                                             const dye = inventory.find(i => i.name === currentPan.gradientDye);
-                                                            return dye?.color || '#9333ea';
+                                                            return dye?.color || '#0d9488';
                                                         })()}60, ${(() => {
                                                             const dye = inventory.find(i => i.name === currentPan.gradientDye);
-                                                            return dye?.color || '#9333ea';
+                                                            return dye?.color || '#0d9488';
                                                         })()})`
                                                     }}
                                                 >
@@ -730,7 +730,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 onClick={goToPreviousPan}
                                                 disabled={currentPanIndex === 0}
                                                 style={{
-                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
+                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
                                                     color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
                                                     cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
                                                 }}
@@ -786,7 +786,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 onClick={goToPreviousPan}
                                                 disabled={currentPanIndex === 0}
                                                 style={{
-                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
+                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
                                                     color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
                                                     cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
                                                 }}
@@ -956,7 +956,7 @@ Examples:
                                                         onClick={goToPreviousPan}
                                                         disabled={currentPanIndex === 0}
                                                         style={{
-                                                            backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
+                                                            backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
                                                             color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
                                                             cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
                                                         }}
@@ -1049,32 +1049,8 @@ Examples:
                                     </div>
                                 </div>
 
-                                {/* Instructions */}
-                                {currentRecipe?.instructions && (
-                                    <div className="bg-white rounded-lg p-4 mb-4">
-                                        <h4 className="font-semibold text-gray-900 mb-2">Instructions:</h4>
-                                        <p className="text-gray-700 whitespace-pre-line">{currentRecipe.instructions}</p>
-                                    </div>
-                                )}
-
-                                {/* Yarns in Pan */}
-                                <div className="bg-white rounded-lg p-4 mb-4">
-                                    <h4 className="font-semibold text-gray-900 mb-3">Yarns in This Pan:</h4>
-                                    <div className="space-y-2">
-                                        {currentPan.yarns.map((yarn, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
-                                                <span className="font-medium">
-                                                    {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
-                                                </span>
-                                                <span className="text-teal-700 font-semibold">
-                                                    {yarn.quantity * parseFloat(yarn.hankSize)}g total
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Recipe & Scaled Ingredients */}
+                                {/* Recipe & Scaled Ingredients (scaled dye amounts — the
+                                    primary thing while dyeing, kept right under the nav) */}
                                 {(currentRecipe || currentColorSketch) ? (
                                     <div className="bg-white rounded-lg p-4">
                                         <h4 className="font-semibold text-gray-900 mb-3">
@@ -1145,6 +1121,31 @@ Examples:
                                         <p className="text-yellow-800">
                                             ⚠️ No recipe linked to this pan. Ingredients need to be calculated manually.
                                         </p>
+                                    </div>
+                                )}
+
+                                {/* Yarns in Pan */}
+                                <div className="bg-white rounded-lg p-4 mb-4 mt-4">
+                                    <h4 className="font-semibold text-gray-900 mb-3">Yarns in This Pan:</h4>
+                                    <div className="space-y-2">
+                                        {currentPan.yarns.map((yarn, idx) => (
+                                            <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
+                                                <span className="font-medium">
+                                                    {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
+                                                </span>
+                                                <span className="text-teal-700 font-semibold">
+                                                    {yarn.quantity * parseFloat(yarn.hankSize)}g total
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Instructions */}
+                                {currentRecipe?.instructions && (
+                                    <div className="bg-white rounded-lg p-4 mb-4">
+                                        <h4 className="font-semibold text-gray-900 mb-2">Instructions:</h4>
+                                        <p className="text-gray-700 whitespace-pre-line">{currentRecipe.instructions}</p>
                                     </div>
                                 )}
 

@@ -86,6 +86,9 @@
     background-color: #1e293b;
     border-color: #334155;
 }
+/* Inner section boxes are bg-white (=> #1e293b, same as the card) — inset them
+   one shade darker so the Yarns/Recipe/Instructions sections stay distinct. */
+.dark .queue-pan-card .bg-white { background-color: #0f172a; }
 
 /* Form controls (preflight is disabled, so style them explicitly) */
 .dark input, .dark select, .dark textarea {
