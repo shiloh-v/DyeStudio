@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local data backups / session artifacts (business data — not code)
+outputs/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel/
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
+# Editor / OS
+.DS_Store
+*.log
