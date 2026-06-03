@@ -4,6 +4,8 @@ import { DateUtils } from '../lib/dates';
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
     const [currentPanIndex, setCurrentPanIndex] = useState(() => Number(localStorage.getItem('queue_pan')) || 0);
+    // Pan indices marked "dyed" this session (fills the progress dots).
+    const [completedPans, setCompletedPans] = useState(() => new Set<number>());
 
     // Unique yarn bases and their available hank sizes from inventory.
     // (Used by the ad-hoc pan editor; previously referenced but never defined,
@@ -54,6 +56,33 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     useEffect(() => {
         if (selectedSession && currentPanIndex >= selectedSession.pans.length) setCurrentPanIndex(0);
     }, [selectedSessionId, selectedSession, currentPanIndex]);
+
+    // Load which pans are marked dyed for this session (persisted per session).
+    useEffect(() => {
+        try {
+            setCompletedPans(new Set(JSON.parse(localStorage.getItem('queue_done_' + selectedSessionId) || '[]')));
+        } catch { setCompletedPans(new Set()); }
+    }, [selectedSessionId]);
+
+    const saveCompleted = (set) =>
+        localStorage.setItem('queue_done_' + selectedSessionId, JSON.stringify([...set]));
+
+    // Mark the current pan dyed (fills its dot) and advance to the next.
+    const completePan = () => {
+        const next = new Set(completedPans);
+        next.add(currentPanIndex);
+        setCompletedPans(next);
+        saveCompleted(next);
+        if (currentPanIndex < selectedSession.pans.length - 1) setCurrentPanIndex(currentPanIndex + 1);
+    };
+
+    // Undo "dyed" for a pan (no navigation).
+    const unmarkPan = (idx) => {
+        const next = new Set(completedPans);
+        next.delete(idx);
+        setCompletedPans(next);
+        saveCompleted(next);
+    };
     
     // Get fresh recipe data if pan has a recipe OR color sketch
     const currentRecipe = currentPan?.recipeId 
@@ -671,19 +700,19 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                         Pan {currentPanIndex + 1} of {selectedSession.pans.length}
                                     </span>
                                     <span className="text-sm text-gray-500">
-                                        {Math.round(((currentPanIndex + 1) / selectedSession.pans.length) * 100)}% Complete
+                                        {completedPans.size} of {selectedSession.pans.length} dyed ({Math.round((completedPans.size / selectedSession.pans.length) * 100)}%)
                                     </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-3">
-                                    <div 
+                                    <div
                                         className="bg-teal-600 h-3 rounded-full transition-all"
-                                        style={{ width: `${((currentPanIndex + 1) / selectedSession.pans.length) * 100}%` }}
+                                        style={{ width: `${(completedPans.size / selectedSession.pans.length) * 100}%` }}
                                     />
                                 </div>
                             </div>
 
                             {/* Current Pan/Tray Details */}
-                            <div className="bg-gradient-to-br from-teal-50 to-blue-50 rounded-lg card-shadow p-6 border-2 border-teal-300">
+                            <div className="queue-pan-card bg-gradient-to-br from-teal-50 to-blue-50 rounded-lg card-shadow p-6 border-2 border-teal-300">
                                 {currentPan.type === 'gradientTray' ? (
                                     // Gradient Tray Display
                                     <>
@@ -694,13 +723,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     style={{
                                                         background: `linear-gradient(to right, ${(() => {
                                                             const dye = inventory.find(i => i.name === currentPan.gradientDye);
-                                                            return dye?.color || '#9333ea';
+                                                            return dye?.color || '#0d9488';
                                                         })()}15, ${(() => {
                                                             const dye = inventory.find(i => i.name === currentPan.gradientDye);
-                                                            return dye?.color || '#9333ea';
+                                                            return dye?.color || '#0d9488';
                                                         })()}60, ${(() => {
                                                             const dye = inventory.find(i => i.name === currentPan.gradientDye);
-                                                            return dye?.color || '#9333ea';
+                                                            return dye?.color || '#0d9488';
                                                         })()})`
                                                     }}
                                                 >
@@ -730,7 +759,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 onClick={goToPreviousPan}
                                                 disabled={currentPanIndex === 0}
                                                 style={{
-                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
+                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
                                                     color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
                                                     cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
                                                 }}
@@ -786,7 +815,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 onClick={goToPreviousPan}
                                                 disabled={currentPanIndex === 0}
                                                 style={{
-                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
+                                                    backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
                                                     color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
                                                     cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
                                                 }}
@@ -956,7 +985,7 @@ Examples:
                                                         onClick={goToPreviousPan}
                                                         disabled={currentPanIndex === 0}
                                                         style={{
-                                                            backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
+                                                            backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#0d9488',
                                                             color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
                                                             cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
                                                         }}
@@ -1005,75 +1034,62 @@ Examples:
                                         </div>
                                     </div>
                                     
-                                    {/* Navigation Buttons - Full Width Row */}
-                                    <div className="flex gap-3 w-full">
+                                    {/* Navigation: Back / Skip / Next */}
+                                    <div className="flex gap-2 w-full">
                                         <button
                                             onClick={goToPreviousPan}
                                             disabled={currentPanIndex === 0}
-                                            style={{
-                                                backgroundColor: currentPanIndex === 0 ? '#d1d5db' : '#9333ea',
-                                                color: currentPanIndex === 0 ? '#9ca3af' : '#ffffff',
-                                                cursor: currentPanIndex === 0 ? 'not-allowed' : 'pointer'
-                                            }}
-                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            onMouseEnter={(e) => {
-                                                if (currentPanIndex !== 0) {
-                                                    e.currentTarget.style.backgroundColor = '#7e22ce';
-                                                }
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                if (currentPanIndex !== 0) {
-                                                    e.currentTarget.style.backgroundColor = '#9333ea';
-                                                }
-                                            }}
+                                            className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            ← Previous Pan
+                                            ← Back
                                         </button>
                                         <button
-                                            onClick={markPanComplete}
-                                            style={{
-                                                backgroundColor: '#16a34a',
-                                                color: '#ffffff'
-                                            }}
-                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg transition-colors shadow-md"
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#15803d';
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#16a34a';
-                                            }}
+                                            onClick={() => currentPanIndex < selectedSession.pans.length - 1 && setCurrentPanIndex(currentPanIndex + 1)}
+                                            disabled={currentPanIndex >= selectedSession.pans.length - 1}
+                                            title="Skip for now — come back via the pan numbers below"
+                                            className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            {currentPanIndex < selectedSession.pans.length - 1 ? 'Next Pan →' : 'Complete Session ✓'}
+                                            Skip ⏭
+                                        </button>
+                                        <button
+                                            onClick={completePan}
+                                            className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
+                                        >
+                                            {completedPans.has(currentPanIndex) ? 'Next Pan →' : '✓ Mark Dyed'}
                                         </button>
                                     </div>
-                                </div>
 
-                                {/* Instructions */}
-                                {currentRecipe?.instructions && (
-                                    <div className="bg-white rounded-lg p-4 mb-4">
-                                        <h4 className="font-semibold text-gray-900 mb-2">Instructions:</h4>
-                                        <p className="text-gray-700 whitespace-pre-line">{currentRecipe.instructions}</p>
-                                    </div>
-                                )}
-
-                                {/* Yarns in Pan */}
-                                <div className="bg-white rounded-lg p-4 mb-4">
-                                    <h4 className="font-semibold text-gray-900 mb-3">Yarns in This Pan:</h4>
-                                    <div className="space-y-2">
-                                        {currentPan.yarns.map((yarn, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
-                                                <span className="font-medium">
-                                                    {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
-                                                </span>
-                                                <span className="text-teal-700 font-semibold">
-                                                    {yarn.quantity * parseFloat(yarn.hankSize)}g total
-                                                </span>
-                                            </div>
+                                    {/* Jump to any pan — filled = dyed, ring = where you are */}
+                                    <div className="flex gap-1.5 overflow-x-auto mt-3 pb-1">
+                                        {selectedSession.pans.map((p, i) => (
+                                            <button
+                                                key={i}
+                                                onClick={() => setCurrentPanIndex(i)}
+                                                title={`Pan ${i + 1}${completedPans.has(i) ? ' — dyed' : ''}`}
+                                                className={`flex-shrink-0 w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
+                                                    completedPans.has(i)
+                                                        ? 'bg-teal-600 text-white'
+                                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                                } ${i === currentPanIndex ? 'ring-2 ring-teal-400' : ''}`}
+                                            >
+                                                {i + 1}
+                                            </button>
                                         ))}
                                     </div>
+
+                                    {/* Undo "dyed" for the current pan if marked by mistake */}
+                                    {completedPans.has(currentPanIndex) && (
+                                        <button
+                                            onClick={() => unmarkPan(currentPanIndex)}
+                                            className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline bg-transparent"
+                                        >
+                                            ↩ Unmark this pan as dyed
+                                        </button>
+                                    )}
                                 </div>
 
-                                {/* Recipe & Scaled Ingredients */}
+                                {/* Recipe & Scaled Ingredients (scaled dye amounts — the
+                                    primary thing while dyeing, kept right under the nav) */}
                                 {(currentRecipe || currentColorSketch) ? (
                                     <div className="bg-white rounded-lg p-4">
                                         <h4 className="font-semibold text-gray-900 mb-3">
@@ -1144,6 +1160,31 @@ Examples:
                                         <p className="text-yellow-800">
                                             ⚠️ No recipe linked to this pan. Ingredients need to be calculated manually.
                                         </p>
+                                    </div>
+                                )}
+
+                                {/* Yarns in Pan */}
+                                <div className="bg-white rounded-lg p-4 mb-4 mt-4">
+                                    <h4 className="font-semibold text-gray-900 mb-3">Yarns in This Pan:</h4>
+                                    <div className="space-y-2">
+                                        {currentPan.yarns.map((yarn, idx) => (
+                                            <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
+                                                <span className="font-medium">
+                                                    {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
+                                                </span>
+                                                <span className="text-teal-700 font-semibold">
+                                                    {yarn.quantity * parseFloat(yarn.hankSize)}g total
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Instructions */}
+                                {currentRecipe?.instructions && (
+                                    <div className="bg-white rounded-lg p-4 mb-4">
+                                        <h4 className="font-semibold text-gray-900 mb-2">Instructions:</h4>
+                                        <p className="text-gray-700 whitespace-pre-line">{currentRecipe.instructions}</p>
                                     </div>
                                 )}
 

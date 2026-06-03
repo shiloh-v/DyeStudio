@@ -77,6 +77,18 @@
 .dark .text-red-600, .dark .text-red-800 { color: #f87171; }
 .dark .text-green-600, .dark .text-green-700 { color: #34d399; }
 .dark .text-yellow-600, .dark .text-yellow-700 { color: #fbbf24; }
+.dark .text-green-800, .dark .text-green-900 { color: #6ee7b7; }
+
+/* Queue: the pan card uses a light gradient (from-teal-50 to-blue-50) that the
+   palette remap doesn't catch — force it dark so its text is readable. */
+.dark .queue-pan-card {
+    background-image: none;
+    background-color: #1e293b;
+    border-color: #334155;
+}
+/* Inner section boxes are bg-white (=> #1e293b, same as the card) — inset them
+   one shade darker so the Yarns/Recipe/Instructions sections stay distinct. */
+.dark .queue-pan-card .bg-white { background-color: #0f172a; }
 
 /* Form controls (preflight is disabled, so style them explicitly) */
 .dark input, .dark select, .dark textarea {
