@@ -14,6 +14,23 @@
         line-height: 1.5;
     }
     table { border-collapse: collapse; }
+
+    /*
+     * Preflight is disabled, so <button> would render with the browser's
+     * default chrome (a gray/white box + border) — which looks awful in dark
+     * mode. Reset it here: bare buttons become flat, while buttons that set a
+     * bg/border via utility classes keep them (utilities win over this base
+     * rule, and border-style:solid lets their border utilities render).
+     */
+    button {
+        background-color: transparent;
+        background-image: none;
+        border-width: 0;
+        border-style: solid;
+        cursor: pointer;
+        font: inherit;
+        color: inherit;
+    }
 }
 
 /*
