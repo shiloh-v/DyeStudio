@@ -1,7 +1,7 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
-import { confirmDialog } from '../lib/dialog';
+import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import type { Pan } from '../types';
 import {
@@ -200,8 +200,18 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         return [...(yarnBases[baseName] || [])].sort((a, b) => parseFloat(a) - parseFloat(b));
     };
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
+    // Persist the session being built/edited. Returns false (without saving) if a
+    // required field is missing, so callers can keep the form open. Does not close
+    // the form — the caller decides whether to reset afterward.
+    const commitSession = () => {
+        if (!formData.name?.trim()) {
+            toast('Please enter a session name', 'error');
+            return false;
+        }
+        if (!formData.date) {
+            toast('Please choose a planned date', 'error');
+            return false;
+        }
         if (editingId) {
             saveDyeSessions(dyeSessions.map(s => s.id === editingId ? { ...formData, id: editingId } : s));
         } else {
@@ -212,7 +222,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                     .filter(id => id && id.startsWith('DS-'))
                     .map(id => parseInt(id.substring(3)))
                     .filter(n => !isNaN(n));
-                
+
                 const maxNum = existingSessionIds.length > 0 ? Math.max(...existingSessionIds) : 0;
                 return `DS-${String(maxNum + 1).padStart(3, '0')}`;
             };
@@ -220,7 +230,12 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             const sessionId = getNextSessionId();
             saveDyeSessions([...dyeSessions, { ...formData, id: Date.now(), sessionId: sessionId }]);
         }
-        resetForm();
+        return true;
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (commitSession()) resetForm();
     };
 
     const resetForm = () => {
@@ -244,7 +259,26 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         setEditingId(null);
     };
 
-    const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
+    const closeForm = async () => {
+        // No unsaved edits — close immediately.
+        if (!guard.isDirty(formData)) { resetForm(); return; }
+        const choice = await choiceDialog({
+            title: 'Unsaved changes',
+            message: 'You have unsaved changes to this dye session.',
+            buttons: [
+                { label: 'Save & close', value: 'save', primary: true },
+                { label: 'Discard', value: 'discard', danger: true },
+                { label: 'Keep editing', value: 'keep' },
+            ],
+        });
+        if (choice === 'save') {
+            // commitSession() may fail validation; stay in the form if so.
+            if (commitSession()) resetForm();
+        } else if (choice === 'discard') {
+            resetForm();
+        }
+        // 'keep' or dismissed (null) → leave the form open, untouched.
+    };
 
     const editSession = (session) => {
         setFormData(session);

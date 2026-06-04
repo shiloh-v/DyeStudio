@@ -6,9 +6,16 @@ import { useEffect, useRef, useState } from 'react';
 // Backed by a single <DialogHost/> mounted at the app root. Requests queue so
 // overlapping calls each get their own dialog in turn.
 
+export interface ChoiceButton {
+    label: string;
+    value: string;
+    danger?: boolean;
+    primary?: boolean;
+}
+
 interface DialogRequest {
     id: number;
-    kind: 'confirm' | 'prompt';
+    kind: 'confirm' | 'prompt' | 'choice';
     title?: string;
     message: string;
     confirmText: string;
@@ -16,6 +23,7 @@ interface DialogRequest {
     danger: boolean;
     defaultValue: string;
     inputType: string;
+    buttons: ChoiceButton[];
     resolve: (value: boolean | string | null) => void;
 }
 
@@ -60,6 +68,7 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
             danger: opts.danger ?? false,
             defaultValue: '',
             inputType: 'text',
+            buttons: [],
             resolve: (v) => resolve(v === true),
         });
         emit();
@@ -87,6 +96,34 @@ export function promptDialog(opts: PromptOptions): Promise<string | null> {
             danger: false,
             defaultValue: opts.defaultValue ?? '',
             inputType: opts.inputType ?? 'text',
+            buttons: [],
+            resolve: (v) => resolve(typeof v === 'string' ? v : null),
+        });
+        emit();
+    });
+}
+
+export interface ChoiceOptions {
+    message: string;
+    title?: string;
+    buttons: ChoiceButton[];
+}
+
+// Multi-button dialog. Resolves to the chosen button's `value`, or null if the
+// user dismisses via Escape / click-outside.
+export function choiceDialog(opts: ChoiceOptions): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+        queue.push({
+            id: nextId++,
+            kind: 'choice',
+            title: opts.title,
+            message: opts.message,
+            confirmText: 'OK',
+            cancelText: 'Cancel',
+            danger: false,
+            defaultValue: '',
+            inputType: 'text',
+            buttons: opts.buttons,
             resolve: (v) => resolve(typeof v === 'string' ? v : null),
         });
         emit();
@@ -146,25 +183,47 @@ export function DialogHost() {
                     />
                 )}
 
-                <div className="flex justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={onCancel}
-                        className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                    >
-                        {req.cancelText}
-                    </button>
-                    <button
-                        type="button"
-                        ref={(el) => { if (req.kind === 'confirm') el?.focus(); }}
-                        onClick={onConfirm}
-                        className={`${
-                            req.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'
-                        } text-white px-4 py-2 rounded-lg transition-colors font-medium`}
-                    >
-                        {req.confirmText}
-                    </button>
-                </div>
+                {req.kind === 'choice' ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                        {req.buttons.map((b) => (
+                            <button
+                                key={b.value}
+                                type="button"
+                                ref={(el) => { if (b.primary) el?.focus(); }}
+                                onClick={() => settle(b.value)}
+                                className={`${
+                                    b.primary
+                                        ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                                        : b.danger
+                                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                } px-4 py-2 rounded-lg transition-colors font-medium`}
+                            >
+                                {b.label}
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                        >
+                            {req.cancelText}
+                        </button>
+                        <button
+                            type="button"
+                            ref={(el) => { if (req.kind === 'confirm') el?.focus(); }}
+                            onClick={onConfirm}
+                            className={`${
+                                req.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'
+                            } text-white px-4 py-2 rounded-lg transition-colors font-medium`}
+                        >
+                            {req.confirmText}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
