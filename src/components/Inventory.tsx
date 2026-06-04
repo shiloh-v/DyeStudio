@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useFormGuard } from '../lib/useFormGuard';
 import type { InventoryItem } from '../types';
 
 export function Inventory({ inventory, saveInventory, settings }) {
@@ -43,6 +44,9 @@ export function Inventory({ inventory, saveInventory, settings }) {
         resetForm();
     };
 
+    const guard = useFormGuard();
+    useEffect(() => { if (showForm) guard.markPristine(formData); }, [showForm]);
+
     const resetForm = () => {
         setFormData({
             name: '',
@@ -70,6 +74,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
         setShowForm(false);
         setEditingId(null);
     };
+
+    const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const editItem = (item) => {
         setFormData(item);
@@ -110,7 +116,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
                 <button
-                    onClick={() => setShowForm(!showForm)}
+                    onClick={() => showForm ? closeForm() : setShowForm(true)}
                     className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ Add Item'}
@@ -153,12 +159,12 @@ export function Inventory({ inventory, saveInventory, settings }) {
 
             {/* Form Modal */}
             {showForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={resetForm}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={closeForm}>
                     <div className="bg-white rounded-lg card-shadow max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
                             <h3 className="text-xl font-semibold">{editingId ? 'Edit Item' : 'New Item'}</h3>
                             <button
-                                onClick={resetForm}
+                                onClick={closeForm}
                                 className="text-gray-500 hover:text-gray-700 text-2xl"
                             >
                                 ✕
@@ -589,7 +595,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                             </button>
                             <button
                                 type="button"
-                                onClick={resetForm}
+                                onClick={closeForm}
                                 className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
                             >
                                 Cancel

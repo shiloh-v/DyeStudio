@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useFormGuard } from '../lib/useFormGuard';
 
 export function ColorLab({ colorSketches, saveColorSketches, settings, inventory, recipes, saveRecipes }) {
     const [showForm, setShowForm] = useState(false);
@@ -39,6 +40,9 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
         return `${prefix}${String(nextNum).padStart(3, '0')}`;
     };
 
+    const guard = useFormGuard();
+    useEffect(() => { if (showForm) guard.markPristine(formData); }, [showForm]);
+
     const resetForm = () => {
         setFormData({
             colorId: '',
@@ -56,6 +60,8 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
         setShowForm(false);
         setEditingId(null);
     };
+
+    const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -324,7 +330,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                         {showArchived ? '📂 Hide Archived' : '📦 Show Archived'}
                     </button>
                     <button
-                        onClick={() => setShowForm(!showForm)}
+                        onClick={() => showForm ? closeForm() : setShowForm(true)}
                         className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                     >
                         {showForm ? '✕ Cancel' : '+ New Color Sketch'}
@@ -334,11 +340,11 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
 
             {/* Form */}
             {showForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={resetForm}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={closeForm}>
                 <div className="bg-white rounded-lg card-shadow p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-semibold">{editingId ? 'Edit' : 'New'} Color Sketch</h3>
-                        <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
+                        <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
@@ -649,7 +655,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                             </button>
                             <button
                                 type="button"
-                                onClick={resetForm}
+                                onClick={closeForm}
                                 className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
                             >
                                 Cancel

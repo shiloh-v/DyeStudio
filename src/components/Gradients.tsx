@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GradientCard } from './GradientCard';
+import { useFormGuard } from '../lib/useFormGuard';
 import type { Gradient } from '../types';
 
 export function Gradients({ gradients, saveGradients, inventory }) {
@@ -46,6 +47,9 @@ export function Gradients({ gradients, saveGradients, inventory }) {
     };
 
     const [formData, setFormData] = useState<Partial<Gradient>>(emptyForm);
+
+    const guard = useFormGuard();
+    useEffect(() => { if (showForm) guard.markPristine(formData); }, [showForm]);
 
     const availableDyes = inventory
         .filter(item => item.category === 'dye')
@@ -116,6 +120,8 @@ export function Gradients({ gradients, saveGradients, inventory }) {
         setEditingId(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
+
+    const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const editGradient = (gradient) => {
         let data = { ...gradient };
@@ -202,7 +208,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                     <p className="text-sm text-gray-600 mt-1">{gradients.length} gradient{gradients.length !== 1 ? 's' : ''} total</p>
                 </div>
                 <button
-                    onClick={() => { setShowForm(!showForm); if (showForm) resetForm(); }}
+                    onClick={() => showForm ? closeForm() : setShowForm(true)}
                     className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ New Gradient'}
@@ -232,11 +238,11 @@ export function Gradients({ gradients, saveGradients, inventory }) {
 
             {/* Form */}
             {showForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={resetForm}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={closeForm}>
                 <div className="bg-white rounded-lg card-shadow p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-semibold">{editingId ? 'Edit Gradient' : 'New Gradient'}</h3>
-                        <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
+                        <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {/* Type Toggle */}
@@ -475,7 +481,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                             <button type="submit" className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
                                 {editingId ? 'Update Gradient' : 'Save Gradient'}
                             </button>
-                            <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium">
+                            <button type="button" onClick={closeForm} className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium">
                                 Cancel
                             </button>
                         </div>

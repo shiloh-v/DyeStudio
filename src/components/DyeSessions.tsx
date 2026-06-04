@@ -1,5 +1,6 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { DateUtils } from '../lib/dates';
+import { useFormGuard } from '../lib/useFormGuard';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -53,6 +54,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         pans: [],
         notes: ''
     });
+
+    const guard = useFormGuard();
+    useEffect(() => { if (showForm) guard.markPristine(formData); }, [showForm]);
+
     const [currentPan, setCurrentPan] = useState<Pan>({
         type: 'pan', // 'pan', 'gradientTray', 'dyeSquareTray', 'kit', or 'colorLab'
         colorway: '',
@@ -236,6 +241,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         setShowForm(false);
         setEditingId(null);
     };
+
+    const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const editSession = (session) => {
         setFormData(session);
@@ -510,7 +517,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                     </button>
                 </div>
                 <button
-                    onClick={() => setShowForm(!showForm)}
+                    onClick={() => showForm ? closeForm() : setShowForm(true)}
                     className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                     {showForm ? '✕ Cancel' : '+ Plan Session'}
@@ -519,11 +526,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
 
             {/* Form */}
             {showForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={resetForm}>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={closeForm}>
                 <div className="bg-white rounded-lg card-shadow p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-xl font-semibold">{editingId ? 'Edit Session' : 'Plan New Dye Session'}</h3>
-                        <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
+                        <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
                     </div>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-4">
@@ -1571,7 +1578,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                             </button>
                             <button
                                 type="button"
-                                onClick={resetForm}
+                                onClick={closeForm}
                                 className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
                             >
                                 Cancel
