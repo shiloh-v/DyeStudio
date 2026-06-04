@@ -109,7 +109,9 @@ export interface Batch {
   colorway?: string;
   customColorway?: string;
   skeins?: Num;
-  status?: 'dyeing' | 'drying' | 'ready' | 'sold' | string;
+  // 'stocked' is the terminal stage (finished inventory). 'sold' is the legacy
+  // terminal value kept for back-compat with pre-rename data; treat via isStocked().
+  status?: 'dyeing' | 'drying' | 'ready' | 'stocked' | 'sold' | string;
   startDate?: string;
   notes?: string;
   batchNotes?: string;
@@ -120,11 +122,11 @@ export interface Batch {
   totalCost?: number;
   costPerSkein?: number;
   isAdHoc?: boolean;
-  salePrice?: number;
+  salePrice?: number;      // expected/list price set when stocked (basis for projected margin)
   pricePerSkein?: number;
-  profit?: number;
-  profitMargin?: number;
-  soldDate?: string;
+  profit?: number;         // projected: salePrice - totalCost
+  profitMargin?: number;   // projected: profit / salePrice
+  soldDate?: string;       // date the batch was stocked (kept name for back-compat)
   [key: string]: any;
 }
 
