@@ -205,7 +205,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                     }}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
-                                    {categories.map(cat => (
+                                    {[...categories].sort((a, b) => a.localeCompare(b)).map(cat => (
                                         <option key={cat} value={cat} className="capitalize">{cat}</option>
                                     ))}
                                 </select>
@@ -385,7 +385,10 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         >
                                             <option value="">Select yarn base...</option>
-                                            {inventory.filter(i => i.category === 'yarn base').map(yarn => (
+                                            {inventory
+                                                .filter(i => i.category === 'yarn base')
+                                                .sort((a, b) => a.name.localeCompare(b.name))
+                                                .map(yarn => (
                                                 <option key={yarn.id} value={yarn.name}>{yarn.name}</option>
                                             ))}
                                         </select>
@@ -545,7 +548,9 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
                                     <option value="">Select supplier...</option>
-                                    {(settings.suppliers || ['Dharma', 'Wool2Dye4', 'Amazon']).map(supplier => (
+                                    {[...(settings.suppliers || ['Dharma', 'Wool2Dye4', 'Amazon'])]
+                                        .sort((a, b) => a.localeCompare(b))
+                                        .map(supplier => (
                                         <option key={supplier} value={supplier}>{supplier}</option>
                                     ))}
                                 </select>

@@ -197,7 +197,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         }, {});
 
     const getAvailableHankSizes = (baseName) => {
-        return yarnBases[baseName] || [];
+        return [...(yarnBases[baseName] || [])].sort((a, b) => parseFloat(a) - parseFloat(b));
     };
 
     const handleSubmit = (e) => {
@@ -636,9 +636,24 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select recipe...</option>
-                                                {recipes.map(r => (
-                                                    <option key={r.id} value={r.id}>{r.name}</option>
-                                                ))}
+                                                {Object.entries(
+                                                    [...recipes]
+                                                        .sort((a, b) => a.name.localeCompare(b.name))
+                                                        .reduce<Record<string, any[]>>((acc, r) => {
+                                                            const type = r.colorType || 'other';
+                                                            (acc[type] = acc[type] || []).push(r);
+                                                            return acc;
+                                                        }, {})
+                                                )
+                                                    .sort(([a], [b]) => a.localeCompare(b))
+                                                    .flatMap(([type, group]) => [
+                                                        <option key={`hdr-${type}`} disabled value="" className="font-bold bg-gray-100 text-gray-700">
+                                                            ── {type.toUpperCase()} ──
+                                                        </option>,
+                                                        ...group.map(r => (
+                                                            <option key={r.id} value={r.id}>{r.name}</option>
+                                                        )),
+                                                    ])}
                                             </select>
                                         </div>
                                     </div>
@@ -678,7 +693,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select yarn base...</option>
-                                                    {Object.keys(yarnBases).map(baseName => (
+                                                    {Object.keys(yarnBases).sort((a, b) => a.localeCompare(b)).map(baseName => (
                                                         <option key={baseName} value={baseName}>{baseName}</option>
                                                     ))}
                                                 </select>
@@ -752,6 +767,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 {inventory
                                                     .filter(item => item.category === 'dye'
                                                         && (!usedGradientDyes.has(item.name) || item.name === currentPan.gradientDye))
+                                                    .sort((a, b) => a.name.localeCompare(b.name))
                                                     .map(dye => (
                                                     <option key={dye.id} value={dye.name}>{dye.name}</option>
                                                 ))}
@@ -773,7 +789,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                             >
                                                 <option value="">Select yarn base...</option>
-                                                {Object.keys(yarnBases).map(baseName => (
+                                                {Object.keys(yarnBases).sort((a, b) => a.localeCompare(b)).map(baseName => (
                                                     <option key={baseName} value={baseName}>{baseName}</option>
                                                 ))}
                                             </select>
@@ -824,7 +840,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select dye...</option>
-                                                    {inventory.filter(item => item.category === 'dye').map(dye => (
+                                                    {inventory
+                                                        .filter(item => item.category === 'dye')
+                                                        .sort((a, b) => a.name.localeCompare(b.name))
+                                                        .map(dye => (
                                                         <option key={dye.id} value={dye.name}>{dye.name}</option>
                                                     ))}
                                                 </select>
@@ -837,7 +856,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select dye...</option>
-                                                    {inventory.filter(item => item.category === 'dye').map(dye => (
+                                                    {inventory
+                                                        .filter(item => item.category === 'dye')
+                                                        .sort((a, b) => a.name.localeCompare(b.name))
+                                                        .map(dye => (
                                                         <option key={dye.id} value={dye.name}>{dye.name}</option>
                                                     ))}
                                                 </select>
@@ -929,7 +951,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         >
                                             <option value="">Choose a kit...</option>
-                                            {kits.map(kit => (
+                                            {[...kits].sort((a, b) => a.name.localeCompare(b.name)).map(kit => (
                                                 <option key={kit.id} value={kit.id}>{kit.name}</option>
                                             ))}
                                         </select>
@@ -1022,7 +1044,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                             className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                         >
                                                             <option value="">Select yarn base...</option>
-                                                            {Object.keys(yarnBases).map(baseName => (
+                                                            {Object.keys(yarnBases).sort((a, b) => a.localeCompare(b)).map(baseName => (
                                                                 <option key={baseName} value={baseName}>{baseName}</option>
                                                             ))}
                                                         </select>
@@ -1164,7 +1186,13 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         >
                                             <option value="">Select experiment...</option>
-                                            {colorSketches.map(sketch => (
+                                            {[...colorSketches]
+                                                .sort((a, b) => {
+                                                    const labelA = `${a.colorId} ${a.customName || ''}`.trim();
+                                                    const labelB = `${b.colorId} ${b.customName || ''}`.trim();
+                                                    return labelA.localeCompare(labelB);
+                                                })
+                                                .map(sketch => (
                                                 <option key={sketch.id} value={sketch.id}>
                                                     {sketch.colorId} {sketch.customName ? `- ${sketch.customName}` : ''} ({sketch.type}, {sketch.yarnWeight}g)
                                                 </option>
@@ -1205,7 +1233,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select yarn base...</option>
-                                                    {Object.keys(yarnBases).map(baseName => (
+                                                    {Object.keys(yarnBases).sort((a, b) => a.localeCompare(b)).map(baseName => (
                                                         <option key={baseName} value={baseName}>{baseName}</option>
                                                     ))}
                                                 </select>

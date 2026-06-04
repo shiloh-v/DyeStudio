@@ -255,7 +255,9 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                     >
                         <option value="all">All Color Types</option>
-                        {(settings.colorTypes || ['tonal', 'variegated', 'speckled']).map(type => (
+                        {[...(settings.colorTypes || ['tonal', 'variegated', 'speckled'])]
+                            .sort((a, b) => a.localeCompare(b))
+                            .map(type => (
                             <option key={type} value={type} className="capitalize">{type}</option>
                         ))}
                     </select>
@@ -316,7 +318,9 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                 onChange={(e) => setFormData({ ...formData, colorType: e.target.value })}
                                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                             >
-                                {(settings.colorTypes || ['tonal', 'variegated', 'speckled']).map(type => (
+                                {[...(settings.colorTypes || ['tonal', 'variegated', 'speckled'])]
+                                    .sort((a, b) => a.localeCompare(b))
+                                    .map(type => (
                                     <option key={type} value={type} className="capitalize">{type}</option>
                                 ))}
                             </select>

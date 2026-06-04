@@ -25,7 +25,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         }, {});
 
     const getAvailableHankSizes = (baseName) => {
-        return yarnBases[baseName] || [];
+        return [...(yarnBases[baseName] || [])].sort((a, b) => parseFloat(a) - parseFloat(b));
     };
 
     // Get all non-archived sessions with pans
@@ -926,7 +926,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                                         className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 bg-white"
                                                                     >
                                                                         <option value="">Yarn base...</option>
-                                                                        {Object.keys(yarnBases).map(baseName => (
+                                                                        {Object.keys(yarnBases).sort((a, b) => a.localeCompare(b)).map(baseName => (
                                                                             <option key={baseName} value={baseName}>{baseName}</option>
                                                                         ))}
                                                                     </select>
