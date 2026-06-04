@@ -334,8 +334,12 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
 
             {/* Form */}
             {showForm && (
-                <div className="bg-white rounded-lg card-shadow p-6">
-                    <h3 className="text-xl font-semibold mb-4">{editingId ? 'Edit' : 'New'} Color Sketch</h3>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={resetForm}>
+                <div className="bg-white rounded-lg card-shadow p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-semibold">{editingId ? 'Edit' : 'New'} Color Sketch</h3>
+                        <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent">✕</button>
+                    </div>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
                             <div>
@@ -652,6 +656,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                             </button>
                         </div>
                     </form>
+                </div>
                 </div>
             )}
 
