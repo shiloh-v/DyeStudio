@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
+import { confirmDialog } from '../lib/dialog';
 import type { Recipe } from '../types';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory }) {
@@ -115,8 +116,8 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
         }
     };
 
-    const deleteRecipe = (id) => {
-        if (confirm('Delete this recipe?')) {
+    const deleteRecipe = async (id) => {
+        if (await confirmDialog({ message: 'Delete this recipe?', confirmText: 'Delete', danger: true })) {
             saveRecipes(recipes.filter(r => r.id !== id));
         }
     };

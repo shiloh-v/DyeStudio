@@ -2,6 +2,8 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { StorageManager } from '../lib/storage';
 import { supabase } from '../lib/supabase';
+import { confirmDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 
 // Code-split each tab — its JS loads on demand instead of in the initial bundle.
 const named = (p, name) => lazy(() => p().then((m) => ({ default: m[name] })));
@@ -127,7 +129,7 @@ export function YarnDyeManager() {
         // Safety check - don't save if inventory is empty and we previously had items
         if ((!newInventory || newInventory.length === 0) && inventory.length > 0) {
             console.warn('Prevented saving empty inventory - this might be an error');
-            if (!confirm('Warning: You are about to clear all inventory. Are you sure?')) {
+            if (!(await confirmDialog({ title: 'Clear all inventory?', message: 'You are about to clear all inventory. Are you sure?', confirmText: 'Clear', danger: true }))) {
                 return;
             }
         }
@@ -268,8 +270,8 @@ export function YarnDyeManager() {
                                                     `Gradients: ${currentCounts.gradients} → ${backupCounts.gradients}\n\n` +
                                                     `Are you sure? This cannot be undone!`;
                                                 
-                                                if (!confirm(confirmMessage)) return;
-                                                
+                                                if (!(await confirmDialog({ title: 'Restore backup?', message: confirmMessage, confirmText: 'Restore', danger: true }))) return;
+
                                                 // First update state
                                                 setRecipes(data.recipes || []);
                                                 setInventory(data.inventory || []);
@@ -296,7 +298,7 @@ export function YarnDyeManager() {
                                                 ]);
                                                 
                                                 console.log('All data saved successfully!');
-                                                alert('Backup restored successfully! Page will reload.');
+                                                toast('Backup restored! Reloading…', 'success');
                                                 
                                                 // Wait a bit more to ensure database commits
                                                 setTimeout(() => {
@@ -304,7 +306,7 @@ export function YarnDyeManager() {
                                                 }, 500);
                                             } catch (error) {
                                                 console.error('Import error:', error);
-                                                alert('Error reading backup file: ' + error.message);
+                                                toast('Error reading backup file: ' + error.message, 'error');
                                             }
                                         }
                                     };
@@ -316,15 +318,15 @@ export function YarnDyeManager() {
                             </button>
                             <button
                                 onClick={async () => {
-                                    if (!confirm('Restore batches directly from Supabase?\n\nThis will reload batch data from the database without importing a file.')) return;
-                                    
+                                    if (!(await confirmDialog({ message: 'Restore batches directly from Supabase?\n\nThis reloads batch data from the database without importing a file.', confirmText: 'Reload' }))) return;
+
                                     try {
                                         const batchesData = await StorageManager.get('batches');
                                         console.log('Loaded batches from database:', batchesData);
                                         setBatches(batchesData || []);
-                                        alert(`Restored ${batchesData?.length || 0} batches from database`);
+                                        toast(`Restored ${batchesData?.length || 0} batches from database`, 'success');
                                     } catch (error) {
-                                        alert('Error loading batches: ' + error.message);
+                                        toast('Error loading batches: ' + error.message, 'error');
                                     }
                                 }}
                                 className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm"
@@ -360,7 +362,7 @@ export function YarnDyeManager() {
                             { id: 'studio', label: '🧪 Studio', group: ['colorlab', 'sessions', 'queue'] },
                             { id: 'inventory', label: '📦 Inventory' },
                             { id: 'pipeline', label: '🔄 Pipeline' },
-                            { id: 'sales', label: '💰 Sales' },
+                            { id: 'sales', label: '🏷️ Stock' },
                             { id: 'settings', label: '⚙️ Settings' }
                         ].map(tab => {
                             const isGroupActive = tab.group 

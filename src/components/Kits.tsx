@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
+import { confirmDialog } from '../lib/dialog';
 
 export function Kits({ kits, saveKits, recipes, inventory }) {
     const [showForm, setShowForm] = useState(false);
@@ -63,8 +64,8 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
         setShowForm(true);
     };
 
-    const deleteKit = (id) => {
-        if (confirm('Delete this kit?')) {
+    const deleteKit = async (id) => {
+        if (await confirmDialog({ message: 'Delete this kit?', confirmText: 'Delete', danger: true })) {
             saveKits(kits.filter(k => k.id !== id));
         }
     };

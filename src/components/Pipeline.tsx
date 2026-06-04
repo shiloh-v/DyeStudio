@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
+import { isStocked } from '../lib/batches';
+import { confirmDialog, promptDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
     const [showForm, setShowForm] = useState(false);
@@ -43,11 +46,12 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
 
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
-    const updateStatus = (id, newStatus, oldStatus) => {
+    const updateStatus = async (id, newStatus, oldStatus) => {
         const batch = batches.find(b => b.id === id);
         
-        // If marking as sold, prompt for sale price and calculate profit
-        if (newStatus === 'sold' && batch) {
+        // If stocking, prompt for the expected list price so we can keep projected
+        // profit/margin (this is finished inventory, not a realized sale).
+        if (newStatus === 'stocked' && batch) {
             // Calculate suggested price from typical yarn prices
             let suggestedPrice = 0;
             if (batch.yarnDetails && batch.yarnDetails.length > 0) {
@@ -63,16 +67,16 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 });
             }
             
-            const promptMessage = suggestedPrice > 0 
-                ? `Enter total sale price for "${batch.colorway}" (${batch.skeins} skeins):\n\nSuggested price: $${suggestedPrice.toFixed(2)} (based on typical prices)`
-                : `Enter total sale price for "${batch.colorway}" (${batch.skeins} skeins):`;
-            
-            const salePrice = prompt(promptMessage, suggestedPrice > 0 ? suggestedPrice.toFixed(2) : '');
+            const promptMessage = suggestedPrice > 0
+                ? `Enter expected list price for "${batch.colorway}" (${batch.skeins} skeins):\n\nSuggested price: $${suggestedPrice.toFixed(2)} (based on typical prices)`
+                : `Enter expected list price for "${batch.colorway}" (${batch.skeins} skeins):`;
+
+            const salePrice = await promptDialog({ title: 'List price', message: promptMessage, defaultValue: suggestedPrice > 0 ? suggestedPrice.toFixed(2) : '', inputType: 'number', confirmText: 'Stock it' });
             if (salePrice === null) return; // User cancelled
-            
+
             const price = parseFloat(salePrice);
             if (isNaN(price) || price < 0) {
-                alert('Please enter a valid price');
+                toast('Please enter a valid price', 'error');
                 return;
             }
             
@@ -80,21 +84,21 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             const profit = price - cost;
             const pricePerSkein = batch.skeins > 0 ? price / batch.skeins : 0;
             
-            // Update batch with sale info
+            // Update batch with stock/pricing info
             const updatedBatch = {
                 ...batch,
-                status: 'sold',
+                status: 'stocked',
                 salePrice: price,
                 pricePerSkein: pricePerSkein,
                 profit: profit,
                 profitMargin: price > 0 ? ((profit / price) * 100) : 0,
                 soldDate: DateUtils.getTodayEST()
             };
-            
+
             saveBatches(batches.map(b => b.id === id ? updatedBatch : b));
-            
-            // Show profit summary
-            alert(`Sale recorded!\n\nSale Price: $${price.toFixed(2)}\nCost: $${cost.toFixed(2)}\nProfit: $${profit.toFixed(2)} (${updatedBatch.profitMargin.toFixed(1)}%)`);
+
+            // Show projected profit summary
+            toast(`Stocked! List $${price.toFixed(2)} · Cost $${cost.toFixed(2)} · Projected profit $${profit.toFixed(2)} (${updatedBatch.profitMargin.toFixed(1)}%)`, 'success');
             
             // Deduct ball bands and labels if coming from ready
             if (oldStatus === 'ready' && batch.yarnDetails && batch.yarnDetails.length > 0) {
@@ -139,24 +143,24 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
         saveBatches(batches.map(b => b.id === id ? { ...b, status: newStatus } : b));
     };
 
-    const deleteBatch = (id) => {
-        if (confirm('Delete this batch?')) {
+    const deleteBatch = async (id) => {
+        if (await confirmDialog({ message: 'Delete this batch?', confirmText: 'Delete', danger: true })) {
             saveBatches(batches.filter(b => b.id !== id));
         }
     };
 
-    const moveAllBatches = (fromStatus, toStatus) => {
+    const moveAllBatches = async (fromStatus, toStatus) => {
         const batchesToMove = batches.filter(b => b.status === fromStatus);
-        
+
         if (batchesToMove.length === 0) {
-            alert('No batches to move');
+            toast('No batches to move', 'error');
             return;
         }
         
         const statusInfo = statusLabels[toStatus];
         
-        // Special handling for moving to sold
-        if (toStatus === 'sold') {
+        // Special handling for moving to stocked (capture a list price for projections)
+        if (toStatus === 'stocked') {
             const totalBatches = batchesToMove.length;
             const totalSkeins = batchesToMove.reduce((sum, b) => sum + (b.skeins || 0), 0);
             const totalCost = batchesToMove.reduce((sum, b) => sum + (b.totalCost || 0), 0);
@@ -178,24 +182,24 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 }
             });
             
-            const confirmMsg = `Mark ${totalBatches} batches (${totalSkeins} total skeins) as SOLD?\n\n` +
+            const confirmMsg = `Mark ${totalBatches} batches (${totalSkeins} total skeins) as STOCKED?\n\n` +
                 `You can either:\n` +
-                `1. Set ONE sale price for all batches combined\n` +
-                `2. Cancel and sell batches individually for different prices\n\n` +
-                `Continue with combined sale?`;
-            
-            if (!confirm(confirmMsg)) return;
-            
-            const promptMessage = suggestedPrice > 0 
-                ? `Enter TOTAL sale price for all ${totalBatches} batches (${totalSkeins} skeins):\n\nSuggested: $${suggestedPrice.toFixed(2)}\nTotal Cost: $${totalCost.toFixed(2)}`
-                : `Enter TOTAL sale price for all ${totalBatches} batches (${totalSkeins} skeins):\n\nTotal Cost: $${totalCost.toFixed(2)}`;
-            
-            const salePrice = prompt(promptMessage, suggestedPrice > 0 ? suggestedPrice.toFixed(2) : '');
+                `1. Set ONE combined list price for all batches\n` +
+                `2. Cancel and stock batches individually for different prices\n\n` +
+                `Continue with combined list price?`;
+
+            if (!(await confirmDialog({ title: 'Stock all batches', message: confirmMsg, confirmText: 'Continue' }))) return;
+
+            const promptMessage = suggestedPrice > 0
+                ? `Enter TOTAL list price for all ${totalBatches} batches (${totalSkeins} skeins):\n\nSuggested: $${suggestedPrice.toFixed(2)}\nTotal Cost: $${totalCost.toFixed(2)}`
+                : `Enter TOTAL list price for all ${totalBatches} batches (${totalSkeins} skeins):\n\nTotal Cost: $${totalCost.toFixed(2)}`;
+
+            const salePrice = await promptDialog({ title: 'List price', message: promptMessage, defaultValue: suggestedPrice > 0 ? suggestedPrice.toFixed(2) : '', inputType: 'number', confirmText: 'Stock them' });
             if (salePrice === null) return;
-            
+
             const price = parseFloat(salePrice);
             if (isNaN(price) || price < 0) {
-                alert('Please enter a valid price');
+                toast('Please enter a valid price', 'error');
                 return;
             }
             
@@ -216,7 +220,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 
                 return {
                     ...b,
-                    status: 'sold',
+                    status: 'stocked',
                     salePrice: batchPrice,
                     pricePerSkein: pricePerSkein,
                     profit: batchProfit,
@@ -265,12 +269,12 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 saveInventory(updatedInventory);
             }
             
-            alert(`${totalBatches} batches marked as sold!\n\nTotal Sale: $${price.toFixed(2)}\nTotal Cost: $${totalCost.toFixed(2)}\nTotal Profit: $${profit.toFixed(2)} (${profitMargin.toFixed(1)}%)`);
+            toast(`${totalBatches} batches stocked! List $${price.toFixed(2)} · Cost $${totalCost.toFixed(2)} · Projected profit $${profit.toFixed(2)} (${profitMargin.toFixed(1)}%)`, 'success');
             return;
         }
         
-        // Regular move (non-sold)
-        if (!confirm(`Move all ${batchesToMove.length} batches from ${statusLabels[fromStatus].label} to ${statusInfo.label}?`)) {
+        // Regular move (non-stocked)
+        if (!(await confirmDialog({ message: `Move all ${batchesToMove.length} batches from ${statusLabels[fromStatus].label} to ${statusInfo.label}?`, confirmText: 'Move all' }))) {
             return;
         }
         
@@ -279,15 +283,15 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
         );
         
         saveBatches(updatedBatches);
-        alert(`Moved ${batchesToMove.length} batches to ${statusInfo.label}`);
+        toast(`Moved ${batchesToMove.length} batches to ${statusInfo.label}`, 'success');
     };
 
-    const statuses = ['dyeing', 'drying', 'ready', 'sold'];
+    const statuses = ['dyeing', 'drying', 'ready', 'stocked'];
     const statusLabels = {
         dyeing: { label: 'Dyeing', color: 'yellow', emoji: '🎨' },
         drying: { label: 'Drying', color: 'blue', emoji: '💨' },
         ready: { label: 'Ready for Labels', color: 'green', emoji: '✓' },
-        sold: { label: 'Sold', color: 'gray', emoji: '💰' }
+        stocked: { label: 'Stocked', color: 'teal', emoji: '📦' }
     };
 
     return (
@@ -371,7 +375,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
-                                    {statuses.filter(s => s !== 'sold').map(status => (
+                                    {statuses.filter(s => s !== 'stocked').map(status => (
                                         <option key={status} value={status} className="capitalize">
                                             {statusLabels[status].label}
                                         </option>
@@ -423,7 +427,10 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             {/* Pipeline View */}
             <div className="grid md:grid-cols-4 gap-4">
                 {statuses.map(status => {
-                    const batchesInStatus = batches.filter(b => b.status === status);
+                    // The Stocked column also catches legacy 'sold' batches (pre-migration).
+                    const batchesInStatus = status === 'stocked'
+                        ? batches.filter(isStocked)
+                        : batches.filter(b => b.status === status);
                     const statusInfo = statusLabels[status];
                     
                     return (
@@ -518,11 +525,11 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                         {/* Editable Batch Notes */}
                                         <div className="mb-2">
                                             <button
-                                                onClick={() => {
+                                                onClick={async () => {
                                                     const currentNotes = batch.batchNotes || '';
-                                                    const newNotes = prompt('Batch Notes (observations during dyeing/drying):', currentNotes);
+                                                    const newNotes = await promptDialog({ title: 'Batch notes', message: 'Observations during dyeing/drying:', defaultValue: currentNotes });
                                                     if (newNotes !== null && newNotes !== currentNotes) {
-                                                        saveBatches(batches.map(b => 
+                                                        saveBatches(batches.map(b =>
                                                             b.id === batch.id ? { ...b, batchNotes: newNotes } : b
                                                         ));
                                                     }

@@ -1,18 +1,19 @@
 import { DateUtils } from '../lib/dates';
+import { isStocked } from '../lib/batches';
 
 export function Sales({ sales, saveSales, batches, saveBatches }) {
-    // Get sold batches for display
-    const soldBatches = batches.filter(b => b.status === 'sold');
+    // Finished stock (incl. legacy 'sold'). These are projections, not realized sales.
+    const stockedBatches = batches.filter(isStocked);
     
-    // Calculate statistics from sold batches
-    const totalRevenue = soldBatches.reduce((sum, b) => sum + (b.salePrice || 0), 0);
-    const totalProfit = soldBatches.reduce((sum, b) => sum + (b.profit || 0), 0);
-    const totalCost = soldBatches.reduce((sum, b) => sum + (b.totalCost || 0), 0);
+    // Calculate projected statistics from stocked batches
+    const totalRevenue = stockedBatches.reduce((sum, b) => sum + (b.salePrice || 0), 0);
+    const totalProfit = stockedBatches.reduce((sum, b) => sum + (b.profit || 0), 0);
+    const totalCost = stockedBatches.reduce((sum, b) => sum + (b.totalCost || 0), 0);
     const avgProfitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100) : 0;
-    const avgSale = soldBatches.length > 0 ? totalRevenue / soldBatches.length : 0;
+    const avgSale = stockedBatches.length > 0 ? totalRevenue / stockedBatches.length : 0;
 
-    // Sales by month from sold batches
-    const salesByMonth: Record<string, number> = soldBatches.reduce((acc, batch) => {
+    // Projected value by month from stocked batches
+    const salesByMonth: Record<string, number> = stockedBatches.reduce((acc, batch) => {
         const month = new Date(batch.soldDate || batch.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
         acc[month] = (acc[month] || 0) + (batch.salePrice || 0);
         return acc;
@@ -20,7 +21,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     
     // Top selling bases (by revenue)
     const baseStats: Record<string, { count: number; revenue: number }> = {};
-    soldBatches.forEach(batch => {
+    stockedBatches.forEach(batch => {
         if (batch.yarnDetails) {
             batch.yarnDetails.forEach(yarn => {
                 const key = yarn.base;
@@ -42,7 +43,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     
     // Top selling colorways (by revenue)
     const colorwayStats: Record<string, { count: number; revenue: number }> = {};
-    soldBatches.forEach(batch => {
+    stockedBatches.forEach(batch => {
         const key = batch.colorway;
         if (!colorwayStats[key]) {
             colorwayStats[key] = { count: 0, revenue: 0 };
@@ -56,7 +57,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     
     // Top base + colorway combos
     const comboStats: Record<string, { count: number; revenue: number }> = {};
-    soldBatches.forEach(batch => {
+    stockedBatches.forEach(batch => {
         if (batch.yarnDetails) {
             batch.yarnDetails.forEach(yarn => {
                 const key = `${yarn.base} - ${batch.colorway}`;
@@ -77,7 +78,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     
     // Performance over time (last 6 months)
     const monthlyPerformance: Record<string, { sales: number; revenue: number; profit: number; totalRevenue: number }> = {};
-    soldBatches.forEach(batch => {
+    stockedBatches.forEach(batch => {
         const month = new Date(batch.soldDate || batch.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
         if (!monthlyPerformance[month]) {
             monthlyPerformance[month] = { sales: 0, revenue: 0, profit: 0, totalRevenue: 0 };
@@ -100,21 +101,25 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">Sales Tracking</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Stock &amp; Projections</h2>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg px-4 py-3">
+                📦 These are <strong>projections</strong> from your finished stock (expected list prices), not realized sales. Actual sales will arrive once Shopify is connected.
             </div>
 
             {/* Stats */}
             <div className="grid md:grid-cols-4 gap-6">
                 <div className="bg-white rounded-lg card-shadow p-6">
-                    <div className="text-sm text-gray-600 mb-1">Total Sales</div>
-                    <div className="text-3xl font-bold text-gray-900">{soldBatches.length}</div>
+                    <div className="text-sm text-gray-600 mb-1">Stocked Batches</div>
+                    <div className="text-3xl font-bold text-gray-900">{stockedBatches.length}</div>
                 </div>
                 <div className="bg-white rounded-lg card-shadow p-6">
-                    <div className="text-sm text-gray-600 mb-1">Total Revenue</div>
+                    <div className="text-sm text-gray-600 mb-1">Projected Revenue</div>
                     <div className="text-3xl font-bold text-green-600">${totalRevenue.toFixed(2)}</div>
                 </div>
                 <div className="bg-white rounded-lg card-shadow p-6">
-                    <div className="text-sm text-gray-600 mb-1">Total Profit</div>
+                    <div className="text-sm text-gray-600 mb-1">Projected Profit</div>
                     <div className="text-3xl font-bold text-blue-600">${totalProfit.toFixed(2)}</div>
                 </div>
                 <div className="bg-white rounded-lg card-shadow p-6">
@@ -126,17 +131,17 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
             {/* Performance Over Time */}
             {performanceData.length > 0 && (
                 <div className="bg-white rounded-lg card-shadow p-6">
-                    <h3 className="text-lg font-semibold mb-4">Performance Trends (Last 6 Months)</h3>
+                    <h3 className="text-lg font-semibold mb-4">Projected Trends (Last 6 Months)</h3>
                     <div className="grid md:grid-cols-2 gap-6">
-                        {/* Sales & Revenue Chart */}
+                        {/* Batches & Value Chart */}
                         <div>
-                            <h4 className="text-sm font-medium text-gray-700 mb-3">Sales & Revenue</h4>
+                            <h4 className="text-sm font-medium text-gray-700 mb-3">Batches & Value</h4>
                             <div className="space-y-3">
                                 {performanceData.map(data => (
                                     <div key={data.month}>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="text-gray-600">{data.month}</span>
-                                            <span className="font-semibold">{data.sales} sales • ${data.revenue.toFixed(0)}</span>
+                                            <span className="font-semibold">{data.sales} batches • ${data.revenue.toFixed(0)}</span>
                                         </div>
                                         <div className="flex gap-2">
                                             <div 
@@ -194,7 +199,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                 {/* Top Bases */}
                 {topBases.length > 0 && (
                     <div className="bg-white rounded-lg card-shadow p-6">
-                        <h3 className="text-lg font-semibold mb-4">🧶 Top Selling Bases</h3>
+                        <h3 className="text-lg font-semibold mb-4">🧶 Top Bases by Value</h3>
                         <div className="space-y-3">
                             {topBases.map(([base, stats], idx) => (
                                 <div key={base} className="flex items-center justify-between">
@@ -215,7 +220,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                 {/* Top Colorways */}
                 {topColorways.length > 0 && (
                     <div className="bg-white rounded-lg card-shadow p-6">
-                        <h3 className="text-lg font-semibold mb-4">🎨 Top Selling Colors</h3>
+                        <h3 className="text-lg font-semibold mb-4">🎨 Top Colors by Value</h3>
                         <div className="space-y-3">
                             {topColorways.map(([colorway, stats], idx) => (
                                 <div key={colorway} className="flex items-center justify-between">
@@ -258,7 +263,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
             {/* Sales by Month */}
             {Object.keys(salesByMonth).length > 0 && (
                 <div className="bg-white rounded-lg card-shadow p-6">
-                    <h3 className="text-lg font-semibold mb-4">Revenue by Month</h3>
+                    <h3 className="text-lg font-semibold mb-4">Projected Value by Month</h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                         {Object.entries(salesByMonth).sort((a, b) => new Date(b[0]).getTime() - new Date(a[0]).getTime()).map(([month, amount]) => (
                             <div key={month} className="text-center p-3 bg-teal-50 rounded-lg">
@@ -270,24 +275,24 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                 </div>
             )}
 
-            {/* Sold Batches List */}
+            {/* Stocked Inventory List */}
             <div className="bg-white rounded-lg card-shadow overflow-hidden">
-                <h3 className="text-lg font-semibold p-6 pb-0">Sold Batches</h3>
+                <h3 className="text-lg font-semibold p-6 pb-0">Stocked Inventory</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50 border-b">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stocked</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Colorway</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Skeins</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sale Price</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">List Price</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Margin</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {soldBatches.slice().reverse().map(batch => (
+                            {stockedBatches.slice().reverse().map(batch => (
                                 <tr key={batch.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 text-sm">
                                         {DateUtils.formatDate(batch.soldDate || batch.startDate)}
@@ -321,10 +326,10 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                     </table>
                 </div>
 
-                {soldBatches.length === 0 && (
+                {stockedBatches.length === 0 && (
                     <div className="text-center py-12 text-gray-400">
-                        <p className="text-xl mb-2">💰</p>
-                        <p>No batches sold yet. Move batches to "Sold" in the Pipeline!</p>
+                        <p className="text-xl mb-2">📦</p>
+                        <p>No finished stock yet. Move batches to "Stocked" in the Pipeline!</p>
                     </div>
                 )}
             </div>

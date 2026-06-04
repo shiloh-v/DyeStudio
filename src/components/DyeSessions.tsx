@@ -1,6 +1,8 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
+import { confirmDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -250,8 +252,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         setShowForm(true);
     };
 
-    const deleteSession = (id) => {
-        if (confirm('Delete this dye session?')) {
+    const deleteSession = async (id) => {
+        if (await confirmDialog({ message: 'Delete this dye session?', confirmText: 'Delete', danger: true })) {
             saveDyeSessions(dyeSessions.filter(s => s.id !== id));
         }
     };
@@ -276,30 +278,30 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         });
     };
 
-    const addPanToSession = () => {
+    const addPanToSession = async () => {
         // Validate based on type
         if (currentPan.type === 'pan') {
             if (!currentPan.colorway) {
-                alert('Please enter a colorway for this pan');
+                toast('Please enter a colorway for this pan', 'error');
                 return;
             }
         } else if (currentPan.type === 'gradientTray') {
             if (!currentPan.gradientDye || !currentPan.gradientYarnBase || !currentPan.gradientHankSize) {
-                alert('Please fill in all gradient tray fields');
+                toast('Please fill in all gradient tray fields', 'error');
                 return;
             }
         } else if (currentPan.type === 'dyeSquareTray') {
             if (!currentPan.squareColorA || !currentPan.squareColorB || !currentPan.gradientYarnBase || !currentPan.gradientHankSize) {
-                alert('Please fill in all dye square tray fields');
+                toast('Please fill in all dye square tray fields', 'error');
                 return;
             }
         } else if (currentPan.type === 'colorLab') {
             if (!currentPan.colorSketchId) {
-                alert('Please select a color experiment');
+                toast('Please select a color experiment', 'error');
                 return;
             }
             if (!currentPan.yarns[0].base || !currentPan.yarns[0].hankSize) {
-                alert('Please select yarn base and size for this experiment');
+                toast('Please select yarn base and size for this experiment', 'error');
                 return;
             }
         }
@@ -309,7 +311,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         const newItemLoad = currentPan.type === 'dyeSquareTray' ? 4 : currentPan.type === 'gradientTray' ? 2 : 1;
         if (currentLoad + newItemLoad > MAX_OVEN_CAPACITY) {
             const itemName = currentPan.type === 'dyeSquareTray' ? 'dye square tray' : currentPan.type === 'gradientTray' ? 'tray' : 'pan';
-            alert(`Cannot add this ${itemName}. Oven capacity exceeded!\n\nCurrent: ${currentLoad}/${MAX_OVEN_CAPACITY}\nAttempting to add: ${newItemLoad}\nMax capacity: ${MAX_OVEN_CAPACITY} pans`);
+            toast(`Cannot add this ${itemName}. Oven capacity exceeded! (${currentLoad}/${MAX_OVEN_CAPACITY}, adding ${newItemLoad})`, 'error');
             return;
         }
 
@@ -354,7 +356,12 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         }
 
         if (inventoryWarnings.length > 0) {
-            const proceed = confirm(`⚠️ INVENTORY WARNING:\n\n${inventoryWarnings.join('\n')}\n\nDo you want to add this ${currentPan.type === 'gradientTray' || currentPan.type === 'dyeSquareTray' ? 'tray' : 'pan'} anyway?`);
+            const proceed = await confirmDialog({
+                title: '⚠️ Inventory warning',
+                message: `${inventoryWarnings.join('\n')}\n\nAdd this ${currentPan.type === 'gradientTray' || currentPan.type === 'dyeSquareTray' ? 'tray' : 'pan'} anyway?`,
+                confirmText: 'Add anyway',
+                danger: true,
+            });
             if (!proceed) return;
         }
 
@@ -1110,17 +1117,17 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             type="button"
                                             onClick={() => {
                                                 if (!currentPan.kitId) {
-                                                    alert('Please select a kit');
+                                                    toast('Please select a kit', 'error');
                                                     return;
                                                 }
                                                 const selectedIds = currentPan.kitSelectedColorIds || [];
                                                 if (selectedIds.length === 0) {
-                                                    alert('Please select at least one colorway to dye');
+                                                    toast('Please select at least one colorway to dye', 'error');
                                                     return;
                                                 }
                                                 const validYarns = (currentPan.kitYarns || []).filter(y => y.base && y.hankSize && y.quantity);
                                                 if (validYarns.length === 0) {
-                                                    alert('Please configure at least one yarn (base, size, qty)');
+                                                    toast('Please configure at least one yarn (base, size, qty)', 'error');
                                                     return;
                                                 }
                                                 
