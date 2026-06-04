@@ -10,6 +10,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
     const [filterColorType, setFilterColorType] = useState('all');
     const [sortBy, setSortBy] = useState('name');
     const fileInputRef = React.useRef(null);
+    const cameraInputRef = React.useRef(null);
     const [formData, setFormData] = useState<Partial<Recipe>>({
         recipeId: '',
         name: '',
@@ -183,10 +184,8 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
             };
             reader.readAsDataURL(file);
         }
-        // Reset file input so same file can be re-selected
-        if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-        }
+        // Reset whichever input fired so the same file/photo can be re-selected
+        e.target.value = '';
     };
 
     const removePhoto = (photoId) => {
@@ -579,13 +578,24 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Photos {formData.photos?.length > 0 && <span className="text-teal-600">({formData.photos.length})</span>}
                             </label>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handlePhotoUpload}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                            />
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => cameraInputRef.current?.click()}
+                                    className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                                >
+                                    📷 Take Photo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                                >
+                                    🖼️ Choose File
+                                </button>
+                            </div>
+                            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
+                            <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                             <p className="text-xs text-gray-500 mt-1">Add multiple photos — pan shots, dry skeins, finished product, etc.</p>
                             
                             {formData.photos && formData.photos.length > 0 && (

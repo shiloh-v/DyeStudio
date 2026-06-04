@@ -10,6 +10,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
     const [filterType, setFilterType] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const fileInputRef = React.useRef(null);
+    const cameraInputRef = React.useRef(null);
 
     const DOS_LEVELS = [0.0625, 0.125, 0.25, 0.50, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0];
     const SQUARE_AMOUNTS = [1.25, 2.5, 5, 7.5, 10];
@@ -169,7 +170,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
             };
             reader.readAsDataURL(file);
         }
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        e.target.value = '';
     };
 
     const removePhoto = (photoId) => {
@@ -427,13 +428,24 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Photos {formData.photos?.length > 0 && <span className="text-teal-600">({formData.photos.length})</span>}
                             </label>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                onChange={handlePhotoUpload}
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                            />
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => cameraInputRef.current?.click()}
+                                    className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                                >
+                                    📷 Take Photo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                                >
+                                    🖼️ Choose File
+                                </button>
+                            </div>
+                            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} className="hidden" />
+                            <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                             <p className="text-xs text-gray-500 mt-1">Add photos of your gradient skeins</p>
                             {formData.photos && formData.photos.length > 0 && (
                                 <div className="mt-3 space-y-2">
