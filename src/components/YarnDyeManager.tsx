@@ -19,6 +19,7 @@ const Pipeline = named(() => import('./Pipeline'), 'Pipeline');
 const Sales = named(() => import('./Sales'), 'Sales');
 const Gradients = named(() => import('./Gradients'), 'Gradients');
 const Settings = named(() => import('./Settings'), 'Settings');
+const BackupRestore = named(() => import('./BackupRestore'), 'BackupRestore');
 
 const VALID_TABS = [
     'dashboard', 'calendar', 'recipes', 'gradients', 'kits', 'colorlab',
@@ -150,6 +151,35 @@ export function YarnDyeManager() {
         await StorageManager.set('sales', newSales);
     };
 
+    // Apply a restored backup: update in-memory state, persist every collection
+    // to the database (StorageManager handles the upsert/delete), then reload.
+    const applyRestore = async (data) => {
+        setRecipes(data.recipes || []);
+        setInventory(data.inventory || []);
+        setBatches(data.batches || []);
+        setSales(data.sales || []);
+        setDyeSessions(data.dyeSessions || []);
+        setKits(data.kits || []);
+        setColorSketches(data.colorSketches || []);
+        setGradients(data.gradients || []);
+        if (data.settings) setSettings(data.settings);
+
+        await Promise.all([
+            StorageManager.set('recipes', data.recipes || []),
+            StorageManager.set('inventory', data.inventory || []),
+            StorageManager.set('batches', data.batches || []),
+            StorageManager.set('sales', data.sales || []),
+            StorageManager.set('dye_sessions', data.dyeSessions || []),
+            StorageManager.set('kits', data.kits || []),
+            StorageManager.set('color_sketches', data.colorSketches || []),
+            StorageManager.set('gradients', data.gradients || []),
+            StorageManager.set('settings', data.settings || settings),
+        ]);
+
+        toast('Backup restored! Reloading…', 'success');
+        setTimeout(() => window.location.reload(), 600);
+    };
+
     const saveDyeSessions = async (newSessions) => {
         setDyeSessions(newSessions);
         await StorageManager.set('dye_sessions', newSessions);
@@ -197,142 +227,6 @@ export function YarnDyeManager() {
                             <p className="text-teal-100 mt-1">Professional dyeing business management</p>
                         </div>
                         <div className="flex gap-2">
-                            <button
-                                onClick={() => {
-                                    const data = {
-                                        recipes,
-                                        inventory,
-                                        batches,
-                                        sales,
-                                        dyeSessions,
-                                        kits,
-                                        colorSketches,
-                                        gradients,
-                                        settings,
-                                        exportDate: new Date().toISOString()
-                                    };
-                                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `celestial-dyeworks-backup-${new Date().toISOString().split('T')[0]}.json`;
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                }}
-                                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium"
-                            >
-                                💾 Export Backup
-                            </button>
-                            <button
-                                onClick={() => {
-                                    const input = document.createElement('input');
-                                    input.type = 'file';
-                                    input.accept = '.json';
-                                    input.onchange = async (e) => {
-                                        const file = (e.target as HTMLInputElement).files[0];
-                                        if (file) {
-                                            try {
-                                                const text = await file.text();
-                                                const data = JSON.parse(text);
-                                                
-                                                // Count current items
-                                                const currentCounts = {
-                                                    recipes: recipes.length,
-                                                    inventory: inventory.length,
-                                                    batches: batches.length,
-                                                    sales: sales.length,
-                                                    dyeSessions: dyeSessions.length,
-                                                    kits: kits.length,
-                                                    colorSketches: colorSketches.length,
-                                                    gradients: gradients.length
-                                                };
-                                                
-                                                const backupCounts = {
-                                                    recipes: data.recipes?.length || 0,
-                                                    inventory: data.inventory?.length || 0,
-                                                    batches: data.batches?.length || 0,
-                                                    sales: data.sales?.length || 0,
-                                                    dyeSessions: data.dyeSessions?.length || 0,
-                                                    kits: data.kits?.length || 0,
-                                                    colorSketches: data.colorSketches?.length || 0,
-                                                    gradients: data.gradients?.length || 0
-                                                };
-                                                
-                                                const confirmMessage = `⚠️ RESTORE BACKUP FROM ${data.exportDate || 'unknown date'}?\n\n` +
-                                                    `This will REPLACE your current data:\n\n` +
-                                                    `Recipes: ${currentCounts.recipes} → ${backupCounts.recipes}\n` +
-                                                    `Inventory: ${currentCounts.inventory} → ${backupCounts.inventory}\n` +
-                                                    `Batches (Pipeline): ${currentCounts.batches} → ${backupCounts.batches}\n` +
-                                                    `Sales: ${currentCounts.sales} → ${backupCounts.sales}\n` +
-                                                    `Dye Sessions: ${currentCounts.dyeSessions} → ${backupCounts.dyeSessions}\n` +
-                                                    `Kits: ${currentCounts.kits} → ${backupCounts.kits}\n` +
-                                                    `Color Sketches: ${currentCounts.colorSketches} → ${backupCounts.colorSketches}\n` +
-                                                    `Gradients: ${currentCounts.gradients} → ${backupCounts.gradients}\n\n` +
-                                                    `Are you sure? This cannot be undone!`;
-                                                
-                                                if (!(await confirmDialog({ title: 'Restore backup?', message: confirmMessage, confirmText: 'Restore', danger: true }))) return;
-
-                                                // First update state
-                                                setRecipes(data.recipes || []);
-                                                setInventory(data.inventory || []);
-                                                setBatches(data.batches || []);
-                                                setSales(data.sales || []);
-                                                setDyeSessions(data.dyeSessions || []);
-                                                setKits(data.kits || []);
-                                                setColorSketches(data.colorSketches || []);
-                                                setGradients(data.gradients || []);
-                                                if (data.settings) setSettings(data.settings);
-                                                
-                                                // Save to database - StorageManager will handle delete+insert
-                                                console.log('Saving backup data to database...');
-                                                await Promise.all([
-                                                    StorageManager.set('recipes', data.recipes || []),
-                                                    StorageManager.set('inventory', data.inventory || []),
-                                                    StorageManager.set('batches', data.batches || []),
-                                                    StorageManager.set('sales', data.sales || []),
-                                                    StorageManager.set('dye_sessions', data.dyeSessions || []),
-                                                    StorageManager.set('kits', data.kits || []),
-                                                    StorageManager.set('color_sketches', data.colorSketches || []),
-                                                    StorageManager.set('gradients', data.gradients || []),
-                                                    StorageManager.set('settings', data.settings || settings)
-                                                ]);
-                                                
-                                                console.log('All data saved successfully!');
-                                                toast('Backup restored! Reloading…', 'success');
-                                                
-                                                // Wait a bit more to ensure database commits
-                                                setTimeout(() => {
-                                                    window.location.reload();
-                                                }, 500);
-                                            } catch (error) {
-                                                console.error('Import error:', error);
-                                                toast('Error reading backup file: ' + error.message, 'error');
-                                            }
-                                        }
-                                    };
-                                    input.click();
-                                }}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                            >
-                                📥 Import Backup
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    if (!(await confirmDialog({ message: 'Restore batches directly from Supabase?\n\nThis reloads batch data from the database without importing a file.', confirmText: 'Reload' }))) return;
-
-                                    try {
-                                        const batchesData = await StorageManager.get('batches');
-                                        console.log('Loaded batches from database:', batchesData);
-                                        setBatches(batchesData || []);
-                                        toast(`Restored ${batchesData?.length || 0} batches from database`, 'success');
-                                    } catch (error) {
-                                        toast('Error loading batches: ' + error.message, 'error');
-                                    }
-                                }}
-                                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm"
-                            >
-                                🔄 Reload Batches
-                            </button>
                             <button
                                 onClick={toggleDark}
                                 title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -524,11 +418,17 @@ export function YarnDyeManager() {
                     />
                 )}
                 {activeTab === 'settings' && (
-                    <Settings
-                        settings={settings}
-                        saveSettings={saveSettings}
-                        inventory={inventory}
-                    />
+                    <div className="space-y-6">
+                        <BackupRestore
+                            collections={{ recipes, inventory, batches, sales, dyeSessions, kits, colorSketches, gradients, settings }}
+                            applyRestore={applyRestore}
+                        />
+                        <Settings
+                            settings={settings}
+                            saveSettings={saveSettings}
+                            inventory={inventory}
+                        />
+                    </div>
                 )}
                 </Suspense>
             </main>

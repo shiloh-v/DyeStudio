@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { StorageManager } from '../lib/storage';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 
@@ -278,38 +277,6 @@ export function Settings({ settings, saveSettings, inventory }) {
                         )}
                     </div>
                 )}
-            </div>
-
-            {/* Export/Import Data */}
-            <div className="bg-white rounded-lg card-shadow p-6">
-                <h3 className="text-lg font-semibold mb-4">Data Management</h3>
-                <div className="space-y-3">
-                    <button
-                        onClick={() => {
-                            const data = {
-                                recipes: StorageManager.get('recipes'),
-                                inventory: StorageManager.get('inventory'),
-                                batches: StorageManager.get('batches'),
-                                sales: StorageManager.get('sales'),
-                                dyeSessions: StorageManager.get('dye_sessions'),
-                                kits: StorageManager.get('kits'),
-                                settings: StorageManager.get('settings')
-                            };
-                            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `yarn-dye-backup-${new Date().toISOString().split('T')[0]}.json`;
-                            a.click();
-                        }}
-                        className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                    >
-                        📥 Export All Data (Backup)
-                    </button>
-                    <p className="text-sm text-gray-500">
-                        Download all your recipes, inventory, batches, and sales data as a backup file.
-                    </p>
-                </div>
             </div>
         </div>
     );
