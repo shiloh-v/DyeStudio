@@ -7,6 +7,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { ResetPassword } from './components/ResetPassword';
 import { Toaster } from './lib/toast';
 import { DialogHost } from './lib/dialog';
+import { IS_PREVIEW, PREVIEW_EMAIL, PREVIEW_PASSWORD } from './lib/preview';
 
 // App wrapper — real auth via Supabase. Shows the login screen until there's
 // a session; swaps to the app on sign-in and back on sign-out.
@@ -15,14 +16,30 @@ function App() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data }) => {
-            setSession(data.session);
-            setLoading(false);
-        });
+        let active = true;
+        (async () => {
+            let { data: { session: s } } = await supabase.auth.getSession();
+            // Preview-only: auto-sign-in so reviewing doesn't need the password.
+            // Safe because preview deployments are gated behind Vercel auth.
+            if (!s && IS_PREVIEW && PREVIEW_EMAIL && PREVIEW_PASSWORD) {
+                const { data } = await supabase.auth.signInWithPassword({
+                    email: PREVIEW_EMAIL,
+                    password: PREVIEW_PASSWORD,
+                });
+                s = data.session;
+            }
+            if (active) {
+                setSession(s);
+                setLoading(false);
+            }
+        })();
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
             setSession(newSession);
         });
-        return () => subscription.unsubscribe();
+        return () => {
+            active = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
     if (loading) {
