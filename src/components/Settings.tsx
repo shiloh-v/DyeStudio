@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { StorageManager } from '../lib/storage';
+import { confirmDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 
 export function Settings({ settings, saveSettings, inventory }) {
     const [activeSection, setActiveSection] = useState('colorTypes');
@@ -28,8 +30,8 @@ export function Settings({ settings, saveSettings, inventory }) {
         setNewItem('');
     };
 
-    const removeItem = (item) => {
-        if (confirm(`Remove "${item}"?`)) {
+    const removeItem = async (item) => {
+        if (await confirmDialog({ message: `Remove "${item}"?`, confirmText: 'Remove', danger: true })) {
             saveSettings({
                 ...settings,
                 [activeSection]: settings[activeSection].filter(i => i !== item)
@@ -39,7 +41,7 @@ export function Settings({ settings, saveSettings, inventory }) {
 
     const addYarnBaseMapping = () => {
         if (!newMapping.supplierName || !newMapping.myName) {
-            alert('Please fill in both supplier name and your name');
+            toast('Please fill in both supplier name and your name', 'error');
             return;
         }
         const currentMappings = settings.yarnBaseMappings || [];
@@ -50,8 +52,8 @@ export function Settings({ settings, saveSettings, inventory }) {
         setNewMapping({ supplierName: '', myName: '' });
     };
 
-    const removeYarnBaseMapping = (index) => {
-        if (confirm('Remove this yarn base mapping?')) {
+    const removeYarnBaseMapping = async (index) => {
+        if (await confirmDialog({ message: 'Remove this yarn base mapping?', confirmText: 'Remove', danger: true })) {
             saveSettings({
                 ...settings,
                 yarnBaseMappings: settings.yarnBaseMappings.filter((_, i) => i !== index)
@@ -62,7 +64,7 @@ export function Settings({ settings, saveSettings, inventory }) {
 
     const addSizeMapping = () => {
         if (!newSizeMapping.grams || !newSizeMapping.name) {
-            alert('Please fill in both grams and name');
+            toast('Please fill in both grams and name', 'error');
             return;
         }
         const currentMappings = settings.sizeMappings || [];
@@ -73,8 +75,8 @@ export function Settings({ settings, saveSettings, inventory }) {
         setNewSizeMapping({ grams: '', name: '' });
     };
 
-    const removeSizeMapping = (index) => {
-        if (confirm('Remove this size mapping?')) {
+    const removeSizeMapping = async (index) => {
+        if (await confirmDialog({ message: 'Remove this size mapping?', confirmText: 'Remove', danger: true })) {
             saveSettings({
                 ...settings,
                 sizeMappings: settings.sizeMappings.filter((_, i) => i !== index)
