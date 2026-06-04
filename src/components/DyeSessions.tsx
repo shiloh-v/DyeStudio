@@ -1,7 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import type { Pan } from '../types';
+import {
+    DndContext,
+    closestCenter,
+    MouseSensor,
+    TouchSensor,
+    KeyboardSensor,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+    arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// Wraps a single pan row so it can be dragged to reorder. The card content is
+// passed as a render-prop so the drag handle gets the sortable listeners while
+// the rest of the card stays interactive (edit/copy/delete buttons still work).
+function SortablePanCard({ id, children }: { id: string | number; children: (h: { attributes: any; listeners: any }) => ReactNode }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style: CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        zIndex: isDragging ? 20 : 'auto',
+        position: 'relative',
+    };
+    return (
+        <div ref={setNodeRef} style={style}>
+            {children({ attributes, listeners })}
+        </div>
+    );
+}
 
 export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, settings, kits, colorSketches, gradients }) {
     // Dyes already made into a saved gradient — excluded from the gradient-tray
@@ -43,6 +80,27 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         kitSelectedColorIds: [],
         kitYarns: [{ base: '', hankSize: '', quantity: 1 }]
     });
+
+    // Drag-and-drop reorder for the pans list. Mouse for desktop, touch (with a
+    // short press delay so the modal can still scroll) for iPad/phone, keyboard
+    // for accessibility.
+    const sensors = useSensors(
+        useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+        useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    const handlePanDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            setFormData(prev => {
+                const oldIndex = prev.pans.findIndex(p => p.id === active.id);
+                const newIndex = prev.pans.findIndex(p => p.id === over.id);
+                if (oldIndex === -1 || newIndex === -1) return prev;
+                return { ...prev, pans: arrayMove(prev.pans, oldIndex, newIndex) };
+            });
+        }
+    };
 
     // Calculate oven capacity (pans count as 1, gradient trays count as 2, dye square trays count as 4)
     const calculateOvenLoad = (pans) => {
@@ -1243,9 +1301,24 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                 <h4 className="font-semibold text-gray-900 mb-3">
                                     Pans/Trays in This Session ({formData.pans.length} items, {calculateOvenLoad(formData.pans)}/18 spaces)
                                 </h4>
+                                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePanDragEnd}>
+                                <SortableContext items={formData.pans.map(p => p.id!)} strategy={verticalListSortingStrategy}>
                                 <div className="space-y-2">
                                     {formData.pans.map((pan, idx) => (
-                                        <div key={pan.id} className="bg-gray-50 rounded-lg p-4 border flex gap-3">
+                                        <SortablePanCard key={pan.id} id={pan.id!}>
+                                            {({ attributes, listeners }) => (
+                                        <div className="bg-gray-50 rounded-lg p-4 border flex gap-3">
+                                            {/* Drag handle */}
+                                            <button
+                                                type="button"
+                                                {...attributes}
+                                                {...listeners}
+                                                title="Drag to reorder"
+                                                aria-label="Drag to reorder"
+                                                className="cursor-grab active:cursor-grabbing touch-none self-stretch flex items-center px-1 text-lg text-gray-400 hover:text-gray-600 bg-transparent"
+                                            >
+                                                ⠿
+                                            </button>
                                             {/* Reorder buttons */}
                                             <div className="flex flex-col gap-1">
                                                 <button
@@ -1476,8 +1549,12 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 </button>
                                             </div>
                                         </div>
+                                            )}
+                                        </SortablePanCard>
                                     ))}
                                 </div>
+                                </SortableContext>
+                                </DndContext>
                             </div>
                         )}
 
