@@ -612,18 +612,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                 <>
                                     <div className="grid md:grid-cols-2 gap-4 mb-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Colorway *</label>
-                                            <input
-                                                type="text"
-                                                value={currentPan.colorway}
-                                                onChange={(e) => setCurrentPan({ ...currentPan, colorway: e.target.value })}
-                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
-                                                placeholder="e.g., Cranberry Spice"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Recipe (Optional)</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Recipe *</label>
                                             <select
+                                                required
                                                 value={currentPan.recipeId}
                                                 onChange={(e) => {
                                                     const recipe = recipes.find(r => r.id === parseInt(e.target.value));
@@ -656,8 +647,18 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     ])}
                                             </select>
                                         </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Custom Colorway Name</label>
+                                            <input
+                                                type="text"
+                                                value={currentPan.colorway}
+                                                onChange={(e) => setCurrentPan({ ...currentPan, colorway: e.target.value })}
+                                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
+                                                placeholder="Override colorway name (optional)"
+                                            />
+                                        </div>
                                     </div>
-                                    
+
                                     <div className="mb-4">
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Pan Capacity (g)</label>
                                         <input
