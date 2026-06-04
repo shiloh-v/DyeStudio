@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DateUtils } from '../lib/dates';
+import { confirmDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
@@ -524,22 +526,22 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         return costs;
     };
 
-    const markPanComplete = () => {
+    const markPanComplete = async () => {
         if (currentPanIndex < selectedSession.pans.length - 1) {
             setCurrentPanIndex(currentPanIndex + 1);
         } else {
-            if (confirm('All pans in this session are complete! Mark session as finished?')) {
+            if (await confirmDialog({ message: 'All pans in this session are complete! Mark session as finished?', confirmText: 'Finish session' })) {
                 finishSession();
             }
         }
     };
 
-    const finishSession = () => {
+    const finishSession = async () => {
         if (!selectedSession) return;
 
         const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn from inventory\n- Remove this session from Dye Sessions`;
-        
-        if (!confirm(confirmMessage)) return;
+
+        if (!(await confirmDialog({ title: 'Finish session', message: confirmMessage, confirmText: 'Finish' }))) return;
 
         // Get next batch ID number
         const getNextBatchId = () => {
@@ -693,7 +695,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         setCurrentPanIndex(0);
         setSelectedSessionId('');
 
-        alert('Session completed! Batches added to Pipeline, inventory updated, and session archived.');
+        toast('Session completed! Batches added to Pipeline, inventory updated, and session archived.', 'success');
     };
 
     const goToPreviousPan = () => {

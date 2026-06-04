@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
+import { confirmDialog } from '../lib/dialog';
+import { toast } from '../lib/toast';
 
 export function ColorLab({ colorSketches, saveColorSketches, settings, inventory, recipes, saveRecipes }) {
     const [showForm, setShowForm] = useState(false);
@@ -82,14 +84,14 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
         setShowForm(true);
     };
 
-    const deleteSketch = (id) => {
-        if (confirm('Delete this color sketch?')) {
+    const deleteSketch = async (id) => {
+        if (await confirmDialog({ message: 'Delete this color sketch?', confirmText: 'Delete', danger: true })) {
             saveColorSketches(colorSketches.filter(s => s.id !== id));
         }
     };
 
-    const promoteToRecipe = (sketch) => {
-        if (confirm(`Promote ${sketch.colorId}${sketch.customName ? ' - ' + sketch.customName : ''} to a permanent recipe?\n\nThis will:\n- Create a new recipe with this formula\n- Copy the sketch notes to recipe instructions\n- Keep the original color sketch for reference\n\nNote: Experiment notes from dye sessions stay with those sessions.`)) {
+    const promoteToRecipe = async (sketch) => {
+        if (await confirmDialog({ title: 'Promote to recipe?', message: `Promote ${sketch.colorId}${sketch.customName ? ' - ' + sketch.customName : ''} to a permanent recipe?\n\nThis will:\n- Create a new recipe with this formula\n- Copy the sketch notes to recipe instructions\n- Keep the original color sketch for reference\n\nNote: Experiment notes from dye sessions stay with those sessions.`, confirmText: 'Promote' })) {
             // Generate recipe ID
             const prefix = sketch.type === 'tonal' ? 'R-T' : sketch.type === 'variegated' ? 'R-V' : 'R-S';
             const existingIds = recipes
@@ -167,22 +169,22 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                 s.id === sketch.id ? { ...s, archived: true } : s
             ));
             
-            alert(`✅ Created recipe ${recipeId} - ${newRecipe.name}!\n\nThe color sketch has been archived.`);
+            toast(`Created recipe ${recipeId} - ${newRecipe.name}! The color sketch has been archived.`, 'success');
         }
     };
 
-    const archiveSketch = (id) => {
+    const archiveSketch = async (id) => {
         const sketch = colorSketches.find(s => s.id === id);
         const action = sketch?.archived ? 'unarchive' : 'archive';
-        if (confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this color sketch?`)) {
+        if (await confirmDialog({ message: `${action.charAt(0).toUpperCase() + action.slice(1)} this color sketch?`, confirmText: action.charAt(0).toUpperCase() + action.slice(1) })) {
             saveColorSketches(colorSketches.map(s => 
                 s.id === id ? { ...s, archived: !s.archived } : s
             ));
         }
     };
 
-    const duplicateSketch = (sketch) => {
-        if (confirm(`Duplicate ${sketch.colorId}${sketch.customName ? ' - ' + sketch.customName : ''}?`)) {
+    const duplicateSketch = async (sketch) => {
+        if (await confirmDialog({ message: `Duplicate ${sketch.colorId}${sketch.customName ? ' - ' + sketch.customName : ''}?`, confirmText: 'Duplicate' })) {
             // Generate new color ID
             const prefix = sketch.type === 'tonal' ? 'CL-T' : sketch.type === 'variegated' ? 'CL-V' : 'CL-S';
             const existingIds = colorSketches
@@ -205,7 +207,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
             };
             
             saveColorSketches([...colorSketches, duplicate]);
-            alert(`✅ Created duplicate: ${newColorId}`);
+            toast(`Created duplicate: ${newColorId}`, 'success');
         }
     };
 

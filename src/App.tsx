@@ -5,6 +5,8 @@ import { supabase } from './lib/supabase';
 import { YarnDyeManager } from './components/YarnDyeManager';
 import { LoginScreen } from './components/LoginScreen';
 import { ResetPassword } from './components/ResetPassword';
+import { Toaster } from './lib/toast';
+import { DialogHost } from './lib/dialog';
 
 // App wrapper — real auth via Supabase. Shows the login screen until there's
 // a session; swaps to the app on sign-in and back on sign-out.
@@ -35,11 +37,16 @@ function App() {
     }
 
     return (
-        <Routes>
-            {/* Always reachable — the recovery email links here even mid-session */}
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/*" element={session ? <YarnDyeManager /> : <LoginScreen />} />
-        </Routes>
+        <>
+            <Routes>
+                {/* Always reachable — the recovery email links here even mid-session */}
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/*" element={session ? <YarnDyeManager /> : <LoginScreen />} />
+            </Routes>
+            {/* App-wide notification + dialog hosts (imperative toast()/confirmDialog()/promptDialog()) */}
+            <Toaster />
+            <DialogHost />
+        </>
     );
 }
 

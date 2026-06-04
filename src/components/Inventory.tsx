@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
+import { confirmDialog } from '../lib/dialog';
 import type { InventoryItem } from '../types';
 
 export function Inventory({ inventory, saveInventory, settings }) {
@@ -83,8 +84,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
         setShowForm(true);
     };
 
-    const deleteItem = (id) => {
-        if (confirm('Delete this item?')) {
+    const deleteItem = async (id) => {
+        if (await confirmDialog({ message: 'Delete this item?', confirmText: 'Delete', danger: true })) {
             saveInventory(inventory.filter(i => i.id !== id));
         }
     };

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GradientCard } from './GradientCard';
 import { useFormGuard } from '../lib/useFormGuard';
+import { confirmDialog } from '../lib/dialog';
 import type { Gradient } from '../types';
 
 export function Gradients({ gradients, saveGradients, inventory }) {
@@ -136,8 +137,8 @@ export function Gradients({ gradients, saveGradients, inventory }) {
         setShowForm(true);
     };
 
-    const deleteGradient = (id) => {
-        if (confirm('Delete this gradient?')) {
+    const deleteGradient = async (id) => {
+        if (await confirmDialog({ message: 'Delete this gradient?', confirmText: 'Delete', danger: true })) {
             saveGradients(gradients.filter(g => g.id !== id));
         }
     };
