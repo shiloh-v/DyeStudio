@@ -360,7 +360,7 @@ export function YarnDyeManager() {
                             { id: 'studio', label: '🧪 Studio', group: ['colorlab', 'sessions', 'queue'] },
                             { id: 'inventory', label: '📦 Inventory' },
                             { id: 'pipeline', label: '🔄 Pipeline' },
-                            { id: 'sales', label: '💰 Sales' },
+                            { id: 'sales', label: '🏷️ Stock' },
                             { id: 'settings', label: '⚙️ Settings' }
                         ].map(tab => {
                             const isGroupActive = tab.group 

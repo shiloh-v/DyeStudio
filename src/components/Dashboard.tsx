@@ -1,17 +1,18 @@
 import { StatCard } from './StatCard';
+import { isStocked } from '../lib/batches';
 
 export function Dashboard({ recipes, inventory, batches, sales }) {
-    const activeBatches = batches.filter(b => b.status !== 'sold').length;
-    const lowStock = inventory.filter(i => 
-        i.lowStockThreshold != null && 
-        i.lowStockThreshold !== '' && 
+    const activeBatches = batches.filter(b => !isStocked(b)).length;
+    const lowStock = inventory.filter(i =>
+        i.lowStockThreshold != null &&
+        i.lowStockThreshold !== '' &&
         i.quantity <= i.lowStockThreshold
     ).length;
-    
-    // Calculate revenue and profit from sold batches
-    const soldBatches = batches.filter(b => b.status === 'sold');
-    const totalRevenue = soldBatches.reduce((sum, b) => sum + (b.salePrice || 0), 0);
-    const totalProfit = soldBatches.reduce((sum, b) => sum + (b.profit || 0), 0);
+
+    // Projected value/profit from finished stock (not realized sales — those come from Shopify later)
+    const stocked = batches.filter(isStocked);
+    const totalRevenue = stocked.reduce((sum, b) => sum + (b.salePrice || 0), 0);
+    const totalProfit = stocked.reduce((sum, b) => sum + (b.profit || 0), 0);
     const avgProfitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100) : 0;
     
     const thisMonthSales = sales.filter(s => {
@@ -49,21 +50,21 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                     icon="⚠️"
                     color={lowStock > 0 ? "red" : "green"}
                 />
-                <StatCard 
-                    title="Total Revenue" 
-                    value={`$${totalRevenue.toFixed(2)}`} 
-                    icon="💰"
+                <StatCard
+                    title="Projected Revenue"
+                    value={`$${totalRevenue.toFixed(2)}`}
+                    icon="🏷️"
                     color="green"
                 />
-                <StatCard 
-                    title="Total Profit" 
-                    value={`$${totalProfit.toFixed(2)}`} 
+                <StatCard
+                    title="Projected Profit"
+                    value={`$${totalProfit.toFixed(2)}`}
                     icon="📈"
                     color={totalProfit >= 0 ? "green" : "red"}
                 />
-                <StatCard 
-                    title="Avg Margin" 
-                    value={`${avgProfitMargin.toFixed(1)}%`} 
+                <StatCard
+                    title="Avg Margin"
+                    value={`${avgProfitMargin.toFixed(1)}%`}
                     icon="📊"
                     color={avgProfitMargin >= 30 ? "green" : avgProfitMargin >= 15 ? "yellow" : "red"}
                 />
@@ -85,9 +86,9 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                         <div className="text-3xl font-bold text-green-700">{statusCounts.ready || 0}</div>
                         <div className="text-sm text-green-600 mt-1">Ready for Labels</div>
                     </div>
-                    <div className="text-center p-4 bg-gray-50 rounded-lg">
-                        <div className="text-3xl font-bold text-gray-700">{statusCounts.sold || 0}</div>
-                        <div className="text-sm text-gray-600 mt-1">Sold</div>
+                    <div className="text-center p-4 bg-teal-50 rounded-lg">
+                        <div className="text-3xl font-bold text-teal-700">{batches.filter(isStocked).length}</div>
+                        <div className="text-sm text-teal-600 mt-1">Stocked</div>
                     </div>
                 </div>
             </div>
