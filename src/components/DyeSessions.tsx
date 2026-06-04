@@ -365,6 +365,24 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             if (!proceed) return;
         }
 
+        // Warn if the pan's yarn weight misses its capacity goal (over or under).
+        // Only pans and color-lab experiments carry a per-pan weight goal.
+        if (currentPan.type === 'pan' || currentPan.type === 'colorLab') {
+            const goal = parseFloat(String(currentPan.capacity)) || 0;
+            const totalWeight = getTotalWeight(currentPan.yarns);
+            if (goal > 0 && totalWeight !== goal) {
+                const over = totalWeight > goal;
+                const diff = Math.abs(totalWeight - goal);
+                const proceed = await confirmDialog({
+                    title: over ? '⚠️ Over weight goal' : '⚠️ Under weight goal',
+                    message: `This pan totals ${totalWeight}g but the goal is ${goal}g (${diff}g ${over ? 'over' : 'short'}).\n\nAdd this pan anyway?`,
+                    confirmText: 'Add anyway',
+                    danger: true,
+                });
+                if (!proceed) return;
+            }
+        }
+
         if (currentPan.type === 'adHoc') {
             setFormData({
                 ...formData,
@@ -614,7 +632,6 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">Recipe *</label>
                                             <select
-                                                required
                                                 value={currentPan.recipeId}
                                                 onChange={(e) => {
                                                     const recipe = recipes.find(r => r.id === parseInt(e.target.value));
