@@ -146,10 +146,10 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                                     onChange={(e) => setFormData({ ...formData, bundleType: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
-                                    <option value="6-color DK set">6-color DK set</option>
-                                    <option value="sock set">Sock set</option>
                                     <option value="2-color DK set">2-color DK set</option>
+                                    <option value="6-color DK set">6-color DK set</option>
                                     <option value="6-color miniskein set">6-color miniskein set</option>
+                                    <option value="sock set">Sock set</option>
                                 </select>
                             </div>
                         </div>

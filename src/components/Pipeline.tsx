@@ -313,18 +313,32 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Recipe</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Recipe *</label>
                                 <select
+                                    required
                                     value={formData.recipeId}
                                     onChange={(e) => setFormData({ ...formData, recipeId: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 >
-                                    <option value="">Select a recipe (optional)</option>
-                                    {recipes.map(r => (
-                                        <option key={r.id} value={r.id}>
-                                            {r.name}
-                                        </option>
-                                    ))}
+                                    <option value="">Select a recipe...</option>
+                                    {Object.entries(
+                                        [...recipes]
+                                            .sort((a, b) => a.name.localeCompare(b.name))
+                                            .reduce<Record<string, any[]>>((acc, r) => {
+                                                const type = r.colorType || 'other';
+                                                (acc[type] = acc[type] || []).push(r);
+                                                return acc;
+                                            }, {})
+                                    )
+                                        .sort(([a], [b]) => a.localeCompare(b))
+                                        .flatMap(([type, group]) => [
+                                            <option key={`hdr-${type}`} disabled value="" className="font-bold bg-gray-100 text-gray-700">
+                                                ── {type.toUpperCase()} ──
+                                            </option>,
+                                            ...group.map(r => (
+                                                <option key={r.id} value={r.id}>{r.name}</option>
+                                            )),
+                                        ])}
                                 </select>
                             </div>
                             <div>
@@ -334,7 +348,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                     value={formData.customColorway}
                                     onChange={(e) => setFormData({ ...formData, customColorway: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                    placeholder="Override colorway name"
+                                    placeholder="Override colorway name (optional)"
                                 />
                             </div>
                         </div>

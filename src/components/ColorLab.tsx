@@ -355,9 +355,9 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                 >
+                                    <option value="speckled">Speckled</option>
                                     <option value="tonal">Tonal</option>
                                     <option value="variegated">Variegated</option>
-                                    <option value="speckled">Speckled</option>
                                 </select>
                             </div>
                             <div>
