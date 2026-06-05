@@ -101,8 +101,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
         if (!base) return;
         setFormData((prev) => ({
             ...prev,
-            name: base.supplierName || prev.name,
             myYarnName: base.myName || prev.myYarnName,
+            supplier: base.supplier || prev.supplier,
             fiberContent: base.fiberContent || prev.fiberContent,
             needleSize: base.needleSize || prev.needleSize,
             gauge: base.gauge || prev.gauge,
@@ -112,16 +112,35 @@ export function Inventory({ inventory, saveInventory, settings }) {
         }));
     };
 
-    // Fill size-level fields (hank size, yardage, per-skein cost) from a base size.
+    // Generate an item name not already used by another inventory item.
+    const uniqueItemName = (desired) => {
+        const taken = new Set(
+            inventory.filter((i) => i.id !== editingId).map((i) => String(i.name || '').trim().toLowerCase())
+        );
+        if (!taken.has(desired.trim().toLowerCase())) return desired;
+        let n = 2;
+        while (taken.has(`${desired} (${n})`.trim().toLowerCase())) n++;
+        return `${desired} (${n})`;
+    };
+
+    // Fill size-level fields + generate a unique Item Name and a Presentation.
     const applySize = (base, size) => {
         if (!base || !size) return;
         const len = sizeLength(base, size);
         const each = perSkeinPrice(size);
+        const wu = base.weightUnit || 'g';
+        const packQty = parseFloat(String(size.packSize));
+        const presentation = !isNaN(packQty) && packQty > 1
+            ? `${packQty} x ${size.amount}${wu} skeins`
+            : `${size.amount}${wu} skein`;
+        const itemName = uniqueItemName(`${base.myName || 'Yarn'} ${size.amount}${wu}`.trim());
         setFormData((prev) => ({
             ...prev,
+            name: itemName,
             hankSize: size.amount != null ? String(size.amount) : prev.hankSize,
             yardage: len ? String(len.value) : prev.yardage,
             cost: each != null ? each.toFixed(2) : prev.cost,
+            presentation,
         }));
     };
 
@@ -296,16 +315,6 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                     </div>
                                 )}
                                 <div className="grid md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name</label>
-                                        <input
-                                            type="text"
-                                            value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                            placeholder="e.g., W2D4 Merino DK SW"
-                                        />
-                                    </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">My Name for Yarn</label>
                                         <input
