@@ -5,6 +5,7 @@ import { sizeName } from '../lib/sizes';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
 import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
 import { yarnBaseRef } from '../lib/yarnMatch';
+import { isLowStock as isItemLowStock, lowStockLabel, DYE_LOW_STOCK_GRAMS } from '../lib/lowStock';
 import type { InventoryItem } from '../types';
 
 // Grams per unit, for converting on-hand amounts between units.
@@ -330,11 +331,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
             return String(aName || '').localeCompare(String(bName || ''));
         });
 
-    const lowStockItems = inventory.filter(i => 
-        i.lowStockThreshold != null && 
-        i.lowStockThreshold !== '' && 
-        i.quantity <= i.lowStockThreshold
-    );
+    const lowStockItems = inventory.filter(isItemLowStock);
 
     return (
         <div className="space-y-6">
@@ -793,14 +790,20 @@ export function Inventory({ inventory, saveInventory, settings }) {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Alert</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.lowStockThreshold}
-                                    onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                    placeholder="Min qty"
-                                />
+                                {formData.category === 'dye' ? (
+                                    <div className="px-3 py-2 border rounded-lg bg-gray-50 text-sm text-gray-600">
+                                        Auto: alerts below {DYE_LOW_STOCK_GRAMS} g of powder
+                                    </div>
+                                ) : (
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={formData.lowStockThreshold}
+                                        onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                        placeholder="Min qty"
+                                    />
+                                )}
                             </div>
                         </div>
 
@@ -970,9 +973,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {filteredInventory.map(item => {
-                                const isLowStock = item.lowStockThreshold != null && 
-                                                  item.lowStockThreshold !== '' && 
-                                                  item.quantity <= item.lowStockThreshold;
+                                const isLowStock = isItemLowStock(item);
                                 return (
                                     <tr key={item.id} className={isLowStock ? 'bg-red-50' : 'hover:bg-gray-50'}>
                                         <td className="px-6 py-4">
@@ -1030,7 +1031,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             <QuantityCell item={item} isLowStock={isLowStock} onAdjust={adjustQuantity} onCommit={commitQuantity} />
                                             {isLowStock && (
                                                 <div className="text-xs text-red-600 mt-1">
-                                                    ⚠️ Below {item.lowStockThreshold} {item.unit}
+                                                    ⚠️ Below {lowStockLabel(item)}
                                                 </div>
                                             )}
                                         </td>
