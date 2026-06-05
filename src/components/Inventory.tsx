@@ -1,10 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 import { sizeName } from '../lib/sizes';
-import { myYarnName } from '../lib/yarnNames';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
 import type { InventoryItem } from '../types';
+
+// Sensible ± step for the quantity stepper, by unit.
+function stepFor(unit: string): number {
+    if (unit === 'g') return 10;
+    if (unit === 'kg' || unit === 'L') return 0.5;
+    return 1;
+}
+
+// Quantity cell with its own local state so typing doesn't write to the
+// database on every keystroke — it commits on blur / Enter. The ± buttons
+// commit immediately (discrete actions), and local state re-syncs from props.
+function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
+    const [val, setVal] = useState(String(item.quantity ?? ''));
+    useEffect(() => { setVal(String(item.quantity ?? '')); }, [item.quantity]);
+    const step = stepFor(item.unit || 'g');
+    const commit = () => {
+        const n = parseFloat(val) || 0;
+        if (n !== parseFloat(String(item.quantity))) onCommit(item.id, n);
+    };
+    return (
+        <div className="flex items-center gap-2">
+            <button type="button" onClick={() => onAdjust(item.id, -step)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">-</button>
+            <input
+                type="number"
+                step="0.1"
+                value={val}
+                onChange={(e) => setVal(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => { if (e.key === 'Enter') { commit(); (e.currentTarget as HTMLInputElement).blur(); } }}
+                className={`w-20 px-2 py-1 text-center border rounded font-medium ${isLowStock ? 'text-red-600 border-red-300' : 'border-gray-300'}`}
+            />
+            <span className="text-sm text-gray-600">{item.unit}</span>
+            <button type="button" onClick={() => onAdjust(item.id, step)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">+</button>
+        </div>
+    );
+}
 
 export function Inventory({ inventory, saveInventory, settings }) {
     const [showForm, setShowForm] = useState(false);
@@ -15,6 +50,9 @@ export function Inventory({ inventory, saveInventory, settings }) {
     const [pickSize, setPickSize] = useState('');
     const pickedBase = yarnBases.find((b) => String(b.id) === String(pickBaseId));
     const [filterCategory, setFilterCategory] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
     const [formData, setFormData] = useState<Partial<InventoryItem>>({
         name: '',
         category: 'dye',
@@ -23,6 +61,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
         hankSize: '',
         lowStockThreshold: '',
         cost: '',
+        typicalPrice: '',
         purchasePrice: '',
         purchaseOunces: '',
         supplier: '',
@@ -150,21 +189,65 @@ export function Inventory({ inventory, saveInventory, settings }) {
         }
     };
 
+    // Compress a chosen/taken photo to an 800px JPEG data URL → formData.image.
+    const handleImageUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    const MAX = 800;
+                    let w = img.width, h = img.height;
+                    if (w > h) { if (w > MAX) { h = Math.round((h * MAX) / w); w = MAX; } }
+                    else { if (h > MAX) { w = Math.round((w * MAX) / h); h = MAX; } }
+                    canvas.width = w; canvas.height = h;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    setFormData((prev) => ({ ...prev, image: canvas.toDataURL('image/jpeg', 0.7) }));
+                };
+                img.src = reader.result as string;
+            };
+            reader.readAsDataURL(file);
+        }
+        e.target.value = '';
+    };
+
     const adjustQuantity = (id, delta) => {
-        saveInventory(inventory.map(i => 
-            i.id === id ? { ...i, quantity: Math.max(0, parseFloat(i.quantity) + delta) } : i
+        saveInventory(inventory.map(i =>
+            i.id === id ? { ...i, quantity: Math.max(0, (parseFloat(String(i.quantity)) || 0) + delta) } : i
         ));
     };
 
-    const filteredInventory = (filterCategory === 'all' 
-        ? inventory 
-        : inventory.filter(i => i.category === filterCategory)
-    ).sort((a, b) => {
-        // For yarn bases, sort by myYarnName if it exists, otherwise by name
-        const aName = a.category === 'yarn base' && a.myYarnName ? a.myYarnName : a.name;
-        const bName = b.category === 'yarn base' && b.myYarnName ? b.myYarnName : b.name;
-        return aName.localeCompare(bName);
-    });
+    const commitQuantity = (id, qty) => {
+        saveInventory(inventory.map(i => (i.id === id ? { ...i, quantity: qty } : i)));
+    };
+
+    // Update purchase price / ounces and recompute dye cost-per-gram in one pass.
+    const updatePurchase = (patch) => {
+        setFormData((prev) => {
+            const next = { ...prev, ...patch };
+            const price = parseFloat(String(next.purchasePrice));
+            const oz = parseFloat(String(next.purchaseOunces));
+            if (!isNaN(price) && !isNaN(oz) && oz > 0) {
+                next.cost = (price / oz / 28.3495).toFixed(4);
+            }
+            return next;
+        });
+    };
+
+    const q = searchTerm.trim().toLowerCase();
+    const filteredInventory = inventory
+        .filter(i => filterCategory === 'all' || i.category === filterCategory)
+        .filter(i => !q || [i.name, i.myYarnName, i.supplier, i.notes, i.fiberContent, i.weight]
+            .some(v => String(v || '').toLowerCase().includes(q)))
+        .sort((a, b) => {
+            // For yarn bases, sort by myYarnName if it exists, otherwise by name
+            const aName = a.category === 'yarn base' && a.myYarnName ? a.myYarnName : a.name;
+            const bName = b.category === 'yarn base' && b.myYarnName ? b.myYarnName : b.name;
+            return String(aName || '').localeCompare(String(bName || ''));
+        });
 
     const lowStockItems = inventory.filter(i => 
         i.lowStockThreshold != null && 
@@ -190,6 +273,26 @@ export function Inventory({ inventory, saveInventory, settings }) {
                     <p className="font-semibold text-red-800">⚠️ {lowStockItems.length} item(s) running low!</p>
                 </div>
             )}
+
+            {/* Search */}
+            <div className="relative">
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="🔍 Search by name, my-name, supplier, fiber…"
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                />
+                {searchTerm && (
+                    <button
+                        type="button"
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-transparent text-lg"
+                    >
+                        ✕
+                    </button>
+                )}
+            </div>
 
             {/* Category Filter */}
             <div className="flex gap-2 overflow-x-auto pb-2">
@@ -324,15 +427,6 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., Luna DK"
                                         />
-                                        {myYarnName(formData.name, settings) && myYarnName(formData.name, settings) !== formData.myYarnName && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, myYarnName: myYarnName(formData.name, settings) })}
-                                                className="text-xs text-teal-600 hover:text-teal-800 mt-1 bg-transparent"
-                                            >
-                                                ↳ Use mapping: {myYarnName(formData.name, settings)}
-                                            </button>
-                                        )}
                                     </div>
                                 </div>
 
@@ -456,21 +550,30 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Yarn Image (URL)</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Yarn Image</label>
+                                    <div className="flex gap-2 mb-2">
+                                        <button type="button" onClick={() => cameraInputRef.current?.click()} className="flex-1 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">📷 Take Photo</button>
+                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium">🖼️ Upload</button>
+                                    </div>
+                                    <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleImageUpload} className="hidden" />
+                                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                                     <input
                                         type="text"
-                                        value={formData.image}
+                                        value={formData.image?.startsWith('data:') ? '' : formData.image}
                                         onChange={(e) => setFormData({ ...formData, image: e.target.value })}
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                        placeholder="https://example.com/yarn-image.jpg"
+                                        placeholder="…or paste an image URL"
                                     />
                                     {formData.image && (
-                                        <img 
-                                            src={formData.image} 
-                                            alt="Yarn preview" 
-                                            className="mt-2 h-6 w-auto border rounded"
-                                            onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
-                                        />
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <img
+                                                src={formData.image}
+                                                alt="Yarn preview"
+                                                className="h-16 w-16 object-cover border rounded"
+                                                onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+                                            />
+                                            <button type="button" onClick={() => setFormData({ ...formData, image: '' })} className="text-xs text-red-600 hover:text-red-800 bg-transparent">Remove</button>
+                                        </div>
                                     )}
                                 </div>
                             </>
@@ -584,20 +687,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="number"
                                             step="0.01"
                                             value={formData.purchasePrice}
-                                            onChange={(e) => {
-                                                const price = e.target.value;
-                                                setFormData({ ...formData, purchasePrice: price });
-                                                // Auto-calculate cost per gram if both fields are filled
-                                                if (price && formData.purchaseOunces) {
-                                                    const costPerOz = parseFloat(price) / parseFloat(String(formData.purchaseOunces));
-                                                    const costPerGram = costPerOz / 28.3495;
-                                                    setFormData({ 
-                                                        ...formData, 
-                                                        purchasePrice: price,
-                                                        cost: costPerGram.toFixed(4)
-                                                    });
-                                                }
-                                            }}
+                                            onChange={(e) => updatePurchase({ purchasePrice: e.target.value })}
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 67.05"
                                         />
@@ -608,20 +698,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             type="number"
                                             step="0.01"
                                             value={formData.purchaseOunces}
-                                            onChange={(e) => {
-                                                const ounces = e.target.value;
-                                                setFormData({ ...formData, purchaseOunces: ounces });
-                                                // Auto-calculate cost per gram if both fields are filled
-                                                if (formData.purchasePrice && ounces) {
-                                                    const costPerOz = parseFloat(String(formData.purchasePrice)) / parseFloat(ounces);
-                                                    const costPerGram = costPerOz / 28.3495;
-                                                    setFormData({ 
-                                                        ...formData, 
-                                                        purchaseOunces: ounces,
-                                                        cost: costPerGram.toFixed(4)
-                                                    });
-                                                }
-                                            }}
+                                            onChange={(e) => updatePurchase({ purchaseOunces: e.target.value })}
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 16"
                                         />
@@ -749,21 +826,10 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                     ></div>
                                                 )}
                                                 {item.category === 'yarn base' && item.image && (
-                                                    <img 
-                                                        src={item.image} 
+                                                    <img
+                                                        src={item.image}
                                                         alt={item.name}
-                                                        style={{ 
-                                                            width: '125px !important', 
-                                                            height: '125px !important', 
-                                                            minWidth: '125px', 
-                                                            minHeight: '125px',
-                                                            maxWidth: '125px',
-                                                            maxHeight: '125px',
-                                                            objectFit: 'cover',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #d1d5db',
-                                                            flexShrink: 0
-                                                        }}
+                                                        className="w-12 h-12 object-cover rounded border flex-shrink-0"
                                                         onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
                                                     />
                                                 )}
@@ -783,15 +849,15 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                         </div>
                                                     )}
                                                     {item.category === 'yarn base' && (
-                                                        <div className="text-xs text-gray-600 mt-1 space-y-0.5">
-                                                            {item.fiberContent && <div>📦 {item.fiberContent}</div>}
-                                                            {item.weight && <div>⚖️ {item.weight}</div>}
-                                                            {item.yardage && <div>📏 {item.yardage}</div>}
-                                                            {item.presentation && <div>🎁 {item.presentation}</div>}
-                                                            {item.needleSize && <div>🪡 Needle: {item.needleSize}</div>}
-                                                            {item.gauge && <div>📐 Gauge: {item.gauge}</div>}
-                                                            {item.wpi && <div>🧵 WPI: {item.wpi}</div>}
-                                                            {item.plies && <div>🔗 Plies: {item.plies}</div>}
+                                                        <div className="text-xs text-gray-600 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                                                            {item.fiberContent && <span>📦 {item.fiberContent}</span>}
+                                                            {item.weight && <span>⚖️ {item.weight}</span>}
+                                                            {item.yardage && <span>📏 {item.yardage}</span>}
+                                                            {item.presentation && <span>🎁 {item.presentation}</span>}
+                                                            {item.needleSize && <span>🪡 {item.needleSize}</span>}
+                                                            {item.gauge && <span>📐 {item.gauge}</span>}
+                                                            {item.wpi && <span>🧵 WPI {item.wpi}</span>}
+                                                            {item.plies && <span>🔗 {item.plies}-ply</span>}
                                                         </div>
                                                     )}
                                                     {item.notes && (
@@ -802,42 +868,10 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         </td>
                                         <td className="px-6 py-4 text-sm capitalize">{item.category}</td>
                                         <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    onClick={() => adjustQuantity(item.id, -1)}
-                                                    className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded"
-                                                >
-                                                    -
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    step="0.1"
-                                                    value={item.quantity}
-                                                    onChange={(e) => {
-                                                        const newQty = parseFloat(e.target.value) || 0;
-                                                        const updatedInventory = inventory.map(i =>
-                                                            i.id === item.id ? { ...i, quantity: newQty } : i
-                                                        );
-                                                        saveInventory(updatedInventory);
-                                                    }}
-                                                    className={`w-20 px-2 py-1 text-center border rounded font-medium ${isLowStock ? 'text-red-600 border-red-300' : 'border-gray-300'}`}
-                                                />
-                                                <span className="text-sm text-gray-600">
-                                                    {item.unit === 'oz' ? 'oz' : item.unit}
-                                                </span>
-                                                <button
-                                                    onClick={() => adjustQuantity(item.id, 1)}
-                                                    className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded"
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
+                                            <QuantityCell item={item} isLowStock={isLowStock} onAdjust={adjustQuantity} onCommit={commitQuantity} />
                                             {isLowStock && (
                                                 <div className="text-xs text-red-600 mt-1">
-                                                    ⚠️ Below {item.unit === 'oz' 
-                                                        ? `${(parseFloat(item.lowStockThreshold) * 28.3495).toFixed(2)} g`
-                                                        : `${item.lowStockThreshold} ${item.unit}`
-                                                    }
+                                                    ⚠️ Below {item.lowStockThreshold} {item.unit}
                                                 </div>
                                             )}
                                         </td>
