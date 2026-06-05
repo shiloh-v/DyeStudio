@@ -17,7 +17,7 @@ const emptyForm = () => ({
     notes: '',
 });
 
-export function DyeCatalog({ settings, saveSettings, inventory }) {
+export function DyeCatalog({ settings, saveSettings }) {
     const dyes = settings?.dyeCatalog || [];
     const suppliers = settings?.suppliers || [];
 
@@ -72,56 +72,6 @@ export function DyeCatalog({ settings, saveSettings, inventory }) {
         }
     };
 
-    // One-tap: turn every dye in inventory into a catalog entry (number/name/color/
-    // supplier) with Dharma's standard 5 sizes & base prices. Skips ones already here.
-    const importFromInventory = async () => {
-        const dyeItems = (inventory || []).filter((i) => i.category === 'dye');
-        if (dyeItems.length === 0) {
-            toast('No dye items in inventory to import', 'info');
-            return;
-        }
-        const existing = new Set(dyes.map((d) => `${d.number || ''}|${String(d.name || '').toLowerCase()}`));
-        const toAdd: any[] = [];
-        dyeItems.forEach((item, idx) => {
-            const raw = String(item.name || '').trim();
-            const m = raw.match(/^(\d+)\s+(.*)$/);
-            const number = m ? m[1] : '';
-            const name = m ? m[2] : raw;
-            if (!name) return;
-            const key = `${number}|${name.toLowerCase()}`;
-            if (existing.has(key)) return;
-            existing.add(key);
-            // Real 2 oz price from the per-gram cost already in inventory.
-            const costPerGram = parseFloat(String(item.cost));
-            const price2oz = !isNaN(costPerGram) && costPerGram > 0
-                ? Number((costPerGram * 2 * 28.3495).toFixed(2))
-                : '';
-            toAdd.push({
-                id: Date.now() + idx,
-                number,
-                name,
-                color: item.color || '',
-                supplier: item.supplier || 'Dharma',
-                dyeType: '',
-                needs4pct: false,
-                sizes: [{ ounces: 2, price: price2oz }],
-                notes: '',
-            });
-        });
-        if (toAdd.length === 0) {
-            toast('All inventory dyes are already in the catalog', 'info');
-            return;
-        }
-        const ok = await confirmDialog({
-            title: 'Import dyes from inventory',
-            message: `Add ${toAdd.length} dye${toAdd.length !== 1 ? 's' : ''} to the catalog, each with a 2 oz size at its actual price (from your inventory cost)? You can add more sizes or edit any after.`,
-            confirmText: 'Import',
-        });
-        if (!ok) return;
-        saveDyes([...dyes, ...toAdd]);
-        toast(`Imported ${toAdd.length} dye${toAdd.length !== 1 ? 's' : ''}`, 'success');
-    };
-
     const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { ounces: '', price: '' }] });
     const updateSize = (i, field, val) => {
         const next = [...(formData.sizes || [])];
@@ -146,23 +96,12 @@ export function DyeCatalog({ settings, saveSettings, inventory }) {
                         {dyes.length} dye{dyes.length !== 1 ? 's' : ''} — pick from these when stocking dyes in Inventory
                     </p>
                 </div>
-                <div className="flex gap-2">
-                    {!showForm && (inventory || []).some((i) => i.category === 'dye') && (
-                        <button
-                            onClick={importFromInventory}
-                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                            title="Create catalog entries from your dye inventory"
-                        >
-                            ⬇ Import from inventory
-                        </button>
-                    )}
-                    <button
-                        onClick={() => (showForm ? closeForm() : setShowForm(true))}
-                        className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
-                    >
-                        {showForm ? '✕ Cancel' : '+ New Dye'}
-                    </button>
-                </div>
+                <button
+                    onClick={() => (showForm ? closeForm() : setShowForm(true))}
+                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                >
+                    {showForm ? '✕ Cancel' : '+ New Dye'}
+                </button>
             </div>
 
             {dyes.length > 0 && (
@@ -314,15 +253,7 @@ export function DyeCatalog({ settings, saveSettings, inventory }) {
             {dyes.length === 0 && !showForm && (
                 <div className="text-center py-12 text-gray-400">
                     <p className="text-xl mb-2">🎨</p>
-                    <p>No dyes yet. Add one, or import your dye inventory in one tap.</p>
-                    {(inventory || []).some((i) => i.category === 'dye') && (
-                        <button
-                            onClick={importFromInventory}
-                            className="mt-4 bg-teal-600 text-white px-5 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
-                        >
-                            ⬇ Import {(inventory || []).filter((i) => i.category === 'dye').length} dyes from inventory
-                        </button>
-                    )}
+                    <p>No dyes yet. Add your first dye to build the catalog!</p>
                 </div>
             )}
         </div>

@@ -403,7 +403,7 @@ export function YarnDyeManager() {
                     <YarnBases settings={settings} saveSettings={saveSettings} />
                 )}
                 {activeTab === 'dyes' && (
-                    <DyeCatalog settings={settings} saveSettings={saveSettings} inventory={inventory} />
+                    <DyeCatalog settings={settings} saveSettings={saveSettings} />
                 )}
                 {activeTab === 'inventory' && (
                     <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} />

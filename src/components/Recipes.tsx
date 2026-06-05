@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 import { unitList } from '../lib/units';
+import { recipeDyeCost } from '../lib/dyeCost';
 import type { Recipe } from '../types';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory }) {
@@ -655,6 +656,16 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                             />
                         </div>
 
+                        {(() => {
+                            const dc = recipeDyeCost(formData, inventory);
+                            return dc > 0 ? (
+                                <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-2">
+                                    💲 Estimated dye cost: <strong>~${dc.toFixed(2)}</strong>
+                                    {formData.yarnWeight ? ` to make ${formData.yarnWeight}g` : ''} (from your inventory dye prices)
+                                </div>
+                            ) : null;
+                        })()}
+
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
@@ -688,7 +699,8 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                             ? [{ id: 1, data: recipe.photo, label: 'Photo' }]
                             : [];
                     const currentIdx = Math.min(photoIndex, photos.length - 1);
-                    
+                    const dyeCost = recipeDyeCost(recipe, inventory);
+
                     return (
                     <div key={recipe.id} className="bg-white rounded-lg card-shadow p-4">
                         <div className="flex justify-between items-start mb-3">
@@ -697,10 +709,18 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                     <p className="text-xs font-semibold text-teal-600 mb-1">{recipe.recipeId}</p>
                                 )}
                                 <h3 className="text-lg font-semibold text-gray-900">{recipe.name}</h3>
-                                <div className="flex gap-2 items-center mt-1">
+                                <div className="flex gap-2 items-center mt-1 flex-wrap">
                                     <p className="text-xs text-teal-600 font-medium">{recipe.yarnWeight}g</p>
                                     <span className="text-gray-400">•</span>
                                     <p className="text-xs text-gray-600 capitalize">{recipe.colorType}</p>
+                                    {dyeCost > 0 && (
+                                        <>
+                                            <span className="text-gray-400">•</span>
+                                            <p className="text-xs text-green-700 font-medium" title={`Estimated dye cost to make this recipe at ${recipe.yarnWeight}g`}>
+                                                ~${dyeCost.toFixed(2)} dye
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                             <div className="flex gap-1 flex-shrink-0">
