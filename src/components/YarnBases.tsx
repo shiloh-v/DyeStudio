@@ -19,11 +19,26 @@ const emptyForm = () => ({
     gauge: '',
     wpi: '',
     plies: '',
-    yardsPer100g: '',
-    metersPer100g: '',
-    sizes: [{ grams: '', sku: '' }],
+    weightUnit: 'g',
+    lengthUnit: 'yd',
+    lengthPer100: '',
+    sizes: [{ amount: '', sku: '', price: '', length: '' }],
     notes: '',
 });
+
+// Length for a size: explicit override wins, otherwise derive from length-per-100.
+function deriveLength(lengthPer100, amount) {
+    const per = parseFloat(String(lengthPer100));
+    const a = parseFloat(String(amount));
+    if (isNaN(per) || isNaN(a)) return null;
+    return Math.round((per * a) / 100);
+}
+function sizeLength(base, size) {
+    const override = parseFloat(String(size.length));
+    if (!isNaN(override)) return { value: override, derived: false };
+    const d = deriveLength(base.lengthPer100, size.amount);
+    return d == null ? null : { value: d, derived: true };
+}
 
 export function YarnBases({ settings, saveSettings }) {
     const bases = settings?.yarnBases || [];
@@ -52,8 +67,13 @@ export function YarnBases({ settings, saveSettings }) {
             return;
         }
         const cleanSizes = (formData.sizes || [])
-            .filter((s) => String(s.grams).trim() !== '')
-            .map((s) => ({ grams: parseFloat(String(s.grams)) || 0, sku: (s.sku || '').trim() }));
+            .filter((s) => String(s.amount).trim() !== '')
+            .map((s) => ({
+                amount: parseFloat(String(s.amount)) || 0,
+                sku: (s.sku || '').trim(),
+                price: String(s.price).trim() === '' ? '' : parseFloat(String(s.price)),
+                length: String(s.length).trim() === '' ? '' : parseFloat(String(s.length)),
+            }));
         const record = { ...formData, myName: formData.myName.trim(), sizes: cleanSizes };
         if (editingId) {
             saveBases(bases.map((b) => (b.id === editingId ? { ...record, id: editingId } : b)));
@@ -68,7 +88,7 @@ export function YarnBases({ settings, saveSettings }) {
         setFormData({
             ...emptyForm(),
             ...b,
-            sizes: b.sizes && b.sizes.length ? b.sizes : [{ grams: '', sku: '' }],
+            sizes: b.sizes && b.sizes.length ? b.sizes : [{ amount: '', sku: '', price: '', length: '' }],
         });
         setEditingId(b.id);
         setShowForm(true);
@@ -80,27 +100,13 @@ export function YarnBases({ settings, saveSettings }) {
         }
     };
 
-    const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { grams: '', sku: '' }] });
+    const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { amount: '', sku: '', price: '', length: '' }] });
     const updateSize = (i, field, val) => {
         const next = [...(formData.sizes || [])];
         next[i] = { ...next[i], [field]: val };
         setFormData({ ...formData, sizes: next });
     };
     const removeSize = (i) => setFormData({ ...formData, sizes: (formData.sizes || []).filter((_, idx) => idx !== i) });
-
-    // Yardage for a given size, derived from yards-per-100g.
-    const yardsFor = (grams) => {
-        const per = parseFloat(String(formData.yardsPer100g));
-        const g = parseFloat(String(grams));
-        if (isNaN(per) || isNaN(g)) return null;
-        return Math.round((per * g) / 100);
-    };
-    const baseYardsFor = (b, grams) => {
-        const per = parseFloat(String(b.yardsPer100g));
-        const g = parseFloat(String(grams));
-        if (isNaN(per) || isNaN(g)) return null;
-        return Math.round((per * g) / 100);
-    };
 
     const inputCls = 'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500';
 
@@ -180,14 +186,25 @@ export function YarnBases({ settings, saveSettings }) {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            {/* Units + density */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Yards per 100g</label>
-                                    <input type="number" step="0.1" value={formData.yardsPer100g} onChange={(e) => setFormData({ ...formData, yardsPer100g: e.target.value })} className={inputCls} placeholder="231" />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Weight unit</label>
+                                    <select value={formData.weightUnit} onChange={(e) => setFormData({ ...formData, weightUnit: e.target.value })} className={`${inputCls} bg-white`}>
+                                        <option value="g">grams (g)</option>
+                                        <option value="oz">ounces (oz)</option>
+                                    </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Meters per 100g</label>
-                                    <input type="number" step="0.1" value={formData.metersPer100g} onChange={(e) => setFormData({ ...formData, metersPer100g: e.target.value })} className={inputCls} placeholder="211" />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Length unit</label>
+                                    <select value={formData.lengthUnit} onChange={(e) => setFormData({ ...formData, lengthUnit: e.target.value })} className={`${inputCls} bg-white`}>
+                                        <option value="yd">yards (yd)</option>
+                                        <option value="m">meters (m)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{formData.lengthUnit} per 100{formData.weightUnit}</label>
+                                    <input type="number" step="0.1" value={formData.lengthPer100} onChange={(e) => setFormData({ ...formData, lengthPer100: e.target.value })} className={inputCls} placeholder="231" />
                                 </div>
                             </div>
 
@@ -196,20 +213,32 @@ export function YarnBases({ settings, saveSettings }) {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Sizes it comes in</label>
                                 <div className="space-y-2">
                                     {(formData.sizes || []).map((s, idx) => {
-                                        const yds = yardsFor(s.grams);
-                                        const name = sizeName(s.grams, settings);
+                                        const len = sizeLength(formData, s);
+                                        const nm = formData.weightUnit === 'g' ? sizeName(s.amount, settings) : null;
                                         return (
-                                            <div key={idx} className="flex items-center gap-2">
-                                                <div className="flex items-center gap-1">
-                                                    <input type="number" step="0.1" value={s.grams} onChange={(e) => updateSize(idx, 'grams', e.target.value)} className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="grams" />
-                                                    <span className="text-sm text-gray-500">g</span>
+                                            <div key={idx} className="border rounded-lg p-2">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="flex items-center gap-1">
+                                                        <input type="number" step="0.1" value={s.amount} onChange={(e) => updateSize(idx, 'amount', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="size" />
+                                                        <span className="text-sm text-gray-500 w-6">{formData.weightUnit}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-sm text-gray-500">$</span>
+                                                        <input type="number" step="0.01" value={s.price} onChange={(e) => updateSize(idx, 'price', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="price" />
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <input type="number" step="0.1" value={s.length} onChange={(e) => updateSize(idx, 'length', e.target.value)} className="w-24 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder={len?.derived ? String(len.value) : 'length'} />
+                                                        <span className="text-sm text-gray-500 w-6">{formData.lengthUnit}</span>
+                                                    </div>
+                                                    <input type="text" value={s.sku || ''} onChange={(e) => updateSize(idx, 'sku', e.target.value)} className="w-24 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="SKU" />
+                                                    {(formData.sizes || []).length > 1 && (
+                                                        <button type="button" onClick={() => removeSize(idx)} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-auto">✕</button>
+                                                    )}
                                                 </div>
-                                                <input type="text" value={s.sku || ''} onChange={(e) => updateSize(idx, 'sku', e.target.value)} className="w-28 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="SKU (opt)" />
-                                                <span className="text-xs text-teal-600 flex-1 truncate">
-                                                    {name ? name : ''}{name && yds ? ' · ' : ''}{yds ? `~${yds} yds` : ''}
-                                                </span>
-                                                {(formData.sizes || []).length > 1 && (
-                                                    <button type="button" onClick={() => removeSize(idx)} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded">✕</button>
+                                                {(nm || (len && len.derived)) && (
+                                                    <div className="text-xs text-teal-600 mt-1 pl-1">
+                                                        {nm || ''}{nm && len?.derived ? ' · ' : ''}{len?.derived ? `auto ${len.value} ${formData.lengthUnit} (edit to override)` : ''}
+                                                    </div>
                                                 )}
                                             </div>
                                         );
@@ -260,13 +289,13 @@ export function YarnBases({ settings, saveSettings }) {
                             {b.fiberContent && <span className="px-2 py-1 bg-gray-50 text-gray-700 rounded border">{b.fiberContent}</span>}
                         </div>
 
-                        {(b.needleSize || b.gauge || b.wpi || b.plies || b.yardsPer100g) && (
+                        {(b.needleSize || b.gauge || b.wpi || b.plies || b.lengthPer100) && (
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600 mb-3">
                                 {b.needleSize && <div><span className="text-gray-400">Needle:</span> {b.needleSize}</div>}
                                 {b.gauge && <div><span className="text-gray-400">Gauge:</span> {b.gauge}</div>}
                                 {b.wpi && <div><span className="text-gray-400">WPI:</span> {b.wpi}</div>}
                                 {b.plies && <div><span className="text-gray-400">Plies:</span> {b.plies}</div>}
-                                {b.yardsPer100g && <div><span className="text-gray-400">Yardage:</span> {b.yardsPer100g} yds/100g</div>}
+                                {b.lengthPer100 && <div><span className="text-gray-400">Length:</span> {b.lengthPer100} {b.lengthUnit || 'yd'}/100{b.weightUnit || 'g'}</div>}
                             </div>
                         )}
 
@@ -275,11 +304,16 @@ export function YarnBases({ settings, saveSettings }) {
                                 <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Sizes</h4>
                                 <div className="flex flex-wrap gap-2">
                                     {b.sizes.map((s, i) => {
-                                        const yds = baseYardsFor(b, s.grams);
-                                        const name = sizeName(s.grams, settings);
+                                        const len = sizeLength(b, s);
+                                        const nm = (b.weightUnit || 'g') === 'g' ? sizeName(s.amount, settings) : null;
+                                        const wu = b.weightUnit || 'g';
+                                        const lu = b.lengthUnit || 'yd';
                                         return (
                                             <span key={i} className="px-2 py-1 bg-gray-50 rounded border text-xs text-gray-700">
-                                                {s.grams}g{name ? ` · ${name}` : ''}{yds ? ` · ~${yds} yds` : ''}
+                                                {s.amount}{wu}
+                                                {nm ? ` · ${nm}` : ''}
+                                                {len ? ` · ${len.value}${lu}` : ''}
+                                                {s.price !== '' && s.price != null ? ` · $${Number(s.price).toFixed(2)}` : ''}
                                             </span>
                                         );
                                     })}

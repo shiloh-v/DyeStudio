@@ -187,12 +187,16 @@ export interface Sale {
 }
 
 export interface YarnBaseSize {
-  grams: Num;
+  amount: Num;      // weight in the base's weightUnit (grams or ounces)
   sku?: string;
+  price?: Num;      // cost per skein of this size
+  length?: Num;     // optional override of the derived length (in the base's lengthUnit)
 }
 
 // A yarn base in the catalog — base-level specs entered once, plus the sizes it
-// comes in. Yardage is stored per 100g and derived for each size.
+// comes in. Length per 100 (weightUnit) auto-derives each size's length; a size
+// can override it. Units vary by supplier, so weight (g/oz) and length (yd/m)
+// are per-base.
 export interface YarnBase {
   id: ID;
   myName: string;          // e.g. "Luna DK"
@@ -204,8 +208,9 @@ export interface YarnBase {
   gauge?: string;
   wpi?: string;
   plies?: string;
-  yardsPer100g?: Num;
-  metersPer100g?: Num;
+  weightUnit?: 'g' | 'oz';
+  lengthUnit?: 'yd' | 'm';
+  lengthPer100?: Num;      // length (lengthUnit) per 100 of weightUnit
   sizes?: YarnBaseSize[];
   notes?: string;
 }
