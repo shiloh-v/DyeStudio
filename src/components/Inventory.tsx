@@ -4,6 +4,7 @@ import { confirmDialog } from '../lib/dialog';
 import { sizeName } from '../lib/sizes';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
 import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
+import { yarnBaseRef } from '../lib/yarnMatch';
 import type { InventoryItem } from '../types';
 
 // Sensible ± step for the quantity stepper, by unit.
@@ -663,11 +664,13 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         >
                                             <option value="">Select yarn base...</option>
-                                            {inventory
-                                                .filter(i => i.category === 'yarn base')
-                                                .sort((a, b) => a.name.localeCompare(b.name))
-                                                .map(yarn => (
-                                                <option key={yarn.id} value={yarn.name}>{yarn.name}</option>
+                                            {formData.forYarnBase && !inventory.some(i => i.category === 'yarn base' && yarnBaseRef(i) === formData.forYarnBase) && (
+                                                <option value={formData.forYarnBase}>{formData.forYarnBase}</option>
+                                            )}
+                                            {([...new Set(inventory.filter(i => i.category === 'yarn base').map((i) => yarnBaseRef(i)))] as string[])
+                                                .sort((a, b) => a.localeCompare(b))
+                                                .map(ref => (
+                                                <option key={ref} value={ref}>{ref}</option>
                                             ))}
                                         </select>
                                     </div>
