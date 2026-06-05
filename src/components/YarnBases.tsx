@@ -3,6 +3,7 @@ import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { useFormGuard } from '../lib/useFormGuard';
 import { sizeName } from '../lib/sizes';
+import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
 
 const YARN_WEIGHTS = [
     'Lace', 'Light Fingering', 'Fingering', 'Sport', 'DK',
@@ -25,29 +26,6 @@ const emptyForm = () => ({
     sizes: [{ amount: '', sku: '', packSize: '', packPrice: '', length: '' }],
     notes: '',
 });
-
-// Per-skein price from the pack price and pack size (defaults to 1 skein/pack).
-function perSkeinPrice(size) {
-    const pp = parseFloat(String(size.packPrice));
-    if (isNaN(pp)) return null;
-    const ps = parseFloat(String(size.packSize));
-    const qty = !isNaN(ps) && ps > 0 ? ps : 1;
-    return pp / qty;
-}
-
-// Length for a size: explicit override wins, otherwise derive from length-per-100.
-function deriveLength(lengthPer100, amount) {
-    const per = parseFloat(String(lengthPer100));
-    const a = parseFloat(String(amount));
-    if (isNaN(per) || isNaN(a)) return null;
-    return Math.round((per * a) / 100);
-}
-function sizeLength(base, size) {
-    const override = parseFloat(String(size.length));
-    if (!isNaN(override)) return { value: override, derived: false };
-    const d = deriveLength(base.lengthPer100, size.amount);
-    return d == null ? null : { value: d, derived: true };
-}
 
 export function YarnBases({ settings, saveSettings }) {
     const bases = settings?.yarnBases || [];

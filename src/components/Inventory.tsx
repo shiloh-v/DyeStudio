@@ -3,11 +3,17 @@ import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 import { sizeName } from '../lib/sizes';
 import { myYarnName } from '../lib/yarnNames';
+import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
 import type { InventoryItem } from '../types';
 
 export function Inventory({ inventory, saveInventory, settings }) {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    // "Fill from Yarn Base catalog" picker (UI only — fills existing fields).
+    const yarnBases = settings?.yarnBases || [];
+    const [pickBaseId, setPickBaseId] = useState('');
+    const [pickSize, setPickSize] = useState('');
+    const pickedBase = yarnBases.find((b) => String(b.id) === String(pickBaseId));
     const [filterCategory, setFilterCategory] = useState('all');
     const [formData, setFormData] = useState<Partial<InventoryItem>>({
         name: '',
@@ -76,6 +82,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
         });
         setShowForm(false);
         setEditingId(null);
+        setPickBaseId('');
+        setPickSize('');
     };
 
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
@@ -84,6 +92,56 @@ export function Inventory({ inventory, saveInventory, settings }) {
         setFormData(item);
         setEditingId(item.id);
         setShowForm(true);
+        setPickBaseId('');
+        setPickSize('');
+    };
+
+    // Fill base-level specs from a catalog base (keeps existing values if blank).
+    const applyBase = (base) => {
+        if (!base) return;
+        setFormData((prev) => ({
+            ...prev,
+            myYarnName: base.myName || prev.myYarnName,
+            supplier: base.supplier || prev.supplier,
+            fiberContent: base.fiberContent || prev.fiberContent,
+            needleSize: base.needleSize || prev.needleSize,
+            gauge: base.gauge || prev.gauge,
+            wpi: base.wpi || prev.wpi,
+            plies: base.plies || prev.plies,
+            weight: base.weight || prev.weight,
+        }));
+    };
+
+    // Generate an item name not already used by another inventory item.
+    const uniqueItemName = (desired) => {
+        const taken = new Set(
+            inventory.filter((i) => i.id !== editingId).map((i) => String(i.name || '').trim().toLowerCase())
+        );
+        if (!taken.has(desired.trim().toLowerCase())) return desired;
+        let n = 2;
+        while (taken.has(`${desired} (${n})`.trim().toLowerCase())) n++;
+        return `${desired} (${n})`;
+    };
+
+    // Fill size-level fields + generate a unique Item Name and a Presentation.
+    const applySize = (base, size) => {
+        if (!base || !size) return;
+        const len = sizeLength(base, size);
+        const each = perSkeinPrice(size);
+        const wu = base.weightUnit || 'g';
+        const packQty = parseFloat(String(size.packSize));
+        const presentation = !isNaN(packQty) && packQty > 1
+            ? `${packQty} x ${size.amount}${wu} skeins`
+            : `${size.amount}${wu} skein`;
+        const itemName = uniqueItemName(`${base.myName || 'Yarn'} ${size.amount}${wu}`.trim());
+        setFormData((prev) => ({
+            ...prev,
+            name: itemName,
+            hankSize: size.amount != null ? String(size.amount) : prev.hankSize,
+            yardage: len ? String(len.value) : prev.yardage,
+            cost: each != null ? each.toFixed(2) : prev.cost,
+            presentation,
+        }));
     };
 
     const deleteItem = async (id) => {
@@ -216,17 +274,47 @@ export function Inventory({ inventory, saveInventory, settings }) {
 
                         {formData.category === 'yarn base' && (
                             <>
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name</label>
-                                        <input
-                                            type="text"
-                                            value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                            placeholder="e.g., W2D4 Merino DK SW"
-                                        />
+                                {yarnBases.length > 0 && (
+                                    <div className="bg-teal-50 border border-teal-200 rounded-lg p-3">
+                                        <label className="block text-sm font-medium text-teal-800 mb-1">Fill from Yarn Base catalog (optional)</label>
+                                        <div className="grid md:grid-cols-2 gap-2">
+                                            <select
+                                                value={pickBaseId}
+                                                onChange={(e) => {
+                                                    setPickBaseId(e.target.value);
+                                                    setPickSize('');
+                                                    applyBase(yarnBases.find((b) => String(b.id) === e.target.value));
+                                                }}
+                                                className="px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                                            >
+                                                <option value="">— manual entry —</option>
+                                                {yarnBases.map((b) => <option key={b.id} value={b.id}>{b.myName}</option>)}
+                                            </select>
+                                            {pickedBase && (pickedBase.sizes || []).length > 0 && (
+                                                <select
+                                                    value={pickSize}
+                                                    onChange={(e) => {
+                                                        setPickSize(e.target.value);
+                                                        applySize(pickedBase, (pickedBase.sizes || []).find((s) => String(s.amount) === e.target.value));
+                                                    }}
+                                                    className="px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                                                >
+                                                    <option value="">Select size to fill…</option>
+                                                    {(pickedBase.sizes || []).map((s, i) => {
+                                                        const each = perSkeinPrice(s);
+                                                        return (
+                                                            <option key={i} value={s.amount}>
+                                                                {s.amount}{pickedBase.weightUnit || 'g'}{each != null ? ` · $${each.toFixed(2)}/skein` : ''}
+                                                            </option>
+                                                        );
+                                                    })}
+                                                </select>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-teal-700 mt-1">Auto-fills the specs below + per-skein cost. You can still edit anything.</p>
                                     </div>
+                                )}
+                                <div className="grid md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">My Name for Yarn</label>
                                         <input
