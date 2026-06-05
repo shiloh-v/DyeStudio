@@ -1566,45 +1566,29 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         const updatedPans = formData.pans.filter(p => p.id !== pan.id);
                                                         setFormData({ ...formData, pans: updatedPans });
                                                         
-                                                        // Load pan into currentPan for editing based on type
-                                                        if (pan.type === 'gradientTray') {
-                                                            setCurrentPan({
-                                                                type: 'gradientTray',
-                                                                colorway: '',
-                                                                recipeId: '',
-                                                                capacity: 300,
-                                                                yarns: [{ base: '', hankSize: '', quantity: 1 }],
-                                                                gradientDye: pan.gradientDye,
-                                                                gradientYarnBase: pan.gradientYarnBase,
-                                                                gradientHankSize: pan.gradientHankSize,
-                                                                squareColorA: '',
-                                                                squareColorB: ''
-                                                            });
-                                                        } else if (pan.type === 'dyeSquareTray') {
-                                                            setCurrentPan({
-                                                                type: 'dyeSquareTray',
-                                                                colorway: '',
-                                                                recipeId: '',
-                                                                capacity: 300,
-                                                                yarns: [{ base: '', hankSize: '', quantity: 1 }],
-                                                                gradientDye: '',
-                                                                gradientYarnBase: pan.gradientYarnBase,
-                                                                gradientHankSize: pan.gradientHankSize,
-                                                                squareColorA: pan.squareColorA,
-                                                                squareColorB: pan.squareColorB
-                                                            });
-                                                        } else {
-                                                            setCurrentPan({
-                                                                type: 'pan',
-                                                                colorway: pan.colorway,
-                                                                recipeId: pan.recipeId || '',
-                                                                capacity: pan.capacity,
-                                                                yarns: pan.yarns,
-                                                                gradientDye: '',
-                                                                gradientYarnBase: '',
-                                                                gradientHankSize: ''
-                                                            });
-                                                        }
+                                                        // Load the pan into the editor. Start from the empty-pan
+                                                        // defaults (so every form field exists) and spread the pan
+                                                        // LAST, so nothing is dropped — fromKit, colorType, the
+                                                        // embedded recipe / color sketch, experiment notes, etc.
+                                                        setCurrentPan({
+                                                            type: 'pan',
+                                                            colorway: '',
+                                                            recipeId: '',
+                                                            capacity: 300,
+                                                            yarns: [{ base: '', hankSize: '', quantity: 1 }],
+                                                            gradientDye: '',
+                                                            gradientYarnBase: '',
+                                                            gradientHankSize: '',
+                                                            squareColorA: '',
+                                                            squareColorB: '',
+                                                            colorSketchId: '',
+                                                            kitId: '',
+                                                            kitName: '',
+                                                            kitColors: [],
+                                                            kitSelectedColorIds: [],
+                                                            kitYarns: [{ base: '', hankSize: '', quantity: 1 }],
+                                                            ...pan,
+                                                        });
                                                     }}
                                                     className="text-blue-600 hover:text-blue-800"
                                                 >
