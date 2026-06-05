@@ -55,13 +55,14 @@ function toDbShape(key: CollectionKey, items: Row[]): Row[] {
   }
   if (key === 'batches') {
     return items.map((item) => {
-      const { batchId, batchNotes, experimentNotes, colorSketch, ...rest } = item;
+      const { batchId, batchNotes, experimentNotes, colorSketch, lastMovedAt, ...rest } = item;
       return {
         ...rest,
         batch_id: batchId || null,
         batch_notes: batchNotes || null,
         experiment_notes: experimentNotes || null,
         color_sketch: colorSketch || null,
+        last_moved_at: lastMovedAt || null,
       };
     });
   }
@@ -161,6 +162,7 @@ export const StorageManager = {
           batchNotes: item.batch_notes || '',
           experimentNotes: item.experiment_notes || '',
           colorSketch: item.color_sketch || null,
+          lastMovedAt: item.last_moved_at || null,
         }));
       }
       if (key === 'kits') {

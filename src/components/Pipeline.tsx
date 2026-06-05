@@ -26,7 +26,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             ...formData,
             id: Date.now(),
             recipeName: recipe?.name || 'Custom',
-            colorway: formData.customColorway || recipe?.name || 'Custom Colorway'
+            colorway: formData.customColorway || recipe?.name || 'Custom Colorway',
+            lastMovedAt: new Date().toISOString(),
         };
         saveBatches([...batches, newBatch]);
         resetForm();
@@ -92,7 +93,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 pricePerSkein: pricePerSkein,
                 profit: profit,
                 profitMargin: price > 0 ? ((profit / price) * 100) : 0,
-                soldDate: DateUtils.getTodayEST()
+                soldDate: DateUtils.getTodayEST(),
+                lastMovedAt: new Date().toISOString(),
             };
 
             saveBatches(batches.map(b => b.id === id ? updatedBatch : b));
@@ -140,7 +142,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
         }
         
         // Regular status update
-        saveBatches(batches.map(b => b.id === id ? { ...b, status: newStatus } : b));
+        const now = new Date().toISOString();
+        saveBatches(batches.map(b => b.id === id ? { ...b, status: newStatus, lastMovedAt: now } : b));
     };
 
     const deleteBatch = async (id) => {
@@ -207,17 +210,18 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             const profitMargin = price > 0 ? ((profit / price) * 100) : 0;
             const pricePerSkein = totalSkeins > 0 ? price / totalSkeins : 0;
             const soldDate = DateUtils.getTodayEST();
-            
+            const movedAt = new Date().toISOString();
+
             // Update all batches with proportional pricing
             const updatedBatches = batches.map(b => {
                 if (b.status !== fromStatus) return b;
-                
+
                 const batchSkeins = b.skeins || 0;
                 const batchCost = b.totalCost || 0;
                 const batchPrice = totalSkeins > 0 ? (batchSkeins / totalSkeins) * price : 0;
                 const batchProfit = batchPrice - batchCost;
                 const batchMargin = batchPrice > 0 ? ((batchProfit / batchPrice) * 100) : 0;
-                
+
                 return {
                     ...b,
                     status: 'stocked',
@@ -225,7 +229,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                     pricePerSkein: pricePerSkein,
                     profit: batchProfit,
                     profitMargin: batchMargin,
-                    soldDate: soldDate
+                    soldDate: soldDate,
+                    lastMovedAt: movedAt,
                 };
             });
             
@@ -278,10 +283,11 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             return;
         }
         
-        const updatedBatches = batches.map(b => 
-            b.status === fromStatus ? { ...b, status: toStatus } : b
+        const movedAt = new Date().toISOString();
+        const updatedBatches = batches.map(b =>
+            b.status === fromStatus ? { ...b, status: toStatus, lastMovedAt: movedAt } : b
         );
-        
+
         saveBatches(updatedBatches);
         toast(`Moved ${batchesToMove.length} batches to ${statusInfo.label}`, 'success');
     };
@@ -428,9 +434,21 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             <div className="grid md:grid-cols-4 gap-4">
                 {statuses.map(status => {
                     // The Stocked column also catches legacy 'sold' batches (pre-migration).
-                    const batchesInStatus = status === 'stocked'
+                    // Sort newest on top: use lastMovedAt when present (stamped on
+                    // creation + every status change); fall back to startDate (set on
+                    // creation) and finally to id (Date.now()) so pre-feature batches
+                    // still get a stable, recency-ish order.
+                    const recency = (b) => {
+                        const t = b.lastMovedAt ? Date.parse(b.lastMovedAt) : NaN;
+                        if (!Number.isNaN(t)) return t;
+                        const d = b.startDate ? Date.parse(b.startDate) : NaN;
+                        if (!Number.isNaN(d)) return d;
+                        return Number(b.id) || 0;
+                    };
+                    const batchesInStatus = (status === 'stocked'
                         ? batches.filter(isStocked)
-                        : batches.filter(b => b.status === status);
+                        : batches.filter(b => b.status === status)
+                    ).slice().sort((a, b) => recency(b) - recency(a));
                     const statusInfo = statusLabels[status];
                     
                     return (
