@@ -7,6 +7,15 @@ import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
 import { yarnBaseRef } from '../lib/yarnMatch';
 import type { InventoryItem } from '../types';
 
+// Grams per unit, for converting on-hand amounts between units.
+const UNIT_TO_GRAM: Record<string, number> = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
+const OZ_IN_GRAMS = 28.3495;
+// Convert a quantity in `unit` to ounces (how dyes are bought/tracked).
+function toOunces(qty: any, unit: string): number {
+    const g = (parseFloat(String(qty)) || 0) * (UNIT_TO_GRAM[unit] || 1);
+    return g / OZ_IN_GRAMS;
+}
+
 // Sensible ± step for the quantity stepper, by unit.
 function stepFor(unit: string): number {
     if (unit === 'g') return 10;
@@ -17,17 +26,27 @@ function stepFor(unit: string): number {
 // Quantity cell with its own local state so typing doesn't write to the
 // database on every keystroke — it commits on blur / Enter. The ± buttons
 // commit immediately (discrete actions), and local state re-syncs from props.
+// Dyes are bought and tracked in OUNCES, so a dye's amount is always shown and
+// edited in oz here even if it was stored in grams (legacy) — editing migrates
+// it to oz. This is display/inventory only; dye cost is per-gram (see below).
 function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
-    const [val, setVal] = useState(String(item.quantity ?? ''));
-    useEffect(() => { setVal(String(item.quantity ?? '')); }, [item.quantity]);
-    const step = stepFor(item.unit || 'g');
+    const isDye = item.category === 'dye';
+    const displayUnit = isDye ? 'oz' : (item.unit || 'g');
+    const toDisplay = () => (isDye ? Number(toOunces(item.quantity, item.unit || 'g').toFixed(2)) : (parseFloat(String(item.quantity)) || 0));
+    const [val, setVal] = useState(String(toDisplay()));
+    useEffect(() => { setVal(String(toDisplay())); }, [item.quantity, item.unit]);
+    const step = isDye ? 0.5 : stepFor(item.unit || 'g');
     const commit = () => {
         const n = parseFloat(val) || 0;
-        if (n !== parseFloat(String(item.quantity))) onCommit(item.id, n);
+        if (isDye) {
+            if (n !== toDisplay()) onCommit(item.id, n, 'oz');
+        } else if (n !== parseFloat(String(item.quantity))) {
+            onCommit(item.id, n);
+        }
     };
     return (
         <div className="flex items-center gap-2">
-            <button type="button" onClick={() => onAdjust(item.id, -step)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">-</button>
+            <button type="button" onClick={() => onAdjust(item.id, -step, isDye ? 'oz' : undefined)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">-</button>
             <input
                 type="number"
                 step="0.1"
@@ -37,8 +56,8 @@ function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
                 onKeyDown={(e) => { if (e.key === 'Enter') { commit(); (e.currentTarget as HTMLInputElement).blur(); } }}
                 className={`w-20 px-2 py-1 text-center border rounded font-medium ${isLowStock ? 'text-red-600 border-red-300' : 'border-gray-300'}`}
             />
-            <span className="text-sm text-gray-600">{item.unit}</span>
-            <button type="button" onClick={() => onAdjust(item.id, step)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">+</button>
+            <span className="text-sm text-gray-600">{displayUnit}</span>
+            <button type="button" onClick={() => onAdjust(item.id, step, isDye ? 'oz' : undefined)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">+</button>
         </div>
     );
 }
@@ -136,7 +155,12 @@ export function Inventory({ inventory, saveInventory, settings }) {
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const editItem = (item) => {
-        setFormData(item);
+        // Dyes are tracked in ounces — present a legacy gram-stored dye in oz.
+        if (item.category === 'dye' && (item.unit || 'g') !== 'oz' && item.quantity !== '' && item.quantity != null) {
+            setFormData({ ...item, unit: 'oz', quantity: String(Number(toOunces(item.quantity, item.unit || 'g').toFixed(2))) });
+        } else {
+            setFormData(item);
+        }
         setEditingId(item.id);
         setShowForm(true);
         setPickBaseId('');
@@ -247,14 +271,20 @@ export function Inventory({ inventory, saveInventory, settings }) {
         e.target.value = '';
     };
 
-    const adjustQuantity = (id, delta) => {
-        saveInventory(inventory.map(i =>
-            i.id === id ? { ...i, quantity: Math.max(0, (parseFloat(String(i.quantity)) || 0) + delta) } : i
-        ));
+    const adjustQuantity = (id, delta, asUnit?) => {
+        saveInventory(inventory.map(i => {
+            if (i.id !== id) return i;
+            if (asUnit === 'oz') {
+                // Step in ounces and normalise the stored amount to oz.
+                const nextOz = Math.max(0, Number((toOunces(i.quantity, i.unit || 'g') + delta).toFixed(2)));
+                return { ...i, quantity: nextOz, unit: 'oz' };
+            }
+            return { ...i, quantity: Math.max(0, (parseFloat(String(i.quantity)) || 0) + delta) };
+        }));
     };
 
-    const commitQuantity = (id, qty) => {
-        saveInventory(inventory.map(i => (i.id === id ? { ...i, quantity: qty } : i)));
+    const commitQuantity = (id, qty, unit?) => {
+        saveInventory(inventory.map(i => (i.id === id ? { ...i, quantity: qty, ...(unit ? { unit } : {}) } : i)));
     };
 
     // Update purchase price / ounces and recompute dye cost-per-gram in one pass.
@@ -956,6 +986,19 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                 const cost = parseFloat(item.cost);
                                                 const unit = item.unit || 'g';
                                                 
+                                                // Dyes store cost as cost-per-GRAM (from purchase
+                                                // price ÷ ounces). Show $/oz (how it's bought) with
+                                                // the per-gram cost beneath — independent of the
+                                                // on-hand unit.
+                                                if (item.category === 'dye') {
+                                                    return (
+                                                        <div>
+                                                            <div>${(cost * OZ_IN_GRAMS).toFixed(2)}/oz</div>
+                                                            <div className="text-xs text-gray-500">(${cost.toFixed(4)}/g)</div>
+                                                        </div>
+                                                    );
+                                                }
+
                                                 // For yarn bases, show per-skein cost
                                                 if (item.category === 'yarn base') {
                                                     return `$${cost.toFixed(2)}/skein`;

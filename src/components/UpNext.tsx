@@ -235,7 +235,11 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         if (!item || !item.cost) return 0;
         const cost = parseFloat(item.cost);
         const unit = item.unit || 'g';
-        
+
+        // Dyes always store cost as cost-per-GRAM (purchase price ÷ ounces ÷
+        // 28.35), independent of the on-hand quantity unit — so don't divide.
+        if (item.category === 'dye') return cost;
+
         // Conversion factors to grams
         const conversions = {
             'g': 1,
