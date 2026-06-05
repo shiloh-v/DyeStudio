@@ -21,10 +21,11 @@ const Gradients = named(() => import('./Gradients'), 'Gradients');
 const Settings = named(() => import('./Settings'), 'Settings');
 const BackupRestore = named(() => import('./BackupRestore'), 'BackupRestore');
 const YarnBases = named(() => import('./YarnBases'), 'YarnBases');
+const DyeCatalog = named(() => import('./DyeCatalog'), 'DyeCatalog');
 
 const VALID_TABS = [
     'dashboard', 'calendar', 'recipes', 'gradients', 'kits', 'colorlab',
-    'sessions', 'queue', 'bases', 'inventory', 'pipeline', 'sales', 'settings',
+    'sessions', 'queue', 'bases', 'dyes', 'inventory', 'pipeline', 'sales', 'settings',
 ];
 
 export function YarnDyeManager() {
@@ -255,6 +256,7 @@ export function YarnDyeManager() {
                             { id: 'colorways', label: '🧶 Colorways', group: ['recipes', 'gradients', 'kits'] },
                             { id: 'studio', label: '🧪 Studio', group: ['colorlab', 'sessions', 'queue'] },
                             { id: 'bases', label: '🧵 Yarn Bases' },
+                            { id: 'dyes', label: '🎨 Dyes' },
                             { id: 'inventory', label: '📦 Inventory' },
                             { id: 'pipeline', label: '🔄 Pipeline' },
                             { id: 'sales', label: '🏷️ Stock' },
@@ -399,6 +401,9 @@ export function YarnDyeManager() {
                 )}
                 {activeTab === 'bases' && (
                     <YarnBases settings={settings} saveSettings={saveSettings} />
+                )}
+                {activeTab === 'dyes' && (
+                    <DyeCatalog settings={settings} saveSettings={saveSettings} />
                 )}
                 {activeTab === 'inventory' && (
                     <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} />

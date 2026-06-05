@@ -3,6 +3,7 @@ import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 import { sizeName } from '../lib/sizes';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
+import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
 import type { InventoryItem } from '../types';
 
 // Sensible ± step for the quantity stepper, by unit.
@@ -49,6 +50,10 @@ export function Inventory({ inventory, saveInventory, settings }) {
     const [pickBaseId, setPickBaseId] = useState('');
     const [pickSize, setPickSize] = useState('');
     const pickedBase = yarnBases.find((b) => String(b.id) === String(pickBaseId));
+    const dyeCatalog = settings?.dyeCatalog || [];
+    const [pickDyeId, setPickDyeId] = useState('');
+    const [pickDyeSize, setPickDyeSize] = useState('');
+    const pickedDye = dyeCatalog.find((d) => String(d.id) === String(pickDyeId));
     const [filterCategory, setFilterCategory] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +128,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
         setEditingId(null);
         setPickBaseId('');
         setPickSize('');
+        setPickDyeId('');
+        setPickDyeSize('');
     };
 
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
@@ -133,6 +140,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
         setShowForm(true);
         setPickBaseId('');
         setPickSize('');
+        setPickDyeId('');
+        setPickDyeSize('');
     };
 
     // Fill base-level specs from a catalog base (keeps existing values if blank).
@@ -180,6 +189,29 @@ export function Inventory({ inventory, saveInventory, settings }) {
             yardage: len ? String(len.value) : prev.yardage,
             cost: each != null ? each.toFixed(2) : prev.cost,
             presentation,
+        }));
+    };
+
+    // Fill name/color/supplier from a catalog dye.
+    const applyDye = (dye) => {
+        if (!dye) return;
+        setFormData((prev) => ({
+            ...prev,
+            name: uniqueItemName(dyeDisplayName(dye)),
+            color: dye.color || prev.color,
+            supplier: dye.supplier || prev.supplier,
+        }));
+    };
+
+    // Fill purchase price/ounces + cost-per-gram from a catalog dye size.
+    const applyDyeSize = (size) => {
+        if (!size) return;
+        const perG = dyeCostPerGram(size);
+        setFormData((prev) => ({
+            ...prev,
+            purchasePrice: size.price != null && size.price !== '' ? String(size.price) : prev.purchasePrice,
+            purchaseOunces: size.ounces != null ? String(size.ounces) : prev.purchaseOunces,
+            cost: perG != null ? perG.toFixed(4) : prev.cost,
         }));
     };
 
@@ -374,6 +406,47 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                 </select>
                             </div>
                         </div>
+
+                        {formData.category === 'dye' && dyeCatalog.length > 0 && (
+                            <div className="bg-teal-50 border border-teal-200 rounded-lg p-3">
+                                <label className="block text-sm font-medium text-teal-800 mb-1">Fill from Dye catalog (optional)</label>
+                                <div className="grid md:grid-cols-2 gap-2">
+                                    <select
+                                        value={pickDyeId}
+                                        onChange={(e) => {
+                                            setPickDyeId(e.target.value);
+                                            setPickDyeSize('');
+                                            applyDye(dyeCatalog.find((d) => String(d.id) === e.target.value));
+                                        }}
+                                        className="px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                                    >
+                                        <option value="">— manual entry —</option>
+                                        {dyeCatalog.map((d) => <option key={d.id} value={d.id}>{dyeDisplayName(d)}</option>)}
+                                    </select>
+                                    {pickedDye && (pickedDye.sizes || []).length > 0 && (
+                                        <select
+                                            value={pickDyeSize}
+                                            onChange={(e) => {
+                                                setPickDyeSize(e.target.value);
+                                                applyDyeSize((pickedDye.sizes || []).find((s) => String(s.ounces) === e.target.value));
+                                            }}
+                                            className="px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                                        >
+                                            <option value="">Select size for cost…</option>
+                                            {(pickedDye.sizes || []).map((s, i) => {
+                                                const pg = dyeCostPerGram(s);
+                                                return (
+                                                    <option key={i} value={s.ounces}>
+                                                        {s.ounces}oz{s.price !== '' && s.price != null ? ` · $${Number(s.price).toFixed(2)}` : ''}{pg != null ? ` · $${pg.toFixed(3)}/g` : ''}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    )}
+                                </div>
+                                <p className="text-xs text-teal-700 mt-1">Fills name, color, supplier + cost-per-gram from the size. You can still edit anything.</p>
+                            </div>
+                        )}
 
                         {formData.category === 'yarn base' && (
                             <>
