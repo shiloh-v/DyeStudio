@@ -83,6 +83,34 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         kitSelectedColorIds: [],
         kitYarns: [{ base: '', hankSize: '', quantity: 1 }]
     });
+    // Id of the pan currently being edited in place (null = adding a new one).
+    const [editingPanId, setEditingPanId] = useState<any>(null);
+
+    // Append a new pan, or replace the one being edited (in place, keeping its id).
+    const commitPan = (newPan) => {
+        if (editingPanId != null) {
+            setFormData((prev) => ({
+                ...prev,
+                pans: prev.pans.map((p) => (p.id === editingPanId ? { ...newPan, id: editingPanId } : p)),
+            }));
+            setEditingPanId(null);
+        } else {
+            setFormData((prev) => ({ ...prev, pans: [...prev.pans, newPan] }));
+        }
+    };
+
+    // Stop editing without saving — clear the editor back to a blank pan.
+    const cancelPanEdit = () => {
+        setEditingPanId(null);
+        setCurrentPan({
+            type: 'pan', colorway: '', recipeId: '', capacity: 300,
+            yarns: [{ base: '', hankSize: '', quantity: 1 }],
+            gradientDye: '', gradientYarnBase: '', gradientHankSize: '',
+            squareColorA: '', squareColorB: '', colorSketchId: '',
+            kitId: '', kitName: '', kitColors: [], kitSelectedColorIds: [],
+            kitYarns: [{ base: '', hankSize: '', quantity: 1 }],
+        });
+    };
 
     // Drag-and-drop reorder for the pans list. Mouse for desktop, touch (with a
     // short press delay so the modal can still scroll) for iPad/phone, keyboard
@@ -258,6 +286,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         });
         setShowForm(false);
         setEditingId(null);
+        setEditingPanId(null);
     };
 
     const closeForm = async () => {
@@ -341,8 +370,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             }
         }
 
+        // When editing in place the pan is still in the list, so exclude it from
+        // the capacity / in-progress checks to avoid double-counting it.
+        const otherPans = editingPanId != null
+            ? formData.pans.filter(p => p.id !== editingPanId)
+            : formData.pans;
+
         // Check oven capacity
-        const currentLoad = calculateOvenLoad(formData.pans);
+        const currentLoad = calculateOvenLoad(otherPans);
         const newItemLoad = currentPan.type === 'dyeSquareTray' ? 4 : currentPan.type === 'gradientTray' ? 2 : 1;
         if (currentLoad + newItemLoad > MAX_OVEN_CAPACITY) {
             const itemName = currentPan.type === 'dyeSquareTray' ? 'dye square tray' : currentPan.type === 'gradientTray' ? 'tray' : 'pan';
@@ -355,7 +390,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         // already added to the session currently being built/edited.
         let inventoryWarnings = [];
         const committed = calculateCommittedNeeds(editingId);
-        const inProgressNeeds = calculatePanNeeds(formData.pans);
+        const inProgressNeeds = calculatePanNeeds(otherPans);
 
         const getEffectiveAvailable = (base, hankSize) => {
             const inventoryItem = findYarnBaseItem(inventory, base, hankSize);
@@ -415,17 +450,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         }
 
         if (currentPan.type === 'adHoc') {
-            setFormData({
-                ...formData,
-                pans: [...formData.pans, {
-                    type: 'adHoc',
-                    id: Date.now(),
-                    adHocLabel: currentPan.adHocLabel || '',
-                    experimentNotes: '',
-                    yarns: [],
-                    totalWeight: 0,
-                    capacity: 0
-                }]
+            commitPan({
+                type: 'adHoc',
+                id: Date.now(),
+                adHocLabel: currentPan.adHocLabel || '',
+                experimentNotes: currentPan.experimentNotes || '',
+                yarns: [],
+                totalWeight: 0,
+                capacity: 0
             });
         } else if (currentPan.type === 'pan' || currentPan.type === 'colorLab') {
             const totalWeight = currentPan.yarns.reduce((sum, y) => {
@@ -436,36 +468,33 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             const colorSketch = currentPan.type === 'colorLab' && currentPan.colorSketchId ? 
                 colorSketches.find(s => s.id === parseInt(currentPan.colorSketchId)) : null;
             
-            setFormData({
-                ...formData,
-                pans: [...formData.pans, { 
-                    ...currentPan, 
-                    id: Date.now(), 
-                    totalWeight,
-                    recipe: recipe ? {
-                        id: recipe.id,
-                        name: recipe.name,
-                        yarnWeight: recipe.yarnWeight,
-                        ingredients: recipe.ingredients,
-                        photo: recipe.photo,
-                        photos: recipe.photos || [],
-                        colorType: recipe.colorType,
-                        instructions: recipe.instructions,
-                        colorSolutions: recipe.colorSolutions
-                    } : null,
-                    colorSketch: colorSketch ? {
-                        id: colorSketch.id,
-                        colorId: colorSketch.colorId,
-                        customName: colorSketch.customName,
-                        type: colorSketch.type,
-                        yarnWeight: colorSketch.yarnWeight,
-                        dyes: colorSketch.dyes,
-                        sections: colorSketch.sections,
-                        baseColors: colorSketch.baseColors,
-                        speckles: colorSketch.speckles,
-                        notes: colorSketch.notes
-                    } : null
-                }]
+            commitPan({
+                ...currentPan,
+                id: Date.now(),
+                totalWeight,
+                recipe: recipe ? {
+                    id: recipe.id,
+                    name: recipe.name,
+                    yarnWeight: recipe.yarnWeight,
+                    ingredients: recipe.ingredients,
+                    photo: recipe.photo,
+                    photos: recipe.photos || [],
+                    colorType: recipe.colorType,
+                    instructions: recipe.instructions,
+                    colorSolutions: recipe.colorSolutions
+                } : null,
+                colorSketch: colorSketch ? {
+                    id: colorSketch.id,
+                    colorId: colorSketch.colorId,
+                    customName: colorSketch.customName,
+                    type: colorSketch.type,
+                    yarnWeight: colorSketch.yarnWeight,
+                    dyes: colorSketch.dyes,
+                    sections: colorSketch.sections,
+                    baseColors: colorSketch.baseColors,
+                    speckles: colorSketch.speckles,
+                    notes: colorSketch.notes
+                } : null
             });
         } else if (currentPan.type === 'kit') {
             // Add kit pans using shared yarn config
@@ -495,31 +524,25 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         } else if (currentPan.type === 'gradientTray') {
             // Gradient tray - create 10 colors with specific depths
             const depths = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 1.5, 2.0, 2.5, 3.0];
-            setFormData({
-                ...formData,
-                pans: [...formData.pans, {
-                    type: 'gradientTray',
-                    id: Date.now(),
-                    gradientDye: currentPan.gradientDye,
-                    gradientYarnBase: currentPan.gradientYarnBase,
-                    gradientHankSize: currentPan.gradientHankSize,
-                    depths: depths
-                }]
+            commitPan({
+                type: 'gradientTray',
+                id: Date.now(),
+                gradientDye: currentPan.gradientDye,
+                gradientYarnBase: currentPan.gradientYarnBase,
+                gradientHankSize: currentPan.gradientHankSize,
+                depths: depths
             });
         } else {
             // Dye square tray - 5x5 grid of two colors
             const amounts = [1.25, 2.5, 5, 7.5, 10];
-            setFormData({
-                ...formData,
-                pans: [...formData.pans, {
-                    type: 'dyeSquareTray',
-                    id: Date.now(),
-                    squareColorA: currentPan.squareColorA,
-                    squareColorB: currentPan.squareColorB,
-                    gradientYarnBase: currentPan.gradientYarnBase,
-                    gradientHankSize: currentPan.gradientHankSize,
-                    amounts: amounts
-                }]
+            commitPan({
+                type: 'dyeSquareTray',
+                id: Date.now(),
+                squareColorA: currentPan.squareColorA,
+                squareColorB: currentPan.squareColorB,
+                gradientYarnBase: currentPan.gradientYarnBase,
+                gradientHankSize: currentPan.gradientHankSize,
+                amounts: amounts
             });
         }
 
@@ -616,9 +639,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                         {/* Current Pan/Tray Builder */}
                         <div className="border-2 border-teal-200 rounded-lg p-4 bg-teal-50">
                             <div className="flex justify-between items-center mb-3">
-                                <h4 className="font-semibold text-gray-900">Add to Session</h4>
-                                <div className="text-sm text-gray-600">
-                                    Oven: {calculateOvenLoad(formData.pans)}/18 pans (or {Math.floor(calculateOvenLoad(formData.pans)/2)}/9 trays)
+                                <h4 className="font-semibold text-gray-900">{editingPanId ? '✏️ Editing Pan' : 'Add to Session'}</h4>
+                                <div className="flex items-center gap-3">
+                                    {editingPanId && (
+                                        <button type="button" onClick={cancelPanEdit} className="text-sm text-gray-500 hover:text-gray-700 underline bg-transparent">Cancel edit</button>
+                                    )}
+                                    <div className="text-sm text-gray-600">
+                                        Oven: {calculateOvenLoad(formData.pans)}/18 pans (or {Math.floor(calculateOvenLoad(formData.pans)/2)}/9 trays)
+                                    </div>
                                 </div>
                             </div>
                             
@@ -798,7 +826,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             onClick={addPanToSession}
                                             className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
-                                            Add Pan
+                                            {editingPanId ? 'Update Pan' : 'Add Pan'}
                                         </button>
                                     </div>
                                 </>
@@ -873,7 +901,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             onClick={addPanToSession}
                                             className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
-                                            Add Gradient Tray
+                                            {editingPanId ? 'Update Gradient Tray' : 'Add Gradient Tray'}
                                         </button>
                                     </div>
                                 </>
@@ -965,7 +993,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             onClick={addPanToSession}
                                             className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
-                                            Add Dye Square Tray
+                                            {editingPanId ? 'Update Dye Square Tray' : 'Add Dye Square Tray'}
                                         </button>
                                     </div>
                                 </>
@@ -1342,7 +1370,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             onClick={addPanToSession}
                                             className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                                         >
-                                            Add Pan
+                                            {editingPanId ? 'Update Pan' : 'Add Pan'}
                                         </button>
                                     </div>
                                 </>
@@ -1562,10 +1590,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <button
                                                     type="button"
                                                     onClick={() => {
-                                                        // Remove from the list first
-                                                        const updatedPans = formData.pans.filter(p => p.id !== pan.id);
-                                                        setFormData({ ...formData, pans: updatedPans });
-                                                        
+                                                        // Edit in place — keep the pan in the list and mark it as
+                                                        // being edited; "Add" becomes "Update" and saving replaces
+                                                        // this pan (by id) instead of appending a new one.
+                                                        setEditingPanId(pan.id);
+
                                                         // Load the pan into the editor. Start from the empty-pan
                                                         // defaults (so every form field exists) and spread the pan
                                                         // LAST, so nothing is dropped — fromKit, colorType, the
