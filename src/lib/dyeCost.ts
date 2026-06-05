@@ -2,16 +2,14 @@
 // Mirrors the gram-conversion logic used when sessions become batches, so the
 // recipe estimate and the batch total agree.
 
-const UNIT_TO_GRAM: Record<string, number> = {
-    g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15,
-};
-
-// Cost per gram of an inventory dye item (its `cost` is per its `unit`).
+// Cost per gram of an inventory dye item. A dye's `cost` is ALWAYS stored as
+// cost-per-gram (purchase price ÷ ounces ÷ 28.35), independent of the on-hand
+// quantity unit (which is ounces) — so it's used directly, no conversion.
 function costPerGram(item: any): number {
     if (!item || !item.cost) return 0;
     const c = parseFloat(String(item.cost));
     if (isNaN(c)) return 0;
-    return c / (UNIT_TO_GRAM[item.unit || 'g'] || 1);
+    return c;
 }
 
 // Grams of dye powder from a recipe amount + unit. Stock solution: 1% → 1 g per

@@ -5,7 +5,17 @@ import { sizeName } from '../lib/sizes';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
 import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
 import { yarnBaseRef } from '../lib/yarnMatch';
+import { isLowStock as isItemLowStock, lowStockLabel, DYE_LOW_STOCK_GRAMS } from '../lib/lowStock';
 import type { InventoryItem } from '../types';
+
+// Grams per unit, for converting on-hand amounts between units.
+const UNIT_TO_GRAM: Record<string, number> = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
+const OZ_IN_GRAMS = 28.3495;
+// Convert a quantity in `unit` to ounces (how dyes are bought/tracked).
+function toOunces(qty: any, unit: string): number {
+    const g = (parseFloat(String(qty)) || 0) * (UNIT_TO_GRAM[unit] || 1);
+    return g / OZ_IN_GRAMS;
+}
 
 // Sensible ± step for the quantity stepper, by unit.
 function stepFor(unit: string): number {
@@ -17,17 +27,27 @@ function stepFor(unit: string): number {
 // Quantity cell with its own local state so typing doesn't write to the
 // database on every keystroke — it commits on blur / Enter. The ± buttons
 // commit immediately (discrete actions), and local state re-syncs from props.
+// Dyes are bought and tracked in OUNCES, so a dye's amount is always shown and
+// edited in oz here even if it was stored in grams (legacy) — editing migrates
+// it to oz. This is display/inventory only; dye cost is per-gram (see below).
 function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
-    const [val, setVal] = useState(String(item.quantity ?? ''));
-    useEffect(() => { setVal(String(item.quantity ?? '')); }, [item.quantity]);
-    const step = stepFor(item.unit || 'g');
+    const isDye = item.category === 'dye';
+    const displayUnit = isDye ? 'oz' : (item.unit || 'g');
+    const toDisplay = () => (isDye ? Number(toOunces(item.quantity, item.unit || 'g').toFixed(2)) : (parseFloat(String(item.quantity)) || 0));
+    const [val, setVal] = useState(String(toDisplay()));
+    useEffect(() => { setVal(String(toDisplay())); }, [item.quantity, item.unit]);
+    const step = isDye ? 0.5 : stepFor(item.unit || 'g');
     const commit = () => {
         const n = parseFloat(val) || 0;
-        if (n !== parseFloat(String(item.quantity))) onCommit(item.id, n);
+        if (isDye) {
+            if (n !== toDisplay()) onCommit(item.id, n, 'oz');
+        } else if (n !== parseFloat(String(item.quantity))) {
+            onCommit(item.id, n);
+        }
     };
     return (
         <div className="flex items-center gap-2">
-            <button type="button" onClick={() => onAdjust(item.id, -step)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">-</button>
+            <button type="button" onClick={() => onAdjust(item.id, -step, isDye ? 'oz' : undefined)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">-</button>
             <input
                 type="number"
                 step="0.1"
@@ -37,8 +57,8 @@ function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
                 onKeyDown={(e) => { if (e.key === 'Enter') { commit(); (e.currentTarget as HTMLInputElement).blur(); } }}
                 className={`w-20 px-2 py-1 text-center border rounded font-medium ${isLowStock ? 'text-red-600 border-red-300' : 'border-gray-300'}`}
             />
-            <span className="text-sm text-gray-600">{item.unit}</span>
-            <button type="button" onClick={() => onAdjust(item.id, step)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">+</button>
+            <span className="text-sm text-gray-600">{displayUnit}</span>
+            <button type="button" onClick={() => onAdjust(item.id, step, isDye ? 'oz' : undefined)} className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded">+</button>
         </div>
     );
 }
@@ -86,7 +106,11 @@ export function Inventory({ inventory, saveInventory, settings }) {
         weight: ''
     });
 
-    const categories = settings.inventoryCategories || ['dye', 'yarn base', 'chemical', 'tool', 'other'];
+    // Categories are derived from settings, but we retire the vague "other"
+    // catch-all and guarantee a dedicated "label" category (for colorway labels
+    // / stickers). Done in code so no settings migration is required.
+    const rawCategories = settings.inventoryCategories || ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'label'];
+    const categories = Array.from(new Set([...rawCategories.filter((c) => c !== 'other'), 'label']));
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -136,7 +160,12 @@ export function Inventory({ inventory, saveInventory, settings }) {
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const editItem = (item) => {
-        setFormData(item);
+        // Dyes are tracked in ounces — present a legacy gram-stored dye in oz.
+        if (item.category === 'dye' && (item.unit || 'g') !== 'oz' && item.quantity !== '' && item.quantity != null) {
+            setFormData({ ...item, unit: 'oz', quantity: String(Number(toOunces(item.quantity, item.unit || 'g').toFixed(2))) });
+        } else {
+            setFormData(item);
+        }
         setEditingId(item.id);
         setShowForm(true);
         setPickBaseId('');
@@ -247,14 +276,20 @@ export function Inventory({ inventory, saveInventory, settings }) {
         e.target.value = '';
     };
 
-    const adjustQuantity = (id, delta) => {
-        saveInventory(inventory.map(i =>
-            i.id === id ? { ...i, quantity: Math.max(0, (parseFloat(String(i.quantity)) || 0) + delta) } : i
-        ));
+    const adjustQuantity = (id, delta, asUnit?) => {
+        saveInventory(inventory.map(i => {
+            if (i.id !== id) return i;
+            if (asUnit === 'oz') {
+                // Step in ounces and normalise the stored amount to oz.
+                const nextOz = Math.max(0, Number((toOunces(i.quantity, i.unit || 'g') + delta).toFixed(2)));
+                return { ...i, quantity: nextOz, unit: 'oz' };
+            }
+            return { ...i, quantity: Math.max(0, (parseFloat(String(i.quantity)) || 0) + delta) };
+        }));
     };
 
-    const commitQuantity = (id, qty) => {
-        saveInventory(inventory.map(i => (i.id === id ? { ...i, quantity: qty } : i)));
+    const commitQuantity = (id, qty, unit?) => {
+        saveInventory(inventory.map(i => (i.id === id ? { ...i, quantity: qty, ...(unit ? { unit } : {}) } : i)));
     };
 
     // Update purchase price / ounces and recompute dye cost-per-gram in one pass.
@@ -265,6 +300,20 @@ export function Inventory({ inventory, saveInventory, settings }) {
             const oz = parseFloat(String(next.purchaseOunces));
             if (!isNaN(price) && !isNaN(oz) && oz > 0) {
                 next.cost = (price / oz / 28.3495).toFixed(4);
+            }
+            return next;
+        });
+    };
+
+    // Chemical cost calculator: "paid $X for Y <unit>" → cost per the item's unit
+    // (stored in `cost`). getCostPerGram converts that to per-gram for batches.
+    const updateChemPurchase = (patch) => {
+        setFormData((prev) => {
+            const next = { ...prev, ...patch };
+            const price = parseFloat(String(next.purchasePrice));
+            const amt = parseFloat(String(next.purchaseOunces));
+            if (!isNaN(price) && !isNaN(amt) && amt > 0) {
+                next.cost = (price / amt).toFixed(4);
             }
             return next;
         });
@@ -282,11 +331,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
             return String(aName || '').localeCompare(String(bName || ''));
         });
 
-    const lowStockItems = inventory.filter(i => 
-        i.lowStockThreshold != null && 
-        i.lowStockThreshold !== '' && 
-        i.quantity <= i.lowStockThreshold
-    );
+    const lowStockItems = inventory.filter(isItemLowStock);
 
     return (
         <div className="space-y-6">
@@ -395,6 +440,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             defaultUnit = 'skeins';
                                         } else if (newCategory === 'dye') {
                                             defaultUnit = 'oz';
+                                        } else if (newCategory === 'tool' || newCategory === 'label') {
+                                            defaultUnit = 'units';
                                         }
                                         
                                         setFormData({ ...formData, category: newCategory, unit: defaultUnit });
@@ -743,14 +790,20 @@ export function Inventory({ inventory, saveInventory, settings }) {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Alert</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.lowStockThreshold}
-                                    onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
-                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                    placeholder="Min qty"
-                                />
+                                {formData.category === 'dye' ? (
+                                    <div className="px-3 py-2 border rounded-lg bg-gray-50 text-sm text-gray-600">
+                                        Auto: alerts below {DYE_LOW_STOCK_GRAMS} g of powder
+                                    </div>
+                                ) : (
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={formData.lowStockThreshold}
+                                        onChange={(e) => setFormData({ ...formData, lowStockThreshold: e.target.value })}
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                        placeholder="Min qty"
+                                    />
+                                )}
                             </div>
                         </div>
 
@@ -785,9 +838,42 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         )}
                                     </div>
                                 </>
+                            ) : formData.category === 'chemical' ? (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount Purchased ({formData.unit || 'g'})</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.purchaseOunces}
+                                            onChange={(e) => updateChemPurchase({ purchaseOunces: e.target.value })}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                            placeholder="e.g., 25"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Total Paid ($)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.purchasePrice}
+                                            onChange={(e) => updateChemPurchase({ purchasePrice: e.target.value })}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                            placeholder="e.g., 81.95"
+                                        />
+                                        {formData.cost ? (
+                                            <div className="text-xs text-green-600 mt-1">
+                                                ${parseFloat(String(formData.cost)).toFixed(4)}/{formData.unit || 'g'}
+                                                {' '}(${(parseFloat(String(formData.cost)) / (UNIT_TO_GRAM[formData.unit || 'g'] || 1)).toFixed(4)}/g)
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </>
                             ) : (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Cost per Unit</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {formData.category === 'tool' || formData.category === 'label' ? 'Cost per item' : 'Cost per Unit'}
+                                    </label>
                                     <input
                                         type="number"
                                         step="0.01"
@@ -887,9 +973,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                         </thead>
                         <tbody className="divide-y divide-gray-200">
                             {filteredInventory.map(item => {
-                                const isLowStock = item.lowStockThreshold != null && 
-                                                  item.lowStockThreshold !== '' && 
-                                                  item.quantity <= item.lowStockThreshold;
+                                const isLowStock = isItemLowStock(item);
                                 return (
                                     <tr key={item.id} className={isLowStock ? 'bg-red-50' : 'hover:bg-gray-50'}>
                                         <td className="px-6 py-4">
@@ -947,7 +1031,7 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             <QuantityCell item={item} isLowStock={isLowStock} onAdjust={adjustQuantity} onCommit={commitQuantity} />
                                             {isLowStock && (
                                                 <div className="text-xs text-red-600 mt-1">
-                                                    ⚠️ Below {item.lowStockThreshold} {item.unit}
+                                                    ⚠️ Below {lowStockLabel(item)}
                                                 </div>
                                             )}
                                         </td>
@@ -956,6 +1040,19 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                 const cost = parseFloat(item.cost);
                                                 const unit = item.unit || 'g';
                                                 
+                                                // Dyes store cost as cost-per-GRAM (from purchase
+                                                // price ÷ ounces). Show $/oz (how it's bought) with
+                                                // the per-gram cost beneath — independent of the
+                                                // on-hand unit.
+                                                if (item.category === 'dye') {
+                                                    return (
+                                                        <div>
+                                                            <div>${(cost * OZ_IN_GRAMS).toFixed(2)}/oz</div>
+                                                            <div className="text-xs text-gray-500">(${cost.toFixed(4)}/g)</div>
+                                                        </div>
+                                                    );
+                                                }
+
                                                 // For yarn bases, show per-skein cost
                                                 if (item.category === 'yarn base') {
                                                     return `$${cost.toFixed(2)}/skein`;

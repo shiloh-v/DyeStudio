@@ -1,13 +1,10 @@
 import { StatCard } from './StatCard';
 import { isStocked } from '../lib/batches';
+import { isLowStock, lowStockLabel } from '../lib/lowStock';
 
 export function Dashboard({ recipes, inventory, batches, sales }) {
     const activeBatches = batches.filter(b => !isStocked(b)).length;
-    const lowStock = inventory.filter(i =>
-        i.lowStockThreshold != null &&
-        i.lowStockThreshold !== '' &&
-        i.quantity <= i.lowStockThreshold
-    ).length;
+    const lowStock = inventory.filter(isLowStock).length;
 
     // Projected value/profit from finished stock (not realized sales — those come from Shopify later)
     const stocked = batches.filter(isStocked);
@@ -121,11 +118,7 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                     <h3 className="text-lg font-semibold mb-4">Low Stock Alert</h3>
                     {lowStock > 0 ? (
                         <div className="space-y-2">
-                            {inventory.filter(i => 
-                                i.lowStockThreshold != null && 
-                                i.lowStockThreshold !== '' && 
-                                i.quantity <= i.lowStockThreshold
-                            ).map((item, idx) => (
+                            {inventory.filter(isLowStock).map((item, idx) => (
                                 <div key={idx} className="flex justify-between items-center p-3 bg-red-50 rounded border-l-4 border-red-500">
                                     <div>
                                         <div className="font-medium">{item.name}</div>
@@ -133,7 +126,7 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                                     </div>
                                     <div className="text-right">
                                         <div className="font-semibold text-red-600">{item.quantity} {item.unit}</div>
-                                        <div className="text-xs text-gray-500">Min: {item.lowStockThreshold}</div>
+                                        <div className="text-xs text-gray-500">Min: {lowStockLabel(item)}</div>
                                     </div>
                                 </div>
                             ))}
