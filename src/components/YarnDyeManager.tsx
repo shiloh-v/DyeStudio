@@ -229,13 +229,6 @@ export function YarnDyeManager() {
                         </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={toggleDark}
-                                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-                                className="bg-white/20 text-white px-3 py-2 rounded-lg hover:bg-white/30 transition-colors font-medium"
-                            >
-                                {darkMode ? '☀️' : '🌙'}
-                            </button>
-                            <button
                                 onClick={() => { supabase.auth.signOut(); }}
                                 className="bg-white text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors font-medium border border-teal-200"
                             >
@@ -436,6 +429,8 @@ export function YarnDyeManager() {
                             settings={settings}
                             saveSettings={saveSettings}
                             inventory={inventory}
+                            darkMode={darkMode}
+                            toggleDark={toggleDark}
                         />
                     </div>
                 )}

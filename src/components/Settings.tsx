@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 
-export function Settings({ settings, saveSettings, inventory }) {
+export function Settings({ settings, saveSettings, inventory, darkMode, toggleDark }) {
     const [activeSection, setActiveSection] = useState('colorTypes');
     const [newItem, setNewItem] = useState('');
     const [newSizeMapping, setNewSizeMapping] = useState({ grams: '', name: '' });
@@ -63,6 +63,43 @@ export function Settings({ settings, saveSettings, inventory }) {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
+
+            {/* Appearance */}
+            <div className="bg-white rounded-lg card-shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Appearance</h3>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="font-medium text-gray-900">Theme</p>
+                        <p className="text-sm text-gray-500">Currently using {darkMode ? 'dark' : 'light'} mode</p>
+                    </div>
+                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden" role="group" aria-label="Theme">
+                        <button
+                            type="button"
+                            onClick={() => { if (darkMode) toggleDark?.(); }}
+                            aria-pressed={!darkMode}
+                            className={`px-4 py-2 text-sm font-medium transition-colors ${
+                                !darkMode
+                                    ? 'bg-teal-600 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            ☀️ Light
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { if (!darkMode) toggleDark?.(); }}
+                            aria-pressed={darkMode}
+                            className={`px-4 py-2 text-sm font-medium transition-colors border-l border-gray-200 ${
+                                darkMode
+                                    ? 'bg-teal-600 text-white'
+                                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            🌙 Dark
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <div className="bg-white rounded-lg card-shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Manage Dropdown Options</h3>
