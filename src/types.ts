@@ -189,7 +189,8 @@ export interface Sale {
 export interface YarnBaseSize {
   amount: Num;      // weight in the base's weightUnit (grams or ounces)
   sku?: string;
-  price?: Num;      // cost per skein of this size
+  packSize?: Num;   // how many skeins come in a pack (defaults to 1)
+  packPrice?: Num;  // price for the whole pack; per-skein price = packPrice / packSize
   length?: Num;     // optional override of the derived length (in the base's lengthUnit)
 }
 

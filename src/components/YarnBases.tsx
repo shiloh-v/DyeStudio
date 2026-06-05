@@ -22,9 +22,18 @@ const emptyForm = () => ({
     weightUnit: 'g',
     lengthUnit: 'yd',
     lengthPer100: '',
-    sizes: [{ amount: '', sku: '', price: '', length: '' }],
+    sizes: [{ amount: '', sku: '', packSize: '', packPrice: '', length: '' }],
     notes: '',
 });
+
+// Per-skein price from the pack price and pack size (defaults to 1 skein/pack).
+function perSkeinPrice(size) {
+    const pp = parseFloat(String(size.packPrice));
+    if (isNaN(pp)) return null;
+    const ps = parseFloat(String(size.packSize));
+    const qty = !isNaN(ps) && ps > 0 ? ps : 1;
+    return pp / qty;
+}
 
 // Length for a size: explicit override wins, otherwise derive from length-per-100.
 function deriveLength(lengthPer100, amount) {
@@ -71,7 +80,8 @@ export function YarnBases({ settings, saveSettings }) {
             .map((s) => ({
                 amount: parseFloat(String(s.amount)) || 0,
                 sku: (s.sku || '').trim(),
-                price: String(s.price).trim() === '' ? '' : parseFloat(String(s.price)),
+                packSize: String(s.packSize).trim() === '' ? '' : parseFloat(String(s.packSize)),
+                packPrice: String(s.packPrice).trim() === '' ? '' : parseFloat(String(s.packPrice)),
                 length: String(s.length).trim() === '' ? '' : parseFloat(String(s.length)),
             }));
         const record = { ...formData, myName: formData.myName.trim(), sizes: cleanSizes };
@@ -88,7 +98,7 @@ export function YarnBases({ settings, saveSettings }) {
         setFormData({
             ...emptyForm(),
             ...b,
-            sizes: b.sizes && b.sizes.length ? b.sizes : [{ amount: '', sku: '', price: '', length: '' }],
+            sizes: b.sizes && b.sizes.length ? b.sizes : [{ amount: '', sku: '', packSize: '', packPrice: '', length: '' }],
         });
         setEditingId(b.id);
         setShowForm(true);
@@ -100,7 +110,7 @@ export function YarnBases({ settings, saveSettings }) {
         }
     };
 
-    const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { amount: '', sku: '', price: '', length: '' }] });
+    const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { amount: '', sku: '', packSize: '', packPrice: '', length: '' }] });
     const updateSize = (i, field, val) => {
         const next = [...(formData.sizes || [])];
         next[i] = { ...next[i], [field]: val };
@@ -215,29 +225,37 @@ export function YarnBases({ settings, saveSettings }) {
                                     {(formData.sizes || []).map((s, idx) => {
                                         const len = sizeLength(formData, s);
                                         const nm = formData.weightUnit === 'g' ? sizeName(s.amount, settings) : null;
+                                        const each = perSkeinPrice(s);
                                         return (
                                             <div key={idx} className="border rounded-lg p-2">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <div className="flex items-center gap-1">
-                                                        <input type="number" step="0.1" value={s.amount} onChange={(e) => updateSize(idx, 'amount', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="size" />
-                                                        <span className="text-sm text-gray-500 w-6">{formData.weightUnit}</span>
+                                                        <input type="number" step="0.1" value={s.amount} onChange={(e) => updateSize(idx, 'amount', e.target.value)} className="w-16 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="size" />
+                                                        <span className="text-sm text-gray-500 w-5">{formData.weightUnit}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <input type="number" value={s.packSize} onChange={(e) => updateSize(idx, 'packSize', e.target.value)} className="w-14 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="qty" title="Skeins per pack" />
+                                                        <span className="text-sm text-gray-500">/pk</span>
                                                     </div>
                                                     <div className="flex items-center gap-1">
                                                         <span className="text-sm text-gray-500">$</span>
-                                                        <input type="number" step="0.01" value={s.price} onChange={(e) => updateSize(idx, 'price', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="price" />
+                                                        <input type="number" step="0.01" value={s.packPrice} onChange={(e) => updateSize(idx, 'packPrice', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="pack" title="Price for the whole pack" />
                                                     </div>
                                                     <div className="flex items-center gap-1">
-                                                        <input type="number" step="0.1" value={s.length} onChange={(e) => updateSize(idx, 'length', e.target.value)} className="w-24 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder={len?.derived ? String(len.value) : 'length'} />
-                                                        <span className="text-sm text-gray-500 w-6">{formData.lengthUnit}</span>
+                                                        <input type="number" step="0.1" value={s.length} onChange={(e) => updateSize(idx, 'length', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder={len?.derived ? String(len.value) : 'length'} />
+                                                        <span className="text-sm text-gray-500 w-5">{formData.lengthUnit}</span>
                                                     </div>
-                                                    <input type="text" value={s.sku || ''} onChange={(e) => updateSize(idx, 'sku', e.target.value)} className="w-24 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="SKU" />
+                                                    <input type="text" value={s.sku || ''} onChange={(e) => updateSize(idx, 'sku', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="SKU" />
                                                     {(formData.sizes || []).length > 1 && (
                                                         <button type="button" onClick={() => removeSize(idx)} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-auto">✕</button>
                                                     )}
                                                 </div>
-                                                {(nm || (len && len.derived)) && (
+                                                {(nm || (len && len.derived) || each != null) && (
                                                     <div className="text-xs text-teal-600 mt-1 pl-1">
-                                                        {nm || ''}{nm && len?.derived ? ' · ' : ''}{len?.derived ? `auto ${len.value} ${formData.lengthUnit} (edit to override)` : ''}
+                                                        {nm || ''}
+                                                        {nm && len?.derived ? ' · ' : ''}
+                                                        {len?.derived ? `auto ${len.value} ${formData.lengthUnit}` : ''}
+                                                        {each != null ? `${nm || len?.derived ? ' · ' : ''}$${each.toFixed(2)}/skein` : ''}
                                                     </div>
                                                 )}
                                             </div>
@@ -308,12 +326,13 @@ export function YarnBases({ settings, saveSettings }) {
                                         const nm = (b.weightUnit || 'g') === 'g' ? sizeName(s.amount, settings) : null;
                                         const wu = b.weightUnit || 'g';
                                         const lu = b.lengthUnit || 'yd';
+                                        const each = perSkeinPrice(s);
                                         return (
                                             <span key={i} className="px-2 py-1 bg-gray-50 rounded border text-xs text-gray-700">
                                                 {s.amount}{wu}
                                                 {nm ? ` · ${nm}` : ''}
                                                 {len ? ` · ${len.value}${lu}` : ''}
-                                                {s.price !== '' && s.price != null ? ` · $${Number(s.price).toFixed(2)}` : ''}
+                                                {each != null ? ` · $${each.toFixed(2)}/skein` : ''}
                                             </span>
                                         );
                                     })}
