@@ -66,6 +66,30 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
 
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
+    // Attach an inspiration/reference photo (compressed to ~800px before saving).
+    const handlePhotoUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const MAX = 800;
+                let w = img.width, h = img.height;
+                if (w > h) { if (w > MAX) { h = Math.round((h * MAX) / w); w = MAX; } }
+                else { if (h > MAX) { w = Math.round((w * MAX) / h); h = MAX; } }
+                canvas.width = w; canvas.height = h;
+                ctx?.drawImage(img, 0, 0, w, h);
+                setFormData((prev) => ({ ...prev, photo: canvas.toDataURL('image/jpeg', 0.7) }));
+            };
+            img.src = reader.result as string;
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (editingId) {
@@ -80,7 +104,10 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
     };
 
     const editSketch = (sketch) => {
-        setFormData(sketch);
+        // Deep-clone so editing the form (incl. nested dyes/sections) never
+        // mutates the saved sketch before Save, and Cancel fully reverts.
+        const clone = JSON.parse(JSON.stringify(sketch));
+        setFormData({ photo: '', experimentNotes: '', ...clone });
         setEditingId(sketch.id);
         setShowForm(true);
     };
@@ -148,7 +175,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                     dyes: section.dyes.map(d => ({
                         name: d.color,
                         amount: d.amount,
-                        unit: d.unit || 'g'
+                        unit: d.unit || 'ml'
                     })),
                     targetMl: '' // User can fill this in later
                 })) : [],
@@ -647,6 +674,28 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                             />
                         </div>
 
+                        {/* Inspiration / reference photo */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Photo</label>
+                            {formData.photo ? (
+                                <div className="flex items-start gap-3">
+                                    <img src={formData.photo} alt="Sketch reference" className="w-24 h-24 object-cover rounded-lg border" />
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, photo: '' })}
+                                        className="text-sm text-red-600 hover:text-red-700 underline bg-transparent"
+                                    >
+                                        Remove photo
+                                    </button>
+                                </div>
+                            ) : (
+                                <label className="inline-block cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium">
+                                    📷 Add photo
+                                    <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                                </label>
+                            )}
+                        </div>
+
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
@@ -724,6 +773,14 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                 </button>
                             </div>
                         </div>
+
+                        {sketch.photo && (
+                            <img
+                                src={sketch.photo}
+                                alt={`${sketch.colorId} reference`}
+                                className="w-full h-40 object-cover rounded-lg border mb-3"
+                            />
+                        )}
 
                         <div className="space-y-2">
                             {sketch.type === 'variegated' ? (
