@@ -217,6 +217,25 @@ export interface YarnBase {
   notes?: string;
 }
 
+export interface DyeCatalogSize {
+  ounces: Num;     // size in ounces (2, 8, 16, …)
+  price?: Num;     // price for this size; cost-per-gram derives from it
+}
+
+// A dye in the catalog — e.g. a Dharma acid dye. Cost-per-gram derives from a
+// size's price ÷ (ounces × 28.3495).
+export interface DyeCatalogEntry {
+  id: ID;
+  number?: string;     // color number, e.g. "401"
+  name: string;        // color name, e.g. "Brilliant Yellow"
+  color?: string;      // hex swatch
+  supplier?: string;
+  dyeType?: string;    // Leveling | Milling | Pre-metalized
+  needs4pct?: boolean; // asterisked dyes that need 4% (vs 1.5–2%)
+  sizes?: DyeCatalogSize[];
+  notes?: string;
+}
+
 export interface Settings {
   colorTypes: string[];
   inventoryCategories: string[];
@@ -225,4 +244,5 @@ export interface Settings {
   yarnBaseMappings: { supplierName: string; myName: string }[];
   sizeMappings: { grams: number; name: string }[];
   yarnBases?: YarnBase[];
+  dyeCatalog?: DyeCatalogEntry[];
 }
