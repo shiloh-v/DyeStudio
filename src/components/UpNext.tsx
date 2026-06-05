@@ -558,11 +558,12 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         let nextBatchNum = getNextBatchId();
 
         // Create batches for each pan with yarn details and costs
+        const movedAt = new Date().toISOString();
         const newBatches = selectedSession.pans.map((pan, idx) => {
             const recipe = pan.recipe || (pan.recipeId ? recipes.find(r => r.id === parseInt(pan.recipeId)) : null);
             const costs = calculatePanCosts(pan, recipe);
             const batchId = `B-${String(nextBatchNum + idx).padStart(3, '0')}`;
-            
+
             if (pan.type === 'gradientTray') {
                 return {
                     id: Date.now() + idx,
@@ -578,7 +579,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     yarnDetails: [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 10 }],
                     costBreakdown: costs,
                     totalCost: costs.total,
-                    costPerSkein: costs.perSkein
+                    costPerSkein: costs.perSkein,
+                    lastMovedAt: movedAt,
                 };
             } else if (pan.type === 'dyeSquareTray') {
                 return {
@@ -595,7 +597,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     yarnDetails: [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 25 }],
                     costBreakdown: costs,
                     totalCost: costs.total,
-                    costPerSkein: costs.perSkein
+                    costPerSkein: costs.perSkein,
+                    lastMovedAt: movedAt,
                 };
             } else if (pan.type === 'adHoc') {
                 const adHocName = pan.adHocLabel || 'Ad Hoc Experiment';
@@ -617,7 +620,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     isAdHoc: true,
                     costBreakdown: costs,
                     totalCost: costs.total,
-                    costPerSkein: costs.perSkein
+                    costPerSkein: costs.perSkein,
+                    lastMovedAt: movedAt,
                 };
             } else {
                 return {
@@ -637,7 +641,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     colorSketch: pan.colorSketch || null, // Preserve Color Lab data
                     costBreakdown: costs,
                     totalCost: costs.total,
-                    costPerSkein: costs.perSkein
+                    costPerSkein: costs.perSkein,
+                    lastMovedAt: movedAt,
                 };
             }
         });
