@@ -6,15 +6,6 @@ import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
 
 const DYE_TYPES = ['Leveling', 'Milling', 'Pre-metalized'];
 
-// Dharma acid dye standard sizes + base published prices (from their product data).
-const DHARMA_BASE_SIZES = [
-    { ounces: 2, price: 2.25 },
-    { ounces: 8, price: 6.45 },
-    { ounces: 16, price: 10.95 },
-    { ounces: 80, price: 52.50 },
-    { ounces: 160, price: 99.80 },
-];
-
 const emptyForm = () => ({
     number: '',
     name: '',
@@ -100,6 +91,11 @@ export function DyeCatalog({ settings, saveSettings, inventory }) {
             const key = `${number}|${name.toLowerCase()}`;
             if (existing.has(key)) return;
             existing.add(key);
+            // Real 2 oz price from the per-gram cost already in inventory.
+            const costPerGram = parseFloat(String(item.cost));
+            const price2oz = !isNaN(costPerGram) && costPerGram > 0
+                ? Number((costPerGram * 2 * 28.3495).toFixed(2))
+                : '';
             toAdd.push({
                 id: Date.now() + idx,
                 number,
@@ -108,7 +104,7 @@ export function DyeCatalog({ settings, saveSettings, inventory }) {
                 supplier: item.supplier || 'Dharma',
                 dyeType: '',
                 needs4pct: false,
-                sizes: DHARMA_BASE_SIZES.map((s) => ({ ...s })),
+                sizes: [{ ounces: 2, price: price2oz }],
                 notes: '',
             });
         });
@@ -118,7 +114,7 @@ export function DyeCatalog({ settings, saveSettings, inventory }) {
         }
         const ok = await confirmDialog({
             title: 'Import dyes from inventory',
-            message: `Add ${toAdd.length} dye${toAdd.length !== 1 ? 's' : ''} to the catalog, each with Dharma's standard 5 sizes & prices? You can edit any of them after.`,
+            message: `Add ${toAdd.length} dye${toAdd.length !== 1 ? 's' : ''} to the catalog, each with a 2 oz size at its actual price (from your inventory cost)? You can add more sizes or edit any after.`,
             confirmText: 'Import',
         });
         if (!ok) return;
