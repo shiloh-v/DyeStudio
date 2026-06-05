@@ -11,21 +11,23 @@ export function Settings({ settings, saveSettings, inventory }) {
     const sections = {
         colorTypes: { label: 'Color Types', key: 'colorTypes' },
         inventoryCategories: { label: 'Inventory Categories', key: 'inventoryCategories' },
-        units: { label: 'Measurement Units', key: 'units' },
         suppliers: { label: 'Suppliers', key: 'suppliers' },
         yarnBaseMappings: { label: 'Yarn Base Mappings', key: 'yarnBaseMappings' },
         sizeMappings: { label: 'Size Mappings', key: 'sizeMappings' }
     };
 
     const addItem = () => {
-        if (!newItem.trim()) return;
+        const value = newItem.trim();
+        if (!value) return;
+        // Color types / categories / units are lowercase keys the app matches on;
+        // suppliers are display names, so keep their casing.
+        const stored = activeSection === 'suppliers' ? value : value.toLowerCase();
         const currentList = settings[activeSection] || [];
-        if (!currentList.includes(newItem.toLowerCase())) {
-            saveSettings({
-                ...settings,
-                [activeSection]: [...currentList, newItem.toLowerCase()]
-            });
+        if (currentList.some((i) => String(i).toLowerCase() === stored.toLowerCase())) {
+            toast(`"${value}" is already in the list`, 'info');
+            return;
         }
+        saveSettings({ ...settings, [activeSection]: [...currentList, stored] });
         setNewItem('');
     };
 
@@ -118,7 +120,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 type="text"
                                 value={newItem}
                                 onChange={(e) => setNewItem(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && addItem()}
+                                onKeyDown={(e) => e.key === 'Enter' && addItem()}
                                 className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder={`Enter new ${sections[activeSection].label.toLowerCase()}...`}
                             />
@@ -139,17 +141,21 @@ export function Settings({ settings, saveSettings, inventory }) {
                             Add Yarn Base Mapping
                         </label>
                         <div className="grid md:grid-cols-2 gap-2 mb-2">
-                            <input
-                                type="text"
+                            <select
                                 value={newMapping.supplierName}
                                 onChange={(e) => setNewMapping({ ...newMapping, supplierName: e.target.value })}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                placeholder="Supplier name (e.g., W2D4 SW DK)"
-                            />
+                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
+                            >
+                                <option value="">Select supplier…</option>
+                                {(settings.suppliers || []).map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
                             <input
                                 type="text"
                                 value={newMapping.myName}
                                 onChange={(e) => setNewMapping({ ...newMapping, myName: e.target.value })}
+                                onKeyDown={(e) => e.key === 'Enter' && addYarnBaseMapping()}
                                 className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Your name (e.g., Luna DK)"
                             />
@@ -175,6 +181,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 type="number"
                                 value={newSizeMapping.grams}
                                 onChange={(e) => setNewSizeMapping({ ...newSizeMapping, grams: e.target.value })}
+                                onKeyDown={(e) => e.key === 'Enter' && addSizeMapping()}
                                 className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Size in grams (e.g., 100)"
                             />
@@ -182,6 +189,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                 type="text"
                                 value={newSizeMapping.name}
                                 onChange={(e) => setNewSizeMapping({ ...newSizeMapping, name: e.target.value })}
+                                onKeyDown={(e) => e.key === 'Enter' && addSizeMapping()}
                                 className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 placeholder="Display name (e.g., Full skein)"
                             />
@@ -207,7 +215,7 @@ export function Settings({ settings, saveSettings, inventory }) {
                                     key={idx}
                                     className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border"
                                 >
-                                    <span className="capitalize text-sm">{item}</span>
+                                    <span className={`text-sm ${activeSection === 'suppliers' ? '' : 'capitalize'}`}>{item}</span>
                                     <button
                                         onClick={() => removeItem(item)}
                                         className="text-red-600 hover:text-red-800 ml-2"

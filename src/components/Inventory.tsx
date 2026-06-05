@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
+import { sizeName } from '../lib/sizes';
+import { myYarnName } from '../lib/yarnNames';
 import type { InventoryItem } from '../types';
 
 export function Inventory({ inventory, saveInventory, settings }) {
@@ -234,6 +236,15 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., Luna DK"
                                         />
+                                        {myYarnName(formData.name, settings) && myYarnName(formData.name, settings) !== formData.myYarnName && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, myYarnName: myYarnName(formData.name, settings) })}
+                                                className="text-xs text-teal-600 hover:text-teal-800 mt-1 bg-transparent"
+                                            >
+                                                ↳ Use mapping: {myYarnName(formData.name, settings)}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -247,6 +258,9 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         placeholder="e.g., 20, 50, 100"
                                     />
+                                    {sizeName(formData.hankSize, settings) && (
+                                        <p className="text-xs text-teal-600 mt-1">= {sizeName(formData.hankSize, settings)}</p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -402,6 +416,9 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                             placeholder="e.g., 20, 50, 100"
                                         />
+                                        {sizeName(formData.hankSize, settings) && (
+                                            <p className="text-xs text-teal-600 mt-1">= {sizeName(formData.hankSize, settings)}</p>
+                                        )}
                                     </div>
                                 </div>
                             </>
@@ -673,7 +690,9 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                                         <div className="text-xs text-gray-500">({item.name})</div>
                                                     )}
                                                     {item.hankSize && (
-                                                        <div className="text-sm text-teal-600">{item.hankSize}g hanks</div>
+                                                        <div className="text-sm text-teal-600">
+                                                            {item.hankSize}g hanks{sizeName(item.hankSize, settings) ? ` · ${sizeName(item.hankSize, settings)}` : ''}
+                                                        </div>
                                                     )}
                                                     {item.category === 'yarn base' && (
                                                         <div className="text-xs text-gray-600 mt-1 space-y-0.5">

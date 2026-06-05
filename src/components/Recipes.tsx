@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
+import { unitList } from '../lib/units';
 import type { Recipe } from '../types';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory }) {
@@ -359,10 +360,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                             onChange={(e) => updateIngredient(idx, 'unit', e.target.value)}
                                             className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                         >
-                                            <option value="ml">ml</option>
-                                            <option value="g">g</option>
-                                            <option value="tsp">tsp</option>
-                                            <option value="tbsp">tbsp</option>
+                                            {unitList().map((u) => <option key={u} value={u}>{u}</option>)}
                                         </select>
                                         <button
                                             type="button"
@@ -515,8 +513,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                                         }}
                                                         className="w-16 px-2 py-1 border rounded focus:ring-2 focus:ring-teal-500 text-sm"
                                                     >
-                                                        <option value="g">g</option>
-                                                        <option value="ml">ml</option>
+                                                        {unitList().map((u) => <option key={u} value={u}>{u}</option>)}
                                                     </select>
                                                     <button
                                                         type="button"
