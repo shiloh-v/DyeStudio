@@ -5,14 +5,12 @@ import { toast } from '../lib/toast';
 export function Settings({ settings, saveSettings, inventory }) {
     const [activeSection, setActiveSection] = useState('colorTypes');
     const [newItem, setNewItem] = useState('');
-    const [newMapping, setNewMapping] = useState({ supplierName: '', myName: '' });
     const [newSizeMapping, setNewSizeMapping] = useState({ grams: '', name: '' });
 
     const sections = {
         colorTypes: { label: 'Color Types', key: 'colorTypes' },
         inventoryCategories: { label: 'Inventory Categories', key: 'inventoryCategories' },
         suppliers: { label: 'Suppliers', key: 'suppliers' },
-        yarnBaseMappings: { label: 'Yarn Base Mappings', key: 'yarnBaseMappings' },
         sizeMappings: { label: 'Size Mappings', key: 'sizeMappings' }
     };
 
@@ -39,29 +37,6 @@ export function Settings({ settings, saveSettings, inventory }) {
             });
         }
     };
-
-    const addYarnBaseMapping = () => {
-        if (!newMapping.supplierName || !newMapping.myName) {
-            toast('Please fill in both supplier name and your name', 'error');
-            return;
-        }
-        const currentMappings = settings.yarnBaseMappings || [];
-        saveSettings({
-            ...settings,
-            yarnBaseMappings: [...currentMappings, { ...newMapping }]
-        });
-        setNewMapping({ supplierName: '', myName: '' });
-    };
-
-    const removeYarnBaseMapping = async (index) => {
-        if (await confirmDialog({ message: 'Remove this yarn base mapping?', confirmText: 'Remove', danger: true })) {
-            saveSettings({
-                ...settings,
-                yarnBaseMappings: settings.yarnBaseMappings.filter((_, i) => i !== index)
-            });
-        }
-    };
-
 
     const addSizeMapping = () => {
         if (!newSizeMapping.grams || !newSizeMapping.name) {
@@ -134,42 +109,6 @@ export function Settings({ settings, saveSettings, inventory }) {
                     </div>
                 )}
 
-                {/* Yarn Base Mapping Form */}
-                {activeSection === 'yarnBaseMappings' && (
-                    <div className="mb-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Add Yarn Base Mapping
-                        </label>
-                        <div className="grid md:grid-cols-2 gap-2 mb-2">
-                            <select
-                                value={newMapping.supplierName}
-                                onChange={(e) => setNewMapping({ ...newMapping, supplierName: e.target.value })}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
-                            >
-                                <option value="">Select supplier…</option>
-                                {(settings.suppliers || []).map((s) => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
-                            <input
-                                type="text"
-                                value={newMapping.myName}
-                                onChange={(e) => setNewMapping({ ...newMapping, myName: e.target.value })}
-                                onKeyDown={(e) => e.key === 'Enter' && addYarnBaseMapping()}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                placeholder="Your name (e.g., Luna DK)"
-                            />
-                        </div>
-                        <button
-                            onClick={addYarnBaseMapping}
-                            className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
-                        >
-                            Add Mapping
-                        </button>
-                    </div>
-                )}
-
-
                 {/* Size Mapping Form */}
                 {activeSection === 'sizeMappings' && (
                     <div className="mb-6">
@@ -227,33 +166,6 @@ export function Settings({ settings, saveSettings, inventory }) {
                         </div>
                         {(settings[activeSection] || []).length === 0 && (
                             <p className="text-gray-400 text-center py-8">No items yet</p>
-                        )}
-                    </div>
-                )}
-
-                {/* Yarn Base Mappings List */}
-                {activeSection === 'yarnBaseMappings' && (
-                    <div>
-                        <h4 className="font-medium text-gray-700 mb-3">Current Yarn Base Mappings</h4>
-                        <div className="space-y-2">
-                            {(settings.yarnBaseMappings || []).map((mapping, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
-                                    <div className="flex-1">
-                                        <span className="font-medium">{mapping.supplierName}</span>
-                                        <span className="mx-2">→</span>
-                                        <span className="text-teal-600">{mapping.myName}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => removeYarnBaseMapping(idx)}
-                                        className="text-red-600 hover:text-red-800 ml-2"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                        {(settings.yarnBaseMappings || []).length === 0 && (
-                            <p className="text-gray-400 text-center py-8">No mappings yet</p>
                         )}
                     </div>
                 )}

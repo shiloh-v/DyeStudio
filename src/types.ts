@@ -186,6 +186,36 @@ export interface Sale {
   [key: string]: any;
 }
 
+export interface YarnBaseSize {
+  amount: Num;      // weight in the base's weightUnit (grams or ounces)
+  sku?: string;
+  packSize?: Num;   // how many skeins come in a pack (defaults to 1)
+  packPrice?: Num;  // price for the whole pack; per-skein price = packPrice / packSize
+  length?: Num;     // optional override of the derived length (in the base's lengthUnit)
+}
+
+// A yarn base in the catalog — base-level specs entered once, plus the sizes it
+// comes in. Length per 100 (weightUnit) auto-derives each size's length; a size
+// can override it. Units vary by supplier, so weight (g/oz) and length (yd/m)
+// are per-base.
+export interface YarnBase {
+  id: ID;
+  myName: string;          // e.g. "Luna DK"
+  supplier?: string;       // e.g. "Wool2Dye4"
+  supplierName?: string;   // supplier's base name, e.g. "W2D4 Merino DK SW"
+  weight?: string;         // yarn weight, e.g. "DK"
+  fiberContent?: string;
+  needleSize?: string;
+  gauge?: string;
+  wpi?: string;
+  plies?: string;
+  weightUnit?: 'g' | 'oz';
+  lengthUnit?: 'yd' | 'm';
+  lengthPer100?: Num;      // length (lengthUnit) per 100 of weightUnit
+  sizes?: YarnBaseSize[];
+  notes?: string;
+}
+
 export interface Settings {
   colorTypes: string[];
   inventoryCategories: string[];
@@ -193,4 +223,5 @@ export interface Settings {
   suppliers: string[];
   yarnBaseMappings: { supplierName: string; myName: string }[];
   sizeMappings: { grams: number; name: string }[];
+  yarnBases?: YarnBase[];
 }
