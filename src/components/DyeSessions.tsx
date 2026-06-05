@@ -505,6 +505,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             if (selectedColors.length === 0) return;
             const validYarns = (currentPan.kitYarns || []).filter(y => y.base && y.hankSize && y.quantity);
             if (validYarns.length === 0) return;
+            const kitTotalWeight = validYarns.reduce(
+                (sum, y) => sum + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0
+            );
             const newPans = selectedColors.map(color => {
                 const recipe = recipes.find(r => r.name === color.colorwayName);
                 return {
@@ -514,7 +517,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                     recipeId: recipe?.id || '',
                     recipe: recipe,
                     yarns: validYarns.map(y => ({ ...y })),
-                    fromKit: currentPan.kitName
+                    fromKit: currentPan.kitName,
+                    totalWeight: kitTotalWeight,
+                    capacity: currentPan.capacity || 300,
                 };
             });
             setFormData({
@@ -1573,7 +1578,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                <div className="text-sm text-gray-600">{pan.totalWeight}g / {pan.capacity}g capacity</div>
+                                                                <div className="text-sm text-gray-600">
+                                                                    {pan.totalWeight || (pan.yarns || []).reduce((s, y) => s + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0)}g
+                                                                    {pan.capacity ? ` / ${pan.capacity}g capacity` : ''}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <div className="text-sm text-gray-600 mt-1">
@@ -2159,7 +2167,7 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
         Pan #{idx + 1}: {pan.colorway}
       </div>
       <div className="text-sm text-gray-600 mb-2">
-        Total: {pan.totalWeight}g / {pan.capacity}g capacity
+        Total: {pan.totalWeight || (pan.yarns || []).reduce((s, y) => s + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0)}g{pan.capacity ? ` / ${pan.capacity}g capacity` : ''}
       </div>
       <div className="text-sm text-gray-700">
         {pan.yarns.map((y, i) => (
