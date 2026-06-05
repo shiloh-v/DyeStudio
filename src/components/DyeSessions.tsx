@@ -3,7 +3,7 @@ import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
-import { findYarnBaseItem, yarnBaseRef } from '../lib/yarnMatch';
+import { findYarnBaseItem, findBallBand, yarnBaseRef } from '../lib/yarnMatch';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -1217,7 +1217,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 }
                                                 
                                                 const selectedColors = currentPan.kitColors.filter((_, idx) => selectedIds.includes(idx));
-                                                
+                                                const kitTotalWeight = validYarns.reduce(
+                                                    (sum, y) => sum + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0
+                                                );
+
                                                 // Create individual pans for each selected colorway, each with the shared yarn list
                                                 const newPans = selectedColors.map(color => {
                                                     const recipe = recipes.find(r => r.name === color.colorwayName);
@@ -1228,7 +1231,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         recipeId: recipe?.id || '',
                                                         recipe: recipe,
                                                         yarns: validYarns.map(y => ({ ...y })),
-                                                        fromKit: currentPan.kitName
+                                                        fromKit: currentPan.kitName,
+                                                        totalWeight: kitTotalWeight,
+                                                        capacity: currentPan.capacity || 300,
                                                     };
                                                 });
                                                 
@@ -1740,7 +1745,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             } else {
                                                 pan.yarns.forEach(y => {
                                                     const key = `${y.base} (${y.hankSize}g)`;
-                                                    bases[key] = (bases[key] || 0) + parseInt(y.quantity);
+                                                    bases[key] = (bases[key] || 0) + (parseInt(y.quantity) || 0);
                                                 });
                                             }
                                         });
@@ -1841,11 +1846,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     // Check yarn inventory (subtract commitments from other planned sessions)
                                     Object.entries(yarnNeeded).forEach(([key, needed]) => {
                                         const [base, hankSize] = key.split('-');
-                                        const item = inventory.find(i => 
-                                            i.category === 'yarn base' && 
-                                            i.name === base && 
-                                            parseFloat(i.hankSize) === parseFloat(hankSize)
-                                        );
+                                        const item = findYarnBaseItem(inventory, base, hankSize);
                                         const onHand = item ? parseFloat(item.quantity) : 0;
                                         const committedElsewhere = committed.yarnNeeded[key] || 0;
                                         const available = onHand - committedElsewhere;
@@ -1864,12 +1865,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         
                                         // Skip ball band check for micro sizes (10g and under)
                                         if (size <= 10) return;
-                                        
-                                        const item = inventory.find(i => 
-                                            i.category === 'ball band' && 
-                                            i.forYarnBase === base && 
-                                            parseFloat(i.hankSize) === parseFloat(hankSize)
-                                        );
+
+                                        const item = findBallBand(inventory, base, hankSize);
                                         const onHand = item ? parseFloat(item.quantity) : 0;
                                         // Ball band commitments mirror yarn commitments for non-micro sizes
                                         const committedElsewhere = committed.ballBandsNeeded[key] || 0;
@@ -1960,35 +1957,23 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     session.pans.forEach(pan => {
                                         if (pan.type === 'gradientTray') {
                                             totalSkeins += 10;
-                                            const yarnItem = inventory.find(i => 
-                                                i.category === 'yarn base' && 
-                                                i.name === pan.gradientYarnBase && 
-                                                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-                                            );
+                                            const yarnItem = findYarnBaseItem(inventory, pan.gradientYarnBase, pan.gradientHankSize);
                                             if (yarnItem?.cost) {
                                                 totalCost += parseFloat(yarnItem.cost) * 10;
                                             }
                                         } else if (pan.type === 'dyeSquareTray') {
                                             totalSkeins += 25;
-                                            const yarnItem = inventory.find(i => 
-                                                i.category === 'yarn base' && 
-                                                i.name === pan.gradientYarnBase && 
-                                                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-                                            );
+                                            const yarnItem = findYarnBaseItem(inventory, pan.gradientYarnBase, pan.gradientHankSize);
                                             if (yarnItem?.cost) {
                                                 totalCost += parseFloat(yarnItem.cost) * 25;
                                             }
                                         } else {
-                                            const skeins = pan.yarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0);
+                                            const skeins = pan.yarns.reduce((sum, y) => sum + (parseInt(y.quantity) || 0), 0);
                                             totalSkeins += skeins;
                                             pan.yarns.forEach(yarn => {
-                                                const yarnItem = inventory.find(i => 
-                                                    i.category === 'yarn base' && 
-                                                    i.name === yarn.base && 
-                                                    parseFloat(i.hankSize) === parseFloat(yarn.hankSize)
-                                                );
+                                                const yarnItem = findYarnBaseItem(inventory, yarn.base, yarn.hankSize);
                                                 if (yarnItem?.cost) {
-                                                    totalCost += parseFloat(yarnItem.cost) * parseInt(yarn.quantity);
+                                                    totalCost += parseFloat(yarnItem.cost) * (parseInt(yarn.quantity) || 0);
                                                 }
                                             });
                                         }
@@ -2009,18 +1994,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         } else {
                                             pan.yarns.forEach(y => {
                                                 const key = `${y.base}-${y.hankSize}`;
-                                                yarnGroups[key] = (yarnGroups[key] || 0) + parseInt(y.quantity);
+                                                yarnGroups[key] = (yarnGroups[key] || 0) + (parseInt(y.quantity) || 0);
                                             });
                                         }
                                     });
-                                    
+
                                     Object.entries(yarnGroups).forEach(([key, qty]) => {
                                         const [base, hankSize] = key.split('-');
-                                        const yarnItem = inventory.find(i => 
-                                            i.category === 'yarn base' && 
-                                            i.name === base && 
-                                            parseFloat(i.hankSize) === parseFloat(hankSize)
-                                        );
+                                        const yarnItem = findYarnBaseItem(inventory, base, hankSize);
                                         if (yarnItem?.typicalPrice) {
                                             expectedRevenue += parseFloat(yarnItem.typicalPrice) * qty;
                                         }
