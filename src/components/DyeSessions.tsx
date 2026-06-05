@@ -87,7 +87,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     const [editingPanId, setEditingPanId] = useState<any>(null);
 
     // Append a new pan, or replace the one being edited (in place, keeping its id).
-    const commitPan = (newPan) => {
+    const commitPan = (builtPan) => {
+        // Carry the deep-shade flag (drives acid usage) onto every pan type.
+        const newPan = { deepShade: !!currentPan.deepShade, ...builtPan };
         if (editingPanId != null) {
             setFormData((prev) => ({
                 ...prev,
@@ -676,7 +678,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         kitSelectedColorIds: [],
                                         kitYarns: [{ base: '', hankSize: '', quantity: 1 }],
                                         colorSketchId: '',
-                                        adHocLabel: ''
+                                        adHocLabel: '',
+                                        deepShade: false
                                     })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                 >
@@ -687,6 +690,19 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     <option value="colorLab">Color Lab Experiment (1 space)</option>
                                     <option value="adHoc">🎲 Ad Hoc Pan (1 space)</option>
                                 </select>
+                            </div>
+
+                            {/* Deep shade — uses more acid when finishing the session */}
+                            <div className="mb-4">
+                                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!currentPan.deepShade}
+                                        onChange={(e) => setCurrentPan({ ...currentPan, deepShade: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    🌑 Deep / dark shade (uses more acid)
+                                </label>
                             </div>
 
                             {/* Pan Form */}
@@ -1234,6 +1250,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         fromKit: currentPan.kitName,
                                                         totalWeight: kitTotalWeight,
                                                         capacity: currentPan.capacity || 300,
+                                                        deepShade: !!currentPan.deepShade,
                                                     };
                                                 });
                                                 
@@ -1580,6 +1597,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                     {pan.fromKit && (
                                                                         <span className="ml-2 text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded">
                                                                             from {pan.fromKit}
+                                                                        </span>
+                                                                    )}
+                                                                    {pan.deepShade && (
+                                                                        <span className="ml-2 text-xs bg-gray-800 text-white px-2 py-1 rounded">
+                                                                            🌑 deep
                                                                         </span>
                                                                     )}
                                                                 </div>
