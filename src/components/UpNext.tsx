@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DateUtils } from '../lib/dates';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
+import { findYarnBaseItem, findBallBand } from '../lib/yarnMatch';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
@@ -287,14 +288,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             // Gradient tray costs - all skeins are identical
             costs.skeins = 10;
             
-            const yarnItem = inventory.find(i => 
-                i.category === 'yarn base' && 
-                i.name === pan.gradientYarnBase && 
-                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-            );
-            
+            const yarnItem = findYarnBaseItem(inventory, pan.gradientYarnBase, pan.gradientHankSize);
+
             const totalGramsYarn = parseFloat(pan.gradientHankSize) * 10;
-            
+
             // Dye cost
             const dye = inventory.find(i => i.category === 'dye' && i.name === pan.gradientDye);
             if (dye) {
@@ -305,11 +302,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             }
 
             // Ball band - match both yarn base AND hank size
-            const ballBand = inventory.find(i => 
-                i.category === 'ball band' && 
-                i.forYarnBase === pan.gradientYarnBase &&
-                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-            );
+            const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
             // Label - check both 'other' and 'ball band' categories
             const labelItem = inventory.find(i => 
@@ -343,12 +336,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             // Dye square tray costs - 25 skeins
             costs.skeins = 25;
             
-            const yarnItem = inventory.find(i => 
-                i.category === 'yarn base' && 
-                i.name === pan.gradientYarnBase && 
-                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-            );
-            
+            const yarnItem = findYarnBaseItem(inventory, pan.gradientYarnBase, pan.gradientHankSize);
+
             // Dye costs for both colors
             const amounts = [1.25, 2.5, 5, 7.5, 10];
             const dyeA = inventory.find(i => i.category === 'dye' && i.name === pan.squareColorA);
@@ -364,11 +353,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             }
 
             // Ball band
-            const ballBand = inventory.find(i => 
-                i.category === 'ball band' && 
-                i.forYarnBase === pan.gradientYarnBase &&
-                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-            );
+            const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
             const labelItem = inventory.find(i => 
                 (i.category === 'other' || i.category === 'ball band') && 
@@ -475,18 +460,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             
             // Calculate cost for each individual skein based on weight ratio
             pan.yarns.forEach(yarnGroup => {
-                const yarnItem = inventory.find(i => 
-                    i.category === 'yarn base' && 
-                    i.name === yarnGroup.base && 
-                    parseFloat(i.hankSize) === parseFloat(yarnGroup.hankSize)
-                );
-                
+                const yarnItem = findYarnBaseItem(inventory, yarnGroup.base, yarnGroup.hankSize);
+
                 // Ball band - match both yarn base AND hank size
-                const ballBand = inventory.find(i => 
-                    i.category === 'ball band' && 
-                    i.forYarnBase === yarnGroup.base &&
-                    parseFloat(i.hankSize) === parseFloat(yarnGroup.hankSize)
-                );
+                const ballBand = findBallBand(inventory, yarnGroup.base, yarnGroup.hankSize);
                 
                 const labelItem = inventory.find(i => 
                     (i.category === 'other' || i.category === 'ball band') && 
@@ -654,32 +631,20 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         selectedSession.pans.forEach(pan => {
             if (pan.type === 'gradientTray') {
                 // Deduct 10 skeins for gradient tray
-                const inventoryItem = updatedInventory.find(
-                    item => item.category === 'yarn base' && 
-                            item.name === pan.gradientYarnBase && 
-                            parseFloat(item.hankSize) === parseFloat(pan.gradientHankSize)
-                );
+                const inventoryItem = findYarnBaseItem(updatedInventory, pan.gradientYarnBase, pan.gradientHankSize);
                 if (inventoryItem) {
                     inventoryItem.quantity = Math.max(0, parseFloat(inventoryItem.quantity) - 10);
                 }
             } else if (pan.type === 'dyeSquareTray') {
                 // Deduct 25 skeins for dye square tray
-                const inventoryItem = updatedInventory.find(
-                    item => item.category === 'yarn base' && 
-                            item.name === pan.gradientYarnBase && 
-                            parseFloat(item.hankSize) === parseFloat(pan.gradientHankSize)
-                );
+                const inventoryItem = findYarnBaseItem(updatedInventory, pan.gradientYarnBase, pan.gradientHankSize);
                 if (inventoryItem) {
                     inventoryItem.quantity = Math.max(0, parseFloat(inventoryItem.quantity) - 25);
                 }
             } else {
                 // Deduct regular pan yarns
                 pan.yarns.forEach(yarnInPan => {
-                    const inventoryItem = updatedInventory.find(
-                        item => item.category === 'yarn base' && 
-                                item.name === yarnInPan.base && 
-                                parseFloat(item.hankSize) === parseFloat(yarnInPan.hankSize)
-                    );
+                    const inventoryItem = findYarnBaseItem(updatedInventory, yarnInPan.base, yarnInPan.hankSize);
                     
                     if (inventoryItem) {
                         const quantityToDeduct = parseInt(yarnInPan.quantity || 0);

@@ -4,6 +4,7 @@ import { useFormGuard } from '../lib/useFormGuard';
 import { isStocked } from '../lib/batches';
 import { confirmDialog, promptDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
+import { findYarnBaseItem, findBallBand } from '../lib/yarnMatch';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
     const [showForm, setShowForm] = useState(false);
@@ -57,11 +58,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             let suggestedPrice = 0;
             if (batch.yarnDetails && batch.yarnDetails.length > 0) {
                 batch.yarnDetails.forEach(yarn => {
-                    const yarnItem = inventory.find(i => 
-                        i.category === 'yarn base' && 
-                        i.name === yarn.base && 
-                        parseFloat(i.hankSize) === parseFloat(yarn.hankSize)
-                    );
+                    const yarnItem = findYarnBaseItem(inventory, yarn.base, yarn.hankSize);
                     if (yarnItem?.typicalPrice) {
                         suggestedPrice += parseFloat(yarnItem.typicalPrice) * parseInt(yarn.quantity || 0);
                     }
@@ -117,11 +114,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                     const yarnBase = yarn.base;
                     
                     // Find ball band that matches this yarn base AND hank size
-                    const ballBand = updatedInventory.find(item => 
-                        item.category === 'ball band' && 
-                        item.forYarnBase === yarnBase &&
-                        parseFloat(item.hankSize) === hankSize
-                    );
+                    const ballBand = findBallBand(updatedInventory, yarnBase, hankSize);
                     if (ballBand) {
                         ballBand.quantity = Math.max(0, parseFloat(ballBand.quantity) - quantity);
                     }

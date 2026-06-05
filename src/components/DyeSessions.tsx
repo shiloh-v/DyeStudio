@@ -3,6 +3,7 @@ import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
+import { findYarnBaseItem, yarnBaseRef } from '../lib/yarnMatch';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -183,16 +184,16 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         return committed;
     };
 
-    // Get unique yarn bases and their available hank sizes from inventory
+    // Unique yarn bases and their hank sizes, keyed by the STABLE reference
+    // (myYarnName, falling back to name) so pans store an identity that survives
+    // renaming the inventory item.
     const yarnBases = inventory
         .filter(item => item.category === 'yarn base')
         .reduce((acc, item) => {
-            if (!acc[item.name]) {
-                acc[item.name] = [];
-            }
-            if (item.hankSize && !acc[item.name].includes(item.hankSize)) {
-                acc[item.name].push(item.hankSize);
-            }
+            const key = yarnBaseRef(item);
+            if (!key) return acc;
+            if (!acc[key]) acc[key] = [];
+            if (item.hankSize && !acc[key].includes(item.hankSize)) acc[key].push(item.hankSize);
             return acc;
         }, {});
 
@@ -357,11 +358,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         const inProgressNeeds = calculatePanNeeds(formData.pans);
 
         const getEffectiveAvailable = (base, hankSize) => {
-            const inventoryItem = inventory.find(
-                item => item.category === 'yarn base' &&
-                        item.name === base &&
-                        parseFloat(item.hankSize) === parseFloat(hankSize)
-            );
+            const inventoryItem = findYarnBaseItem(inventory, base, hankSize);
             const onHand = inventoryItem ? parseFloat(inventoryItem.quantity) : 0;
             const yKey = `${base}-${hankSize}`;
             const committedElsewhere = committed.yarnNeeded[yKey] || 0;
@@ -745,6 +742,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                     className="flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
                                                     <option value="">Select yarn base...</option>
+                                                    {yarn.base && !yarnBases[yarn.base] && (
+                                                        <option value={yarn.base}>{yarn.base}</option>
+                                                    )}
                                                     {Object.keys(yarnBases).sort((a, b) => a.localeCompare(b)).map(baseName => (
                                                         <option key={baseName} value={baseName}>{baseName}</option>
                                                     ))}
