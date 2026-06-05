@@ -186,6 +186,30 @@ export interface Sale {
   [key: string]: any;
 }
 
+export interface YarnBaseSize {
+  grams: Num;
+  sku?: string;
+}
+
+// A yarn base in the catalog — base-level specs entered once, plus the sizes it
+// comes in. Yardage is stored per 100g and derived for each size.
+export interface YarnBase {
+  id: ID;
+  myName: string;          // e.g. "Luna DK"
+  supplier?: string;       // e.g. "Wool2Dye4"
+  supplierName?: string;   // supplier's base name, e.g. "W2D4 Merino DK SW"
+  weight?: string;         // yarn weight, e.g. "DK"
+  fiberContent?: string;
+  needleSize?: string;
+  gauge?: string;
+  wpi?: string;
+  plies?: string;
+  yardsPer100g?: Num;
+  metersPer100g?: Num;
+  sizes?: YarnBaseSize[];
+  notes?: string;
+}
+
 export interface Settings {
   colorTypes: string[];
   inventoryCategories: string[];
@@ -193,4 +217,5 @@ export interface Settings {
   suppliers: string[];
   yarnBaseMappings: { supplierName: string; myName: string }[];
   sizeMappings: { grams: number; name: string }[];
+  yarnBases?: YarnBase[];
 }
