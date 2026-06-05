@@ -1,10 +1,9 @@
-// Measurement units are configurable in Settings (settings.units). These helpers
-// give every unit dropdown the same source of truth, with a sane fallback when
-// settings haven't loaded or the list is empty.
+// The fixed set of measurement units the dye-measurement dropdowns offer
+// (Recipes / Color Lab). Units are no longer user-configurable; conversions are
+// handled in code where needed (e.g. Inventory's quantity unit switch).
 
 export const DEFAULT_UNITS = ['ml', 'g', 'oz', 'lb', 'tsp', 'tbsp'];
 
-export function unitList(settings: any): string[] {
-    const units = settings?.units;
-    return Array.isArray(units) && units.length > 0 ? units : DEFAULT_UNITS;
+export function unitList(): string[] {
+    return DEFAULT_UNITS;
 }

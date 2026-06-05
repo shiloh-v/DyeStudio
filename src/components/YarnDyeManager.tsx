@@ -53,7 +53,6 @@ export function YarnDyeManager() {
     const [settings, setSettings] = useState({
         colorTypes: ['tonal', 'variegated', 'speckled'],
         inventoryCategories: ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'other'],
-        units: ['ml', 'g', 'oz', 'lb', 'tsp', 'tbsp'],
         suppliers: ['Dharma', 'Wool2Dye4', 'Amazon'],
         yarnBaseMappings: [
             { supplierName: 'W2D4 Merino Bulky SW', myName: 'Luna Bulky' },

@@ -421,7 +421,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                             onChange={(e) => updateDye(idx, 'unit', e.target.value)}
                                             className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                         >
-                                            {unitList(settings).map((u) => <option key={u} value={u}>{u}</option>)}
+                                            {unitList().map((u) => <option key={u} value={u}>{u}</option>)}
                                         </select>
                                         {formData.dyes.length > 1 && (
                                             <button
@@ -603,7 +603,7 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                                                     onChange={(e) => updateSectionDye(sectionIdx, dyeIdx, 'unit', e.target.value)}
                                                     className="w-20 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                                 >
-                                                    {unitList(settings).map((u) => <option key={u} value={u}>{u}</option>)}
+                                                    {unitList().map((u) => <option key={u} value={u}>{u}</option>)}
                                                 </select>
                                                 {section.dyes.length > 1 && (
                                                     <button

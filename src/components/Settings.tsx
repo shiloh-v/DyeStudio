@@ -11,7 +11,6 @@ export function Settings({ settings, saveSettings, inventory }) {
     const sections = {
         colorTypes: { label: 'Color Types', key: 'colorTypes' },
         inventoryCategories: { label: 'Inventory Categories', key: 'inventoryCategories' },
-        units: { label: 'Measurement Units', key: 'units' },
         suppliers: { label: 'Suppliers', key: 'suppliers' },
         yarnBaseMappings: { label: 'Yarn Base Mappings', key: 'yarnBaseMappings' },
         sizeMappings: { label: 'Size Mappings', key: 'sizeMappings' }
@@ -142,14 +141,16 @@ export function Settings({ settings, saveSettings, inventory }) {
                             Add Yarn Base Mapping
                         </label>
                         <div className="grid md:grid-cols-2 gap-2 mb-2">
-                            <input
-                                type="text"
+                            <select
                                 value={newMapping.supplierName}
                                 onChange={(e) => setNewMapping({ ...newMapping, supplierName: e.target.value })}
-                                onKeyDown={(e) => e.key === 'Enter' && addYarnBaseMapping()}
-                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                placeholder="Supplier name (e.g., W2D4 SW DK)"
-                            />
+                                className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
+                            >
+                                <option value="">Select supplier…</option>
+                                {(settings.suppliers || []).map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
                             <input
                                 type="text"
                                 value={newMapping.myName}
