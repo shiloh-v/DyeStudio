@@ -105,7 +105,11 @@ export function Inventory({ inventory, saveInventory, settings }) {
         weight: ''
     });
 
-    const categories = settings.inventoryCategories || ['dye', 'yarn base', 'chemical', 'tool', 'other'];
+    // Categories are derived from settings, but we retire the vague "other"
+    // catch-all and guarantee a dedicated "label" category (for colorway labels
+    // / stickers). Done in code so no settings migration is required.
+    const rawCategories = settings.inventoryCategories || ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'label'];
+    const categories = Array.from(new Set([...rawCategories.filter((c) => c !== 'other'), 'label']));
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -300,6 +304,20 @@ export function Inventory({ inventory, saveInventory, settings }) {
         });
     };
 
+    // Chemical cost calculator: "paid $X for Y <unit>" → cost per the item's unit
+    // (stored in `cost`). getCostPerGram converts that to per-gram for batches.
+    const updateChemPurchase = (patch) => {
+        setFormData((prev) => {
+            const next = { ...prev, ...patch };
+            const price = parseFloat(String(next.purchasePrice));
+            const amt = parseFloat(String(next.purchaseOunces));
+            if (!isNaN(price) && !isNaN(amt) && amt > 0) {
+                next.cost = (price / amt).toFixed(4);
+            }
+            return next;
+        });
+    };
+
     const q = searchTerm.trim().toLowerCase();
     const filteredInventory = inventory
         .filter(i => filterCategory === 'all' || i.category === filterCategory)
@@ -425,6 +443,8 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                             defaultUnit = 'skeins';
                                         } else if (newCategory === 'dye') {
                                             defaultUnit = 'oz';
+                                        } else if (newCategory === 'tool' || newCategory === 'label') {
+                                            defaultUnit = 'units';
                                         }
                                         
                                         setFormData({ ...formData, category: newCategory, unit: defaultUnit });
@@ -815,9 +835,42 @@ export function Inventory({ inventory, saveInventory, settings }) {
                                         )}
                                     </div>
                                 </>
+                            ) : formData.category === 'chemical' ? (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount Purchased ({formData.unit || 'g'})</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.purchaseOunces}
+                                            onChange={(e) => updateChemPurchase({ purchaseOunces: e.target.value })}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                            placeholder="e.g., 25"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Total Paid ($)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={formData.purchasePrice}
+                                            onChange={(e) => updateChemPurchase({ purchasePrice: e.target.value })}
+                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                            placeholder="e.g., 81.95"
+                                        />
+                                        {formData.cost ? (
+                                            <div className="text-xs text-green-600 mt-1">
+                                                ${parseFloat(String(formData.cost)).toFixed(4)}/{formData.unit || 'g'}
+                                                {' '}(${(parseFloat(String(formData.cost)) / (UNIT_TO_GRAM[formData.unit || 'g'] || 1)).toFixed(4)}/g)
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </>
                             ) : (
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Cost per Unit</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {formData.category === 'tool' || formData.category === 'label' ? 'Cost per item' : 'Cost per Unit'}
+                                    </label>
                                     <input
                                         type="number"
                                         step="0.01"

@@ -310,7 +310,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             
             // Label - check both 'other' and 'ball band' categories
             const labelItem = inventory.find(i => 
-                (i.category === 'other' || i.category === 'ball band') && 
+                (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
                 i.name?.toLowerCase().includes('label')
             );
             
@@ -360,7 +360,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
             const labelItem = inventory.find(i => 
-                (i.category === 'other' || i.category === 'ball band') && 
+                (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
                 i.name?.toLowerCase().includes('label')
             );
             
@@ -470,7 +470,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                 const ballBand = findBallBand(inventory, yarnGroup.base, yarnGroup.hankSize);
                 
                 const labelItem = inventory.find(i => 
-                    (i.category === 'other' || i.category === 'ball band') && 
+                    (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
                     i.name?.toLowerCase().includes('label')
                 );
                 
