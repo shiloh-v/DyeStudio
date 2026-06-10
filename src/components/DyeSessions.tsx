@@ -3,7 +3,9 @@ import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
-import { findYarnBaseItem, yarnBaseRef } from '../lib/yarnMatch';
+import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
+import { findDyeItem } from '../lib/dyeMatch';
+import { labelItems } from '../lib/roleMatch';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -44,6 +46,13 @@ function SortablePanCard({ id, children }: { id: string | number; children: (h: 
 }
 
 export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, settings, kits, colorSketches, gradients }) {
+    // Catalog-aware yarn matching so old supplier-name refs still resolve.
+    const _yarnCatalog = settings?.yarnBases || [];
+    const findYarnBaseItem = (inv, ref, hank?) => _findYarnBaseItem(inv, ref, hank, _yarnCatalog);
+    const findBallBand = (inv, ref, hank?) => _findBallBand(inv, ref, hank, _yarnCatalog);
+    // Resolve a (possibly old supplier-name) yarn ref to its current name, so
+    // needs/commitments aggregate per base and shortages show the current name.
+    const canon = (ref) => canonicalYarnRef(ref, _yarnCatalog);
     // Dyes already made into a saved gradient — excluded from the gradient-tray
     // picker so you don't accidentally re-do a gradient you've already done.
     const usedGradientDyes = new Set((gradients || []).map(g => g.dyeColor).filter(Boolean));
@@ -87,7 +96,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     const [editingPanId, setEditingPanId] = useState<any>(null);
 
     // Append a new pan, or replace the one being edited (in place, keeping its id).
-    const commitPan = (newPan) => {
+    const commitPan = (builtPan) => {
+        // Carry the deep-shade flag (drives acid usage) onto every pan type.
+        const newPan = { deepShade: !!currentPan.deepShade, ...builtPan };
         if (editingPanId != null) {
             setFormData((prev) => ({
                 ...prev,
@@ -154,19 +165,19 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
 
         (pans || []).forEach(pan => {
             if (pan.type === 'gradientTray') {
-                const yKey = `${pan.gradientYarnBase}-${pan.gradientHankSize}`;
+                const yKey = `${canon(pan.gradientYarnBase)}-${pan.gradientHankSize}`;
                 yarnNeeded[yKey] = (yarnNeeded[yKey] || 0) + 10;
                 ballBandsNeeded[yKey] = (ballBandsNeeded[yKey] || 0) + 10;
                 if (pan.gradientDye) dyesNeeded[pan.gradientDye] = true;
             } else if (pan.type === 'dyeSquareTray') {
-                const yKey = `${pan.gradientYarnBase}-${pan.gradientHankSize}`;
+                const yKey = `${canon(pan.gradientYarnBase)}-${pan.gradientHankSize}`;
                 yarnNeeded[yKey] = (yarnNeeded[yKey] || 0) + 25;
                 ballBandsNeeded[yKey] = (ballBandsNeeded[yKey] || 0) + 25;
                 if (pan.squareColorA) dyesNeeded[pan.squareColorA] = true;
                 if (pan.squareColorB) dyesNeeded[pan.squareColorB] = true;
             } else {
                 (pan.yarns || []).forEach(yarn => {
-                    const yKey = `${yarn.base}-${yarn.hankSize}`;
+                    const yKey = `${canon(yarn.base)}-${yarn.hankSize}`;
                     const qty = parseInt(yarn.quantity) || 0;
                     yarnNeeded[yKey] = (yarnNeeded[yKey] || 0) + qty;
                     ballBandsNeeded[yKey] = (ballBandsNeeded[yKey] || 0) + qty;
@@ -180,8 +191,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                             });
                         } else if (recipe.ingredients) {
                             recipe.ingredients.forEach(ing => {
-                                const item = inventory.find(i => i.name === ing.name);
-                                if (item?.category === 'dye') dyesNeeded[ing.name] = true;
+                                if (findDyeItem(inventory, ing.name)) dyesNeeded[ing.name] = true;
                             });
                         }
                     }
@@ -196,11 +206,24 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     // (non-archived) sessions, optionally excluding one session by id.
     // This lets us subtract already-spoken-for yarn from on-hand inventory
     // so a second planned session correctly shows a shortage warning.
-    const calculateCommittedNeeds = (excludeSessionId = null) => {
+    // Inventory is reserved CHRONOLOGICALLY: earlier-dated sessions get first
+    // claim. For a target session, sum only the needs of sessions scheduled
+    // strictly before it (earlier date; same date → earlier id/creation). So an
+    // earlier session never shows a shortage caused by a later one — only the
+    // later session that tips cumulative demand past stock does.
+    const calculateCommittedNeeds = (target: { date?: any; id?: any }) => {
         const committed: { yarnNeeded: Record<string, number>; ballBandsNeeded: Record<string, number> } = { yarnNeeded: {}, ballBandsNeeded: {} };
+        const ts = (d) => { const t = new Date(d || 0).getTime(); return Number.isFinite(t) ? t : 0; };
+        const targetTime = ts(target?.date);
+        const targetId = Number(target?.id ?? Number.MAX_SAFE_INTEGER);
+        const isBefore = (s) => {
+            if (s.archived) return false;
+            const st = ts(s.date);
+            if (st !== targetTime) return st < targetTime;
+            return Number(s.id) < targetId; // same date → earlier creation wins
+        };
         dyeSessions.forEach(s => {
-            if (s.archived) return;
-            if (excludeSessionId != null && s.id === excludeSessionId) return;
+            if (!isBefore(s)) return;
             const needs = calculatePanNeeds(s.pans || []);
             Object.entries(needs.yarnNeeded).forEach(([k, v]) => {
                 committed.yarnNeeded[k] = (committed.yarnNeeded[k] || 0) + v;
@@ -389,7 +412,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         // committed to other planned (non-archived) sessions AND to pans
         // already added to the session currently being built/edited.
         let inventoryWarnings = [];
-        const committed = calculateCommittedNeeds(editingId);
+        // Only sessions scheduled before the one being built/edited have a prior
+        // claim on inventory (a new session sits last on its date → MAX id).
+        const committed = calculateCommittedNeeds({ date: formData.date, id: editingId ?? Number.MAX_SAFE_INTEGER });
         const inProgressNeeds = calculatePanNeeds(otherPans);
 
         const getEffectiveAvailable = (base, hankSize) => {
@@ -676,7 +701,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         kitSelectedColorIds: [],
                                         kitYarns: [{ base: '', hankSize: '', quantity: 1 }],
                                         colorSketchId: '',
-                                        adHocLabel: ''
+                                        adHocLabel: '',
+                                        deepShade: false
                                     })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 bg-white"
                                 >
@@ -687,6 +713,19 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     <option value="colorLab">Color Lab Experiment (1 space)</option>
                                     <option value="adHoc">🎲 Ad Hoc Pan (1 space)</option>
                                 </select>
+                            </div>
+
+                            {/* Deep shade — uses more acid when finishing the session */}
+                            <div className="mb-4">
+                                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={!!currentPan.deepShade}
+                                        onChange={(e) => setCurrentPan({ ...currentPan, deepShade: e.target.checked })}
+                                        className="w-4 h-4"
+                                    />
+                                    🌑 Deep / dark shade (uses more acid)
+                                </label>
                             </div>
 
                             {/* Pan Form */}
@@ -1217,7 +1256,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 }
                                                 
                                                 const selectedColors = currentPan.kitColors.filter((_, idx) => selectedIds.includes(idx));
-                                                
+                                                const kitTotalWeight = validYarns.reduce(
+                                                    (sum, y) => sum + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0
+                                                );
+
                                                 // Create individual pans for each selected colorway, each with the shared yarn list
                                                 const newPans = selectedColors.map(color => {
                                                     const recipe = recipes.find(r => r.name === color.colorwayName);
@@ -1228,7 +1270,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         recipeId: recipe?.id || '',
                                                         recipe: recipe,
                                                         yarns: validYarns.map(y => ({ ...y })),
-                                                        fromKit: currentPan.kitName
+                                                        fromKit: currentPan.kitName,
+                                                        totalWeight: kitTotalWeight,
+                                                        capacity: currentPan.capacity || 300,
+                                                        deepShade: !!currentPan.deepShade,
                                                     };
                                                 });
                                                 
@@ -1474,7 +1519,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             {/* Recipe image or gradient icon */}
                                             {pan.type === 'gradientTray' ? (
                                                 (() => {
-                                                    const dye = inventory.find(i => i.name === pan.gradientDye);
+                                                    const dye = findDyeItem(inventory, pan.gradientDye);
                                                     const baseColor = dye?.color || '#0d9488';
                                                     return (
                                                         <div 
@@ -1489,8 +1534,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 })()
                                             ) : pan.type === 'dyeSquareTray' ? (
                                                 (() => {
-                                                    const dyeA = inventory.find(i => i.name === pan.squareColorA);
-                                                    const dyeB = inventory.find(i => i.name === pan.squareColorB);
+                                                    const dyeA = findDyeItem(inventory, pan.squareColorA);
+                                                    const dyeB = findDyeItem(inventory, pan.squareColorB);
                                                     const colorA = dyeA?.color || '#3b82f6';
                                                     const colorB = dyeB?.color || '#ef4444';
                                                     return (
@@ -1575,6 +1620,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                                     {pan.fromKit && (
                                                                         <span className="ml-2 text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded">
                                                                             from {pan.fromKit}
+                                                                        </span>
+                                                                    )}
+                                                                    {pan.deepShade && (
+                                                                        <span className="ml-2 text-xs bg-gray-800 text-white px-2 py-1 rounded">
+                                                                            🌑 deep
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -1740,7 +1790,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             } else {
                                                 pan.yarns.forEach(y => {
                                                     const key = `${y.base} (${y.hankSize}g)`;
-                                                    bases[key] = (bases[key] || 0) + parseInt(y.quantity);
+                                                    bases[key] = (bases[key] || 0) + (parseInt(y.quantity) || 0);
                                                 });
                                             }
                                         });
@@ -1791,8 +1841,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                             });
                                                         } else if (recipe.ingredients) {
                                                             recipe.ingredients.forEach(ing => {
-                                                                const item = inventory.find(i => i.name === ing.name);
-                                                                if (item?.category === 'dye') {
+                                                                if (findDyeItem(inventory, ing.name)) {
                                                                     if (ing.unit === 'g') {
                                                                         dyePowders.add(ing.name);
                                                                     } else {
@@ -1833,25 +1882,21 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     // Track totals needed for this session
                                     const { yarnNeeded, ballBandsNeeded, dyesNeeded } = calculatePanNeeds(session.pans);
 
-                                    // Track what other planned (non-archived) sessions have already
-                                    // committed, so we don't falsely show inventory as available when
-                                    // it's already spoken for by another session.
-                                    const committed = calculateCommittedNeeds(session.id);
+                                    // Reserve inventory for EARLIER-dated sessions first, so this
+                                    // session only flags a shortage if demand up to and including it
+                                    // exceeds stock (a later session never causes an alert here).
+                                    const committed = calculateCommittedNeeds({ date: session.date, id: session.id });
 
                                     // Check yarn inventory (subtract commitments from other planned sessions)
                                     Object.entries(yarnNeeded).forEach(([key, needed]) => {
                                         const [base, hankSize] = key.split('-');
-                                        const item = inventory.find(i => 
-                                            i.category === 'yarn base' && 
-                                            i.name === base && 
-                                            parseFloat(i.hankSize) === parseFloat(hankSize)
-                                        );
+                                        const item = findYarnBaseItem(inventory, base, hankSize);
                                         const onHand = item ? parseFloat(item.quantity) : 0;
                                         const committedElsewhere = committed.yarnNeeded[key] || 0;
                                         const available = onHand - committedElsewhere;
                                         if (available < needed) {
                                             const suffix = committedElsewhere > 0
-                                                ? ` (${onHand} on hand − ${committedElsewhere} in other planned sessions)`
+                                                ? ` (${onHand} on hand − ${committedElsewhere} in earlier planned sessions)`
                                                 : '';
                                             shortages.yarn.push(`${base} ${hankSize}g: need ${needed}, have ${available}${suffix}`);
                                         }
@@ -1864,19 +1909,15 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         
                                         // Skip ball band check for micro sizes (10g and under)
                                         if (size <= 10) return;
-                                        
-                                        const item = inventory.find(i => 
-                                            i.category === 'ball band' && 
-                                            i.forYarnBase === base && 
-                                            parseFloat(i.hankSize) === parseFloat(hankSize)
-                                        );
+
+                                        const item = findBallBand(inventory, base, hankSize);
                                         const onHand = item ? parseFloat(item.quantity) : 0;
                                         // Ball band commitments mirror yarn commitments for non-micro sizes
                                         const committedElsewhere = committed.ballBandsNeeded[key] || 0;
                                         const available = onHand - committedElsewhere;
                                         if (available < needed) {
                                             const suffix = committedElsewhere > 0
-                                                ? ` (${onHand} on hand − ${committedElsewhere} in other planned sessions)`
+                                                ? ` (${onHand} on hand − ${committedElsewhere} in earlier planned sessions)`
                                                 : '';
                                             shortages.ballBands.push(`${base} ${hankSize}g: need ${needed}, have ${available}${suffix}`);
                                         }
@@ -1885,23 +1926,20 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     // Check labels (total skeins) - labels can be in 'ball band' or 'other'
                                     // Also subtract labels committed to other planned sessions.
                                     const totalSkeins = Object.values(yarnNeeded).reduce((sum, qty) => sum + qty, 0);
-                                    const labels = inventory.filter(i => 
-                                        (i.category === 'ball band' || i.category === 'other') && 
-                                        i.name?.toLowerCase().includes('label')
-                                    );
+                                    const labels = labelItems(inventory);
                                     const totalLabels = labels.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
                                     const labelsCommittedElsewhere = Object.values(committed.yarnNeeded).reduce((sum, qty) => sum + qty, 0);
                                     const labelsAvailable = totalLabels - labelsCommittedElsewhere;
                                     if (labelsAvailable < totalSkeins) {
                                         const suffix = labelsCommittedElsewhere > 0
-                                            ? ` (${totalLabels} on hand − ${labelsCommittedElsewhere} in other planned sessions)`
+                                            ? ` (${totalLabels} on hand − ${labelsCommittedElsewhere} in earlier planned sessions)`
                                             : '';
                                         shortages.labels.push(`Labels: need ${totalSkeins}, have ${labelsAvailable}${suffix}`);
                                     }
                                     
                                     // Check dyes
                                     Object.keys(dyesNeeded).forEach(dyeName => {
-                                        const item = inventory.find(i => i.category === 'dye' && i.name === dyeName);
+                                        const item = findDyeItem(inventory, dyeName);
                                         if (!item || parseFloat(item.quantity || 0) <= 0) {
                                             shortages.dyes.push(`${dyeName}: ${item ? 'out of stock' : 'not in inventory'}`);
                                         }
@@ -1960,35 +1998,23 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     session.pans.forEach(pan => {
                                         if (pan.type === 'gradientTray') {
                                             totalSkeins += 10;
-                                            const yarnItem = inventory.find(i => 
-                                                i.category === 'yarn base' && 
-                                                i.name === pan.gradientYarnBase && 
-                                                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-                                            );
+                                            const yarnItem = findYarnBaseItem(inventory, pan.gradientYarnBase, pan.gradientHankSize);
                                             if (yarnItem?.cost) {
                                                 totalCost += parseFloat(yarnItem.cost) * 10;
                                             }
                                         } else if (pan.type === 'dyeSquareTray') {
                                             totalSkeins += 25;
-                                            const yarnItem = inventory.find(i => 
-                                                i.category === 'yarn base' && 
-                                                i.name === pan.gradientYarnBase && 
-                                                parseFloat(i.hankSize) === parseFloat(pan.gradientHankSize)
-                                            );
+                                            const yarnItem = findYarnBaseItem(inventory, pan.gradientYarnBase, pan.gradientHankSize);
                                             if (yarnItem?.cost) {
                                                 totalCost += parseFloat(yarnItem.cost) * 25;
                                             }
                                         } else {
-                                            const skeins = pan.yarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0);
+                                            const skeins = pan.yarns.reduce((sum, y) => sum + (parseInt(y.quantity) || 0), 0);
                                             totalSkeins += skeins;
                                             pan.yarns.forEach(yarn => {
-                                                const yarnItem = inventory.find(i => 
-                                                    i.category === 'yarn base' && 
-                                                    i.name === yarn.base && 
-                                                    parseFloat(i.hankSize) === parseFloat(yarn.hankSize)
-                                                );
+                                                const yarnItem = findYarnBaseItem(inventory, yarn.base, yarn.hankSize);
                                                 if (yarnItem?.cost) {
-                                                    totalCost += parseFloat(yarnItem.cost) * parseInt(yarn.quantity);
+                                                    totalCost += parseFloat(yarnItem.cost) * (parseInt(yarn.quantity) || 0);
                                                 }
                                             });
                                         }
@@ -2009,18 +2035,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         } else {
                                             pan.yarns.forEach(y => {
                                                 const key = `${y.base}-${y.hankSize}`;
-                                                yarnGroups[key] = (yarnGroups[key] || 0) + parseInt(y.quantity);
+                                                yarnGroups[key] = (yarnGroups[key] || 0) + (parseInt(y.quantity) || 0);
                                             });
                                         }
                                     });
-                                    
+
                                     Object.entries(yarnGroups).forEach(([key, qty]) => {
                                         const [base, hankSize] = key.split('-');
-                                        const yarnItem = inventory.find(i => 
-                                            i.category === 'yarn base' && 
-                                            i.name === base && 
-                                            parseFloat(i.hankSize) === parseFloat(hankSize)
-                                        );
+                                        const yarnItem = findYarnBaseItem(inventory, base, hankSize);
                                         if (yarnItem?.typicalPrice) {
                                             expectedRevenue += parseFloat(yarnItem.typicalPrice) * qty;
                                         }
@@ -2093,7 +2115,7 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
 {/* Recipe image or gradient icon */}
 {pan.type === "gradientTray" ? (
   (() => {
-    const dye = inventory.find(i => i.name === pan.gradientDye);
+    const dye = findDyeItem(inventory, pan.gradientDye);
     const baseColor = dye?.color || "#0d9488";
     return (
       <div
@@ -2108,8 +2130,8 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
   })()
 ) : pan.type === "dyeSquareTray" ? (
   (() => {
-    const dyeA = inventory.find(i => i.name === pan.squareColorA);
-    const dyeB = inventory.find(i => i.name === pan.squareColorB);
+    const dyeA = findDyeItem(inventory, pan.squareColorA);
+    const dyeB = findDyeItem(inventory, pan.squareColorB);
     const colorA = dyeA?.color || "#3b82f6";
     const colorB = dyeB?.color || "#ef4444";
     return (

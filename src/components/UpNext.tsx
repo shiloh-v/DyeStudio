@@ -2,13 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { DateUtils } from '../lib/dates';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
-import { findYarnBaseItem, findBallBand } from '../lib/yarnMatch';
+import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
+import { findDyeItem } from '../lib/dyeMatch';
+import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
+import { panAcidUsage } from '../lib/chemicals';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
+    // Catalog-aware yarn matching so old supplier-name refs still resolve.
+    const _yarnCatalog = settings?.yarnBases || [];
+    const findYarnBaseItem = (inv, ref, hank?) => _findYarnBaseItem(inv, ref, hank, _yarnCatalog);
+    const findBallBand = (inv, ref, hank?) => _findBallBand(inv, ref, hank, _yarnCatalog);
     const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
     const [currentPanIndex, setCurrentPanIndex] = useState(() => Number(localStorage.getItem('queue_pan')) || 0);
     // Pan indices marked "dyed" this session (fills the progress dots).
     const [completedPans, setCompletedPans] = useState(() => new Set<number>());
+    // In-flight lock so a double-tap on "Finish" can't deduct/create twice.
+    const [finishing, setFinishing] = useState(false);
 
     // Unique yarn bases and their available hank sizes from inventory.
     // (Used by the ad-hoc pan editor; previously referenced but never defined,
@@ -279,10 +288,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         };
 
         // Citric acid cost - ~20g per pan
-        const citricAcid = inventory.find(i => 
-            i.category === 'chemical' && 
-            i.name.toLowerCase().includes('citric')
-        );
+        const citricAcid = findChemicalByRole(inventory, settings, 'citric');
         if (citricAcid) {
             const costPerGram = getCostPerGram(citricAcid);
             costs.chemicals = costPerGram * 20; // 20g per pan
@@ -297,7 +303,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             const totalGramsYarn = parseFloat(pan.gradientHankSize) * 10;
 
             // Dye cost
-            const dye = inventory.find(i => i.category === 'dye' && i.name === pan.gradientDye);
+            const dye = findDyeItem(inventory, pan.gradientDye);
             if (dye) {
                 const totalDepth = pan.depths.reduce((sum, d) => sum + d, 0);
                 const dyeNeeded = (totalGramsYarn * totalDepth) / 100;
@@ -309,10 +315,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
             // Label - check both 'other' and 'ball band' categories
-            const labelItem = inventory.find(i => 
-                (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
-                i.name?.toLowerCase().includes('label')
-            );
+            const labelItem = findLabelItem(inventory);
             
             // Calculate per-skein cost (all skeins identical)
             const yarnCost = yarnItem?.cost ? parseFloat(yarnItem.cost) : 0;
@@ -344,8 +347,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
             // Dye costs for both colors
             const amounts = [1.25, 2.5, 5, 7.5, 10];
-            const dyeA = inventory.find(i => i.category === 'dye' && i.name === pan.squareColorA);
-            const dyeB = inventory.find(i => i.category === 'dye' && i.name === pan.squareColorB);
+            const dyeA = findDyeItem(inventory, pan.squareColorA);
+            const dyeB = findDyeItem(inventory, pan.squareColorB);
             const totalML_each = amounts.reduce((s, a) => s + a, 0) * 5; // each color used 5 times per amount
             if (dyeA) {
                 const costPerGram = getCostPerGram(dyeA);
@@ -359,10 +362,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             // Ball band
             const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
-            const labelItem = inventory.find(i => 
-                (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
-                i.name?.toLowerCase().includes('label')
-            );
+            const labelItem = findLabelItem(inventory);
             
             const yarnCost = yarnItem?.cost ? parseFloat(yarnItem.cost) : 0;
             const dyeCostPerSkein = costs.dye / 25;
@@ -392,71 +392,35 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             
             costs.skeins = pan.yarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0);
             
-            // Dye and additional chemical costs from recipe
-            if (recipe) {
-                const scaledIngredients = scaleIngredients(recipe, totalWeight);
-                console.log('🎨 DYE COST DEBUG:', { 
-                    recipeName: recipe.name,
-                    colorType: recipe.colorType,
-                    totalWeight,
-                    scaledIngredients 
-                });
-                
-                if (recipe.colorType === 'variegated') {
-                    // For variegated: each solution contains dyes
-                    // When you use the solution, you use ALL the dyes that went into making it
+            // Dye costs from the recipe OR — for Color Lab pans — the color sketch.
+            const colorSketch = pan.type === 'colorLab' ? pan.colorSketch : null;
+            const dyeSource = recipe || colorSketch;
+            if (dyeSource) {
+                const scaledIngredients = scaleIngredients(recipe, totalWeight, colorSketch);
+                const isVariegated = recipe ? recipe.colorType === 'variegated' : colorSketch?.type === 'variegated';
+
+                if (isVariegated) {
+                    // Each solution/section contains the dyes that went into making it.
                     scaledIngredients.forEach(solution => {
-                        console.log('  Solution:', solution.scaledTargetMl + 'ml');
-                        solution.dyes.forEach(dye => {
+                        (solution.dyes || []).forEach(dye => {
                             const amount = parseFloat(dye.scaledAmount || 0);
-                            const unit = dye.unit || 'g';
-                            
-                            // Convert to grams
-                            let gramsOfDye = amount;
-                            if (unit === 'ml') {
-                                // For stock solutions: ml of stock / 100 = grams of dye powder
-                                gramsOfDye = amount / 100;
-                            }
-                            // else already in grams
-                            
-                            const dyeItem = inventory.find(i => i.category === 'dye' && i.name === dye.name);
-                            if (dyeItem) {
-                                const costPerGram = getCostPerGram(dyeItem);
-                                const dyeCost = gramsOfDye * costPerGram;
-                                console.log('    -', dye.name, ':', gramsOfDye + 'g', '(from ' + amount + unit + ') ×', '$' + costPerGram.toFixed(4) + '/g', '=', '$' + dyeCost.toFixed(4));
-                                costs.dye += dyeCost;
-                            } else {
-                                console.log('    -', dye.name, ': NOT FOUND IN INVENTORY');
-                            }
+                            const gramsOfDye = (dye.unit || 'g') === 'ml' ? amount / 100 : amount;
+                            const dyeItem = findDyeItem(inventory, dye.name);
+                            if (dyeItem) costs.dye += gramsOfDye * getCostPerGram(dyeItem);
                         });
                     });
                 } else {
-                    // Tonal/Speckled: ingredients have units (ml, g, tsp, tbsp)
+                    // Tonal/Speckled: ingredients have units (ml, g, tsp, tbsp).
                     scaledIngredients.forEach(ing => {
-                        const item = inventory.find(i => i.name === ing.name);
-                        if (item && item.category === 'dye') {
+                        const item = findDyeItem(inventory, ing.name);
+                        if (item) {
                             const amount = parseFloat(ing.scaledAmount || 0);
                             const unit = ing.unit || 'g';
-                            
-                            // Convert amount to grams based on unit
                             let gramsOfDye = amount;
-                            if (unit === 'ml') {
-                                // For stock solutions: 1% = 1g dye per 100ml
-                                // So 450ml of stock solution = 450/100 = 4.5g of dye powder
-                                gramsOfDye = amount / 100;
-                            } else if (unit === 'tsp') {
-                                gramsOfDye = amount * 5; // 1 tsp ≈ 5g
-                            } else if (unit === 'tbsp') {
-                                gramsOfDye = amount * 15; // 1 tbsp ≈ 15g
-                            }
-                            // else unit is already 'g'
-                            
-                            const costPerGram = getCostPerGram(item);
-                            const dyeCost = gramsOfDye * costPerGram;
-                            console.log('  -', ing.name, ':', gramsOfDye + 'g', '(from ' + amount + unit + ') ×', '$' + costPerGram.toFixed(4) + '/g', '=', '$' + dyeCost.toFixed(4));
-                            costs.dye += dyeCost;
-                        } else if (item) {
-                            console.log('  -', ing.name, ': not a dye (category:', item.category + ')');
+                            if (unit === 'ml') gramsOfDye = amount / 100;
+                            else if (unit === 'tsp') gramsOfDye = amount * 5;
+                            else if (unit === 'tbsp') gramsOfDye = amount * 15;
+                            costs.dye += gramsOfDye * getCostPerGram(item);
                         }
                     });
                 }
@@ -469,10 +433,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                 // Ball band - match both yarn base AND hank size
                 const ballBand = findBallBand(inventory, yarnGroup.base, yarnGroup.hankSize);
                 
-                const labelItem = inventory.find(i => 
-                    (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
-                    i.name?.toLowerCase().includes('label')
-                );
+                const labelItem = findLabelItem(inventory);
                 
                 const hankSize = parseFloat(yarnGroup.hankSize);
                 const quantity = parseInt(yarnGroup.quantity);
@@ -507,22 +468,16 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         return costs;
     };
 
-    const markPanComplete = async () => {
-        if (currentPanIndex < selectedSession.pans.length - 1) {
-            setCurrentPanIndex(currentPanIndex + 1);
-        } else {
-            if (await confirmDialog({ message: 'All pans in this session are complete! Mark session as finished?', confirmText: 'Finish session' })) {
-                finishSession();
-            }
-        }
-    };
-
     const finishSession = async () => {
         if (!selectedSession) return;
+        if (selectedSession.archived) { toast('This session is already finished.', 'error'); return; }
+        if (finishing) return;
 
-        const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn from inventory\n- Remove this session from Dye Sessions`;
+        const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn, dye and acid from inventory\n- Remove this session from Dye Sessions`;
 
         if (!(await confirmDialog({ title: 'Finish session', message: confirmMessage, confirmText: 'Finish' }))) return;
+
+        setFinishing(true);
 
         // Get next batch ID number
         const getNextBatchId = () => {
@@ -630,46 +585,121 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
         saveBatches([...batches, ...newBatches]);
 
-        // Deduct yarn from inventory
-        const updatedInventory = [...inventory];
-        selectedSession.pans.forEach(pan => {
+        // ---- Deduct consumed inventory: yarn + dye + acid ----
+        const UNIT_G = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
+        const ML_PER = { ml: 1, L: 1000, oz: 29.5735, tsp: 5, tbsp: 15, g: 1 };
+
+        // Recipe amount → grams of dye powder (stock solution: ml ÷ 100).
+        const gramsFromAmount = (amount, unit) => {
+            const a = parseFloat(amount) || 0;
+            if (unit === 'ml') return a / 100;
+            if (unit === 'tsp') return a * 5;
+            if (unit === 'tbsp') return a * 15;
+            return a;
+        };
+        // Grams of each dye a pan consumes (mirrors the cost breakdown exactly).
+        const dyeGramsForPan = (pan, recipe) => {
+            const out = {};
+            const add = (name, g) => {
+                if (!name || !(g > 0)) return;
+                const k = String(name).toLowerCase().trim();
+                out[k] = (out[k] || 0) + g;
+            };
             if (pan.type === 'gradientTray') {
-                // Deduct 10 skeins for gradient tray
-                const inventoryItem = findYarnBaseItem(updatedInventory, pan.gradientYarnBase, pan.gradientHankSize);
-                if (inventoryItem) {
-                    inventoryItem.quantity = Math.max(0, parseFloat(inventoryItem.quantity) - 10);
-                }
+                const totalGramsYarn = (parseFloat(pan.gradientHankSize) || 0) * 10;
+                const totalDepth = (pan.depths || []).reduce((s, d) => s + (parseFloat(d) || 0), 0);
+                add(pan.gradientDye, (totalGramsYarn * totalDepth) / 100);
             } else if (pan.type === 'dyeSquareTray') {
-                // Deduct 25 skeins for dye square tray
-                const inventoryItem = findYarnBaseItem(updatedInventory, pan.gradientYarnBase, pan.gradientHankSize);
-                if (inventoryItem) {
-                    inventoryItem.quantity = Math.max(0, parseFloat(inventoryItem.quantity) - 25);
-                }
+                const totalMlEach = [1.25, 2.5, 5, 7.5, 10].reduce((s, a) => s + a, 0) * 5;
+                add(pan.squareColorA, totalMlEach / 100);
+                add(pan.squareColorB, totalMlEach / 100);
             } else {
-                // Deduct regular pan yarns
-                pan.yarns.forEach(yarnInPan => {
-                    const inventoryItem = findYarnBaseItem(updatedInventory, yarnInPan.base, yarnInPan.hankSize);
-                    
-                    if (inventoryItem) {
-                        const quantityToDeduct = parseInt(yarnInPan.quantity || 0);
-                        inventoryItem.quantity = Math.max(0, parseFloat(inventoryItem.quantity) - quantityToDeduct);
+                // Recipe pan, or a Color Lab pan whose dyes live in its color sketch.
+                const colorSketch = pan.type === 'colorLab' ? pan.colorSketch : null;
+                if (recipe || colorSketch) {
+                    const totalWeight = pan.totalWeight || (pan.yarns || []).reduce((s, y) =>
+                        s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
+                    const scaled = scaleIngredients(recipe, totalWeight, colorSketch);
+                    const isVar = recipe ? recipe.colorType === 'variegated' : colorSketch?.type === 'variegated';
+                    if (isVar) {
+                        scaled.forEach(sol => (sol.dyes || []).forEach(d => add(d.name, gramsFromAmount(d.scaledAmount, d.unit || 'g'))));
+                    } else {
+                        scaled.forEach(ing => add(ing.name, gramsFromAmount(ing.scaledAmount, ing.unit || 'g')));
                     }
+                }
+            }
+            return out;
+        };
+
+        const updatedInventory = [...inventory];
+        let citricGrams = 0, vinegarMl = 0;
+
+        selectedSession.pans.forEach(pan => {
+            // --- Yarn ---
+            if (pan.type === 'gradientTray') {
+                const it = findYarnBaseItem(updatedInventory, pan.gradientYarnBase, pan.gradientHankSize);
+                if (it) it.quantity = Math.max(0, parseFloat(it.quantity) - 10);
+            } else if (pan.type === 'dyeSquareTray') {
+                const it = findYarnBaseItem(updatedInventory, pan.gradientYarnBase, pan.gradientHankSize);
+                if (it) it.quantity = Math.max(0, parseFloat(it.quantity) - 25);
+            } else {
+                (pan.yarns || []).forEach(y => {
+                    const it = findYarnBaseItem(updatedInventory, y.base, y.hankSize);
+                    if (it) it.quantity = Math.max(0, parseFloat(it.quantity) - (parseInt(y.quantity) || 0));
                 });
             }
+
+            // --- Dye powder (recipe grams → ounces, since dyes are stocked in oz) ---
+            const recipe = pan.recipe || (pan.recipeId ? recipes.find(r => r.id === parseInt(pan.recipeId)) : null);
+            Object.entries(dyeGramsForPan(pan, recipe)).forEach(([nameLc, grams]) => {
+                const dyeItem = findDyeItem(updatedInventory, nameLc);
+                if (dyeItem) {
+                    const curOz = (parseFloat(dyeItem.quantity) || 0) * (UNIT_G[dyeItem.unit || 'g'] || 1) / 28.3495;
+                    dyeItem.quantity = Math.max(0, Number((curOz - (grams as number) / 28.3495).toFixed(3)));
+                    dyeItem.unit = 'oz';
+                }
+            });
+
+            // --- Acid (citric or vinegar, with deep-shade + padding) ---
+            const acid = panAcidUsage(pan, settings, updatedInventory);
+            if (acid.type === 'citric') citricGrams += acid.grams;
+            else vinegarMl += acid.ml;
         });
+
+        // Deduct citric acid, keeping its own unit.
+        if (citricGrams > 0) {
+            const citric = findChemicalByRole(updatedInventory, settings, 'citric');
+            if (citric) {
+                const per = UNIT_G[citric.unit || 'g'] || 1;
+                const curG = (parseFloat(citric.quantity) || 0) * per;
+                citric.quantity = Math.max(0, Number(((curG - citricGrams) / per).toFixed(3)));
+            }
+        }
+        // Deduct vinegar if it's tracked as a chemical.
+        if (vinegarMl > 0) {
+            const vinegar = findChemicalByRole(updatedInventory, settings, 'vinegar');
+            if (vinegar) {
+                const per = ML_PER[vinegar.unit || 'ml'] || 1;
+                const curMl = (parseFloat(vinegar.quantity) || 0) * per;
+                vinegar.quantity = Math.max(0, Number(((curMl - vinegarMl) / per).toFixed(3)));
+            }
+        }
+
         saveInventory(updatedInventory);
 
         // Archive session (don't delete it)
-        const updatedSessions = dyeSessions.map(s => 
+        const updatedSessions = dyeSessions.map(s =>
             s.id === selectedSession.id ? { ...s, archived: true } : s
         );
         saveDyeSessions(updatedSessions);
 
         // Reset selection
+        localStorage.removeItem('queue_done_' + selectedSession.id);
         setCurrentPanIndex(0);
         setSelectedSessionId('');
+        setFinishing(false);
 
-        toast('Session completed! Batches added to Pipeline, inventory updated, and session archived.', 'success');
+        toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted.', 'success');
     };
 
     const goToPreviousPan = () => {
@@ -714,9 +744,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                             </div>
                             <button
                                 onClick={finishSession}
-                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap"
+                                disabled={finishing}
+                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                🏁 Finish Session
+                                {finishing ? 'Finishing…' : '🏁 Finish Session'}
                             </button>
                         </div>
                     </div>
@@ -752,13 +783,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     className="w-32 h-32 rounded-lg border-2 flex items-center justify-center flex-shrink-0"
                                                     style={{
                                                         background: `linear-gradient(to right, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.gradientDye);
+                                                            const dye = findDyeItem(inventory, currentPan.gradientDye);
                                                             return dye?.color || '#0d9488';
                                                         })()}15, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.gradientDye);
+                                                            const dye = findDyeItem(inventory, currentPan.gradientDye);
                                                             return dye?.color || '#0d9488';
                                                         })()}60, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.gradientDye);
+                                                            const dye = findDyeItem(inventory, currentPan.gradientDye);
                                                             return dye?.color || '#0d9488';
                                                         })()})`
                                                     }}
@@ -794,10 +825,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     className="w-32 h-32 rounded-lg border-2 flex items-center justify-center flex-shrink-0"
                                                     style={{
                                                         background: `linear-gradient(135deg, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.squareColorA);
+                                                            const dye = findDyeItem(inventory, currentPan.squareColorA);
                                                             return dye?.color || '#3b82f6';
                                                         })()}80, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.squareColorB);
+                                                            const dye = findDyeItem(inventory, currentPan.squareColorB);
                                                             return dye?.color || '#ef4444';
                                                         })()}80)`
                                                     }}

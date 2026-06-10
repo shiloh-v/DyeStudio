@@ -112,10 +112,28 @@ export function Inventory({ inventory, saveInventory, settings }) {
     const rawCategories = settings.inventoryCategories || ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'label'];
     const categories = Array.from(new Set([...rawCategories.filter((c) => c !== 'other'), 'label']));
 
+    // When an item is renamed, remember its previous name(s) as aliases so that
+    // recipes/pans/ball bands referencing the old name keep resolving. This makes
+    // any naming-convention change self-healing for everything that points at it.
+    const withRenameAliases = (next, prev) => {
+        if (!prev) return next;
+        const norm = (s) => String(s ?? '').trim().toLowerCase();
+        const aliases = Array.isArray(next.aliases) ? [...next.aliases] : [...(prev.aliases || [])];
+        const remember = (oldVal, newVal) => {
+            const o = String(oldVal ?? '').trim();
+            if (o && norm(o) !== norm(newVal) && !aliases.some((a) => norm(a) === norm(o))) aliases.push(o);
+        };
+        remember(prev.name, next.name);
+        remember(prev.myYarnName, next.myYarnName);
+        return { ...next, aliases };
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         if (editingId) {
-            saveInventory(inventory.map(i => i.id === editingId ? { ...formData, id: editingId } : i));
+            const prev = inventory.find(i => i.id === editingId);
+            const updated = withRenameAliases({ ...formData, id: editingId }, prev);
+            saveInventory(inventory.map(i => i.id === editingId ? updated : i));
         } else {
             saveInventory([...inventory, { ...formData, id: Date.now() }]);
         }

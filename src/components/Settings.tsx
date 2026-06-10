@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
+import { chemSettings } from '../lib/chemicals';
 
 export function Settings({ settings, saveSettings, inventory, darkMode, toggleDark }) {
     const [activeSection, setActiveSection] = useState('colorTypes');
     const [newItem, setNewItem] = useState('');
     const [newSizeMapping, setNewSizeMapping] = useState({ grams: '', name: '' });
+
+    const chem = chemSettings(settings);
+    const setChem = (field, value) =>
+        saveSettings({ ...settings, chemicals: { ...(settings.chemicals || {}), [field]: value } });
 
     const sections = {
         colorTypes: { label: 'Color Types', key: 'colorTypes' },
@@ -97,6 +102,85 @@ export function Settings({ settings, saveSettings, inventory, darkMode, toggleDa
                         >
                             🌙 Dark
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Chemical usage (acid per pan) */}
+            <div className="bg-white rounded-lg card-shadow p-6">
+                <h3 className="text-lg font-semibold mb-1">Chemical Usage</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    How much acid each pan uses when a session is finished. Bases containing
+                    “Stellina” use vinegar; everything else uses citric acid.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Citric acid per pan (g)</label>
+                        <input
+                            type="number" step="1" min="0"
+                            value={chem.citricAcidPerPanG}
+                            onChange={(e) => setChem('citricAcidPerPanG', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">≈ 1 heaping tbsp ≈ 20 g</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vinegar per pan (ml)</label>
+                        <input
+                            type="number" step="5" min="0"
+                            value={chem.vinegarPerPanMl}
+                            onChange={(e) => setChem('vinegarPerPanMl', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">For Stellina bases</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Deep-shade multiplier (×)</label>
+                        <input
+                            type="number" step="0.1" min="1"
+                            value={chem.deepShadeMultiplier}
+                            onChange={(e) => setChem('deepShadeMultiplier', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Extra acid for pans marked “deep shade”</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Safety padding (%)</label>
+                        <input
+                            type="number" step="5" min="0"
+                            value={chem.paddingPct}
+                            onChange={(e) => setChem('paddingPct', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Deduct a bit extra so you reorder early</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Citric acid item</label>
+                        <select
+                            value={settings.chemicals?.citricItemId || ''}
+                            onChange={(e) => setChem('citricItemId', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="">Auto-detect (name contains “citric”)</option>
+                            {(inventory || []).filter(i => i.category === 'chemical').map(i => (
+                                <option key={i.id} value={i.id}>{i.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">Pin the exact item so renaming it never breaks deductions</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vinegar item</label>
+                        <select
+                            value={settings.chemicals?.vinegarItemId || ''}
+                            onChange={(e) => setChem('vinegarItemId', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="">Auto-detect (name contains “vinegar”)</option>
+                            {(inventory || []).filter(i => i.category === 'chemical').map(i => (
+                                <option key={i.id} value={i.id}>{i.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">For Stellina bases</p>
                     </div>
                 </div>
             </div>
