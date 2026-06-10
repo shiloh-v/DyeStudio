@@ -433,10 +433,17 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                         if (!Number.isNaN(d)) return d;
                         return Number(b.id) || 0;
                     };
+                    // Batch number from the batch id ("B-007" -> 7) for tie-breaking.
+                    const batchNum = (b) => {
+                        const m = String(b.batchId || b.batch_id || '').match(/(\d+)/);
+                        return m ? parseInt(m[1], 10) : 0;
+                    };
+                    // Most recently moved on top; batches moved together (same
+                    // timestamp) then run in ascending batch-number order.
                     const batchesInStatus = (status === 'stocked'
                         ? batches.filter(isStocked)
                         : batches.filter(b => b.status === status)
-                    ).slice().sort((a, b) => recency(b) - recency(a));
+                    ).slice().sort((a, b) => recency(b) - recency(a) || batchNum(a) - batchNum(b));
                     const statusInfo = statusLabels[status];
                     
                     return (
