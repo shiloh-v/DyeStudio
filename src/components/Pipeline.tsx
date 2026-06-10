@@ -4,9 +4,13 @@ import { useFormGuard } from '../lib/useFormGuard';
 import { isStocked } from '../lib/batches';
 import { confirmDialog, promptDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
-import { findYarnBaseItem, findBallBand } from '../lib/yarnMatch';
+import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
+    // Catalog-aware yarn matching so old supplier-name refs still resolve.
+    const _yarnCatalog = settings?.yarnBases || [];
+    const findYarnBaseItem = (inv, ref, hank?) => _findYarnBaseItem(inv, ref, hank, _yarnCatalog);
+    const findBallBand = (inv, ref, hank?) => _findBallBand(inv, ref, hank, _yarnCatalog);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({
         recipeId: '',

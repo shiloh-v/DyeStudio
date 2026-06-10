@@ -3,7 +3,7 @@ import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
-import { findYarnBaseItem, findBallBand, yarnBaseRef } from '../lib/yarnMatch';
+import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -44,6 +44,13 @@ function SortablePanCard({ id, children }: { id: string | number; children: (h: 
 }
 
 export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, settings, kits, colorSketches, gradients }) {
+    // Catalog-aware yarn matching so old supplier-name refs still resolve.
+    const _yarnCatalog = settings?.yarnBases || [];
+    const findYarnBaseItem = (inv, ref, hank?) => _findYarnBaseItem(inv, ref, hank, _yarnCatalog);
+    const findBallBand = (inv, ref, hank?) => _findBallBand(inv, ref, hank, _yarnCatalog);
+    // Resolve a (possibly old supplier-name) yarn ref to its current name, so
+    // needs/commitments aggregate per base and shortages show the current name.
+    const canon = (ref) => canonicalYarnRef(ref, _yarnCatalog);
     // Dyes already made into a saved gradient — excluded from the gradient-tray
     // picker so you don't accidentally re-do a gradient you've already done.
     const usedGradientDyes = new Set((gradients || []).map(g => g.dyeColor).filter(Boolean));
@@ -156,19 +163,19 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
 
         (pans || []).forEach(pan => {
             if (pan.type === 'gradientTray') {
-                const yKey = `${pan.gradientYarnBase}-${pan.gradientHankSize}`;
+                const yKey = `${canon(pan.gradientYarnBase)}-${pan.gradientHankSize}`;
                 yarnNeeded[yKey] = (yarnNeeded[yKey] || 0) + 10;
                 ballBandsNeeded[yKey] = (ballBandsNeeded[yKey] || 0) + 10;
                 if (pan.gradientDye) dyesNeeded[pan.gradientDye] = true;
             } else if (pan.type === 'dyeSquareTray') {
-                const yKey = `${pan.gradientYarnBase}-${pan.gradientHankSize}`;
+                const yKey = `${canon(pan.gradientYarnBase)}-${pan.gradientHankSize}`;
                 yarnNeeded[yKey] = (yarnNeeded[yKey] || 0) + 25;
                 ballBandsNeeded[yKey] = (ballBandsNeeded[yKey] || 0) + 25;
                 if (pan.squareColorA) dyesNeeded[pan.squareColorA] = true;
                 if (pan.squareColorB) dyesNeeded[pan.squareColorB] = true;
             } else {
                 (pan.yarns || []).forEach(yarn => {
-                    const yKey = `${yarn.base}-${yarn.hankSize}`;
+                    const yKey = `${canon(yarn.base)}-${yarn.hankSize}`;
                     const qty = parseInt(yarn.quantity) || 0;
                     yarnNeeded[yKey] = (yarnNeeded[yKey] || 0) + qty;
                     ballBandsNeeded[yKey] = (ballBandsNeeded[yKey] || 0) + qty;
@@ -198,11 +205,24 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     // (non-archived) sessions, optionally excluding one session by id.
     // This lets us subtract already-spoken-for yarn from on-hand inventory
     // so a second planned session correctly shows a shortage warning.
-    const calculateCommittedNeeds = (excludeSessionId = null) => {
+    // Inventory is reserved CHRONOLOGICALLY: earlier-dated sessions get first
+    // claim. For a target session, sum only the needs of sessions scheduled
+    // strictly before it (earlier date; same date → earlier id/creation). So an
+    // earlier session never shows a shortage caused by a later one — only the
+    // later session that tips cumulative demand past stock does.
+    const calculateCommittedNeeds = (target: { date?: any; id?: any }) => {
         const committed: { yarnNeeded: Record<string, number>; ballBandsNeeded: Record<string, number> } = { yarnNeeded: {}, ballBandsNeeded: {} };
+        const ts = (d) => { const t = new Date(d || 0).getTime(); return Number.isFinite(t) ? t : 0; };
+        const targetTime = ts(target?.date);
+        const targetId = Number(target?.id ?? Number.MAX_SAFE_INTEGER);
+        const isBefore = (s) => {
+            if (s.archived) return false;
+            const st = ts(s.date);
+            if (st !== targetTime) return st < targetTime;
+            return Number(s.id) < targetId; // same date → earlier creation wins
+        };
         dyeSessions.forEach(s => {
-            if (s.archived) return;
-            if (excludeSessionId != null && s.id === excludeSessionId) return;
+            if (!isBefore(s)) return;
             const needs = calculatePanNeeds(s.pans || []);
             Object.entries(needs.yarnNeeded).forEach(([k, v]) => {
                 committed.yarnNeeded[k] = (committed.yarnNeeded[k] || 0) + v;
@@ -391,7 +411,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         // committed to other planned (non-archived) sessions AND to pans
         // already added to the session currently being built/edited.
         let inventoryWarnings = [];
-        const committed = calculateCommittedNeeds(editingId);
+        // Only sessions scheduled before the one being built/edited have a prior
+        // claim on inventory (a new session sits last on its date → MAX id).
+        const committed = calculateCommittedNeeds({ date: formData.date, id: editingId ?? Number.MAX_SAFE_INTEGER });
         const inProgressNeeds = calculatePanNeeds(otherPans);
 
         const getEffectiveAvailable = (base, hankSize) => {
@@ -1860,10 +1882,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     // Track totals needed for this session
                                     const { yarnNeeded, ballBandsNeeded, dyesNeeded } = calculatePanNeeds(session.pans);
 
-                                    // Track what other planned (non-archived) sessions have already
-                                    // committed, so we don't falsely show inventory as available when
-                                    // it's already spoken for by another session.
-                                    const committed = calculateCommittedNeeds(session.id);
+                                    // Reserve inventory for EARLIER-dated sessions first, so this
+                                    // session only flags a shortage if demand up to and including it
+                                    // exceeds stock (a later session never causes an alert here).
+                                    const committed = calculateCommittedNeeds({ date: session.date, id: session.id });
 
                                     // Check yarn inventory (subtract commitments from other planned sessions)
                                     Object.entries(yarnNeeded).forEach(([key, needed]) => {
@@ -1874,7 +1896,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         const available = onHand - committedElsewhere;
                                         if (available < needed) {
                                             const suffix = committedElsewhere > 0
-                                                ? ` (${onHand} on hand − ${committedElsewhere} in other planned sessions)`
+                                                ? ` (${onHand} on hand − ${committedElsewhere} in earlier planned sessions)`
                                                 : '';
                                             shortages.yarn.push(`${base} ${hankSize}g: need ${needed}, have ${available}${suffix}`);
                                         }
@@ -1895,7 +1917,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         const available = onHand - committedElsewhere;
                                         if (available < needed) {
                                             const suffix = committedElsewhere > 0
-                                                ? ` (${onHand} on hand − ${committedElsewhere} in other planned sessions)`
+                                                ? ` (${onHand} on hand − ${committedElsewhere} in earlier planned sessions)`
                                                 : '';
                                             shortages.ballBands.push(`${base} ${hankSize}g: need ${needed}, have ${available}${suffix}`);
                                         }
@@ -1913,7 +1935,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     const labelsAvailable = totalLabels - labelsCommittedElsewhere;
                                     if (labelsAvailable < totalSkeins) {
                                         const suffix = labelsCommittedElsewhere > 0
-                                            ? ` (${totalLabels} on hand − ${labelsCommittedElsewhere} in other planned sessions)`
+                                            ? ` (${totalLabels} on hand − ${labelsCommittedElsewhere} in earlier planned sessions)`
                                             : '';
                                         shortages.labels.push(`Labels: need ${totalSkeins}, have ${labelsAvailable}${suffix}`);
                                     }
