@@ -154,6 +154,34 @@ export function Settings({ settings, saveSettings, inventory, darkMode, toggleDa
                         />
                         <p className="text-xs text-gray-400 mt-1">Deduct a bit extra so you reorder early</p>
                     </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Citric acid item</label>
+                        <select
+                            value={settings.chemicals?.citricItemId || ''}
+                            onChange={(e) => setChem('citricItemId', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="">Auto-detect (name contains “citric”)</option>
+                            {(inventory || []).filter(i => i.category === 'chemical').map(i => (
+                                <option key={i.id} value={i.id}>{i.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">Pin the exact item so renaming it never breaks deductions</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vinegar item</label>
+                        <select
+                            value={settings.chemicals?.vinegarItemId || ''}
+                            onChange={(e) => setChem('vinegarItemId', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                        >
+                            <option value="">Auto-detect (name contains “vinegar”)</option>
+                            {(inventory || []).filter(i => i.category === 'chemical').map(i => (
+                                <option key={i.id} value={i.id}>{i.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">For Stellina bases</p>
+                    </div>
                 </div>
             </div>
 

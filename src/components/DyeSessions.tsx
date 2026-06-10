@@ -5,6 +5,7 @@ import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
+import { labelItems } from '../lib/roleMatch';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -1925,10 +1926,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     // Check labels (total skeins) - labels can be in 'ball band' or 'other'
                                     // Also subtract labels committed to other planned sessions.
                                     const totalSkeins = Object.values(yarnNeeded).reduce((sum, qty) => sum + qty, 0);
-                                    const labels = inventory.filter(i => 
-                                        (i.category === 'ball band' || i.category === 'other') && 
-                                        i.name?.toLowerCase().includes('label')
-                                    );
+                                    const labels = labelItems(inventory);
                                     const totalLabels = labels.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
                                     const labelsCommittedElsewhere = Object.values(committed.yarnNeeded).reduce((sum, qty) => sum + qty, 0);
                                     const labelsAvailable = totalLabels - labelsCommittedElsewhere;

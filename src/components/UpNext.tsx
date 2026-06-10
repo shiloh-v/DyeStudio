@@ -4,6 +4,7 @@ import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
+import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage } from '../lib/chemicals';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
@@ -287,10 +288,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         };
 
         // Citric acid cost - ~20g per pan
-        const citricAcid = inventory.find(i => 
-            i.category === 'chemical' && 
-            i.name.toLowerCase().includes('citric')
-        );
+        const citricAcid = findChemicalByRole(inventory, settings, 'citric');
         if (citricAcid) {
             const costPerGram = getCostPerGram(citricAcid);
             costs.chemicals = costPerGram * 20; // 20g per pan
@@ -317,10 +315,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
             // Label - check both 'other' and 'ball band' categories
-            const labelItem = inventory.find(i => 
-                (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
-                i.name?.toLowerCase().includes('label')
-            );
+            const labelItem = findLabelItem(inventory);
             
             // Calculate per-skein cost (all skeins identical)
             const yarnCost = yarnItem?.cost ? parseFloat(yarnItem.cost) : 0;
@@ -367,10 +362,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             // Ball band
             const ballBand = findBallBand(inventory, pan.gradientYarnBase, pan.gradientHankSize);
             
-            const labelItem = inventory.find(i => 
-                (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
-                i.name?.toLowerCase().includes('label')
-            );
+            const labelItem = findLabelItem(inventory);
             
             const yarnCost = yarnItem?.cost ? parseFloat(yarnItem.cost) : 0;
             const dyeCostPerSkein = costs.dye / 25;
@@ -441,10 +433,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                 // Ball band - match both yarn base AND hank size
                 const ballBand = findBallBand(inventory, yarnGroup.base, yarnGroup.hankSize);
                 
-                const labelItem = inventory.find(i => 
-                    (i.category === 'label' || i.category === 'other' || i.category === 'ball band') && 
-                    i.name?.toLowerCase().includes('label')
-                );
+                const labelItem = findLabelItem(inventory);
                 
                 const hankSize = parseFloat(yarnGroup.hankSize);
                 const quantity = parseInt(yarnGroup.quantity);
@@ -679,7 +668,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
         // Deduct citric acid, keeping its own unit.
         if (citricGrams > 0) {
-            const citric = updatedInventory.find(i => i.category === 'chemical' && String(i.name).toLowerCase().includes('citric'));
+            const citric = findChemicalByRole(updatedInventory, settings, 'citric');
             if (citric) {
                 const per = UNIT_G[citric.unit || 'g'] || 1;
                 const curG = (parseFloat(citric.quantity) || 0) * per;
@@ -688,7 +677,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         }
         // Deduct vinegar if it's tracked as a chemical.
         if (vinegarMl > 0) {
-            const vinegar = updatedInventory.find(i => i.category === 'chemical' && String(i.name).toLowerCase().includes('vinegar'));
+            const vinegar = findChemicalByRole(updatedInventory, settings, 'vinegar');
             if (vinegar) {
                 const per = ML_PER[vinegar.unit || 'ml'] || 1;
                 const curMl = (parseFloat(vinegar.quantity) || 0) * per;

@@ -5,6 +5,7 @@ import { isStocked } from '../lib/batches';
 import { confirmDialog, promptDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
+import { findLabelItem } from '../lib/roleMatch';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -125,10 +126,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 });
                 
                 // Deduct labels (total skeins)
-                const labelItem = updatedInventory.find(item => 
-                    (item.category === 'other' || item.category === 'ball band') && 
-                    item.name?.toLowerCase().includes('label')
-                );
+                const labelItem = findLabelItem(updatedInventory);
                 if (labelItem) {
                     labelItem.quantity = Math.max(0, parseFloat(labelItem.quantity) - totalSkeins);
                 }
@@ -170,11 +168,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             batchesToMove.forEach(batch => {
                 if (batch.yarnDetails && batch.yarnDetails.length > 0) {
                     batch.yarnDetails.forEach(yarn => {
-                        const yarnItem = inventory.find(i => 
-                            i.category === 'yarn base' && 
-                            i.name === yarn.base && 
-                            parseFloat(i.hankSize) === parseFloat(yarn.hankSize)
-                        );
+                        const yarnItem = findYarnBaseItem(inventory, yarn.base, yarn.hankSize);
                         if (yarnItem?.typicalPrice) {
                             suggestedPrice += parseFloat(yarnItem.typicalPrice) * parseInt(yarn.quantity || 0);
                         }
@@ -260,10 +254,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 });
                 
                 // Deduct labels (total for all batches)
-                const labelItem = updatedInventory.find(item => 
-                    (item.category === 'other' || item.category === 'ball band') && 
-                    item.name?.toLowerCase().includes('label')
-                );
+                const labelItem = findLabelItem(updatedInventory);
                 if (labelItem && totalLabelsUsed > 0) {
                     labelItem.quantity = Math.max(0, parseFloat(labelItem.quantity) - totalLabelsUsed);
                 }
