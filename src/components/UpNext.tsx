@@ -3,6 +3,7 @@ import { DateUtils } from '../lib/dates';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
+import { findDyeItem } from '../lib/dyeMatch';
 import { panAcidUsage } from '../lib/chemicals';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
@@ -304,7 +305,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             const totalGramsYarn = parseFloat(pan.gradientHankSize) * 10;
 
             // Dye cost
-            const dye = inventory.find(i => i.category === 'dye' && i.name === pan.gradientDye);
+            const dye = findDyeItem(inventory, pan.gradientDye);
             if (dye) {
                 const totalDepth = pan.depths.reduce((sum, d) => sum + d, 0);
                 const dyeNeeded = (totalGramsYarn * totalDepth) / 100;
@@ -351,8 +352,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
             // Dye costs for both colors
             const amounts = [1.25, 2.5, 5, 7.5, 10];
-            const dyeA = inventory.find(i => i.category === 'dye' && i.name === pan.squareColorA);
-            const dyeB = inventory.find(i => i.category === 'dye' && i.name === pan.squareColorB);
+            const dyeA = findDyeItem(inventory, pan.squareColorA);
+            const dyeB = findDyeItem(inventory, pan.squareColorB);
             const totalML_each = amounts.reduce((s, a) => s + a, 0) * 5; // each color used 5 times per amount
             if (dyeA) {
                 const costPerGram = getCostPerGram(dyeA);
@@ -412,15 +413,15 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                         (solution.dyes || []).forEach(dye => {
                             const amount = parseFloat(dye.scaledAmount || 0);
                             const gramsOfDye = (dye.unit || 'g') === 'ml' ? amount / 100 : amount;
-                            const dyeItem = inventory.find(i => i.category === 'dye' && i.name === dye.name);
+                            const dyeItem = findDyeItem(inventory, dye.name);
                             if (dyeItem) costs.dye += gramsOfDye * getCostPerGram(dyeItem);
                         });
                     });
                 } else {
                     // Tonal/Speckled: ingredients have units (ml, g, tsp, tbsp).
                     scaledIngredients.forEach(ing => {
-                        const item = inventory.find(i => i.name === ing.name);
-                        if (item && item.category === 'dye') {
+                        const item = findDyeItem(inventory, ing.name);
+                        if (item) {
                             const amount = parseFloat(ing.scaledAmount || 0);
                             const unit = ing.unit || 'g';
                             let gramsOfDye = amount;
@@ -662,7 +663,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             // --- Dye powder (recipe grams → ounces, since dyes are stocked in oz) ---
             const recipe = pan.recipe || (pan.recipeId ? recipes.find(r => r.id === parseInt(pan.recipeId)) : null);
             Object.entries(dyeGramsForPan(pan, recipe)).forEach(([nameLc, grams]) => {
-                const dyeItem = updatedInventory.find(i => i.category === 'dye' && String(i.name).toLowerCase().trim() === nameLc);
+                const dyeItem = findDyeItem(updatedInventory, nameLc);
                 if (dyeItem) {
                     const curOz = (parseFloat(dyeItem.quantity) || 0) * (UNIT_G[dyeItem.unit || 'g'] || 1) / 28.3495;
                     dyeItem.quantity = Math.max(0, Number((curOz - (grams as number) / 28.3495).toFixed(3)));
@@ -793,13 +794,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     className="w-32 h-32 rounded-lg border-2 flex items-center justify-center flex-shrink-0"
                                                     style={{
                                                         background: `linear-gradient(to right, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.gradientDye);
+                                                            const dye = findDyeItem(inventory, currentPan.gradientDye);
                                                             return dye?.color || '#0d9488';
                                                         })()}15, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.gradientDye);
+                                                            const dye = findDyeItem(inventory, currentPan.gradientDye);
                                                             return dye?.color || '#0d9488';
                                                         })()}60, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.gradientDye);
+                                                            const dye = findDyeItem(inventory, currentPan.gradientDye);
                                                             return dye?.color || '#0d9488';
                                                         })()})`
                                                     }}
@@ -835,10 +836,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     className="w-32 h-32 rounded-lg border-2 flex items-center justify-center flex-shrink-0"
                                                     style={{
                                                         background: `linear-gradient(135deg, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.squareColorA);
+                                                            const dye = findDyeItem(inventory, currentPan.squareColorA);
                                                             return dye?.color || '#3b82f6';
                                                         })()}80, ${(() => {
-                                                            const dye = inventory.find(i => i.name === currentPan.squareColorB);
+                                                            const dye = findDyeItem(inventory, currentPan.squareColorB);
                                                             return dye?.color || '#ef4444';
                                                         })()}80)`
                                                     }}

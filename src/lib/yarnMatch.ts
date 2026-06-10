@@ -30,15 +30,22 @@ export function canonicalYarnRef(ref: any, catalog?: any[]): string {
     return String(ref ?? '');
 }
 
-// Does this yarn base item match a stored reference (by myYarnName or name)?
-// Resolves the ref through the catalog first so old supplier names still match.
+// Previous names recorded on an item when it was renamed (see Inventory). Lets
+// any reference to an old name keep resolving after a rename — generically, for
+// any naming-convention change, not just the catalog supplier→my-name one.
+function aliasesOf(item: any): string[] {
+    return Array.isArray(item?.aliases) ? item.aliases.map(norm) : [];
+}
+
+// Does this yarn base item match a stored reference (by myYarnName, name, or a
+// recorded alias)? Resolves the ref through the catalog first so old supplier
+// names still match even before any alias was recorded.
 export function matchesYarnBase(item: any, ref: any, catalog?: any[]): boolean {
     if (!item || ref == null || ref === '') return false;
     const raw = norm(ref);
     const canon = norm(canonicalYarnRef(ref, catalog));
-    const myName = norm(item.myYarnName);
-    const name = norm(item.name);
-    return myName === raw || name === raw || myName === canon || name === canon;
+    const candidates = [norm(item.myYarnName), norm(item.name), ...aliasesOf(item)];
+    return candidates.includes(raw) || candidates.includes(canon);
 }
 
 // Find a yarn base inventory item for a reference + hank size. Prefers an exact
@@ -54,7 +61,9 @@ export function findYarnBaseItem(inventory: any[], ref: any, hankSize?: any, cat
 }
 
 // Find the ball band for a yarn base reference + hank size (ball bands store the
-// reference in `forYarnBase`). Catalog-aware so old supplier names still match.
+// reference in `forYarnBase`). Resolves BOTH the lookup ref and the stored
+// `forYarnBase` through the catalog/aliases, so a ball band saved under an old
+// supplier name still matches a base referenced by its current name.
 export function findBallBand(inventory: any[], ref: any, hankSize?: any, catalog?: any[]): any {
     if (ref == null || ref === '') return undefined;
     const raw = norm(ref);
@@ -62,7 +71,8 @@ export function findBallBand(inventory: any[], ref: any, hankSize?: any, catalog
     const h = hankSize == null || hankSize === '' ? null : parseFloat(String(hankSize));
     return (inventory || []).find((i) => {
         if (i.category !== 'ball band') return false;
-        const fyb = norm(i.forYarnBase);
-        return (fyb === raw || fyb === canon) && (h == null || parseFloat(String(i.hankSize)) === h);
+        const candidates = [norm(i.forYarnBase), norm(canonicalYarnRef(i.forYarnBase, catalog)), ...aliasesOf(i)];
+        const refMatch = candidates.includes(raw) || candidates.includes(canon);
+        return refMatch && (h == null || parseFloat(String(i.hankSize)) === h);
     });
 }

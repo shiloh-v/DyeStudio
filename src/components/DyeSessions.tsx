@@ -4,6 +4,7 @@ import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
+import { findDyeItem } from '../lib/dyeMatch';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -189,8 +190,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                             });
                         } else if (recipe.ingredients) {
                             recipe.ingredients.forEach(ing => {
-                                const item = inventory.find(i => i.name === ing.name);
-                                if (item?.category === 'dye') dyesNeeded[ing.name] = true;
+                                if (findDyeItem(inventory, ing.name)) dyesNeeded[ing.name] = true;
                             });
                         }
                     }
@@ -1518,7 +1518,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             {/* Recipe image or gradient icon */}
                                             {pan.type === 'gradientTray' ? (
                                                 (() => {
-                                                    const dye = inventory.find(i => i.name === pan.gradientDye);
+                                                    const dye = findDyeItem(inventory, pan.gradientDye);
                                                     const baseColor = dye?.color || '#0d9488';
                                                     return (
                                                         <div 
@@ -1533,8 +1533,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 })()
                                             ) : pan.type === 'dyeSquareTray' ? (
                                                 (() => {
-                                                    const dyeA = inventory.find(i => i.name === pan.squareColorA);
-                                                    const dyeB = inventory.find(i => i.name === pan.squareColorB);
+                                                    const dyeA = findDyeItem(inventory, pan.squareColorA);
+                                                    const dyeB = findDyeItem(inventory, pan.squareColorB);
                                                     const colorA = dyeA?.color || '#3b82f6';
                                                     const colorB = dyeB?.color || '#ef4444';
                                                     return (
@@ -1840,8 +1840,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                             });
                                                         } else if (recipe.ingredients) {
                                                             recipe.ingredients.forEach(ing => {
-                                                                const item = inventory.find(i => i.name === ing.name);
-                                                                if (item?.category === 'dye') {
+                                                                if (findDyeItem(inventory, ing.name)) {
                                                                     if (ing.unit === 'g') {
                                                                         dyePowders.add(ing.name);
                                                                     } else {
@@ -1942,7 +1941,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     
                                     // Check dyes
                                     Object.keys(dyesNeeded).forEach(dyeName => {
-                                        const item = inventory.find(i => i.category === 'dye' && i.name === dyeName);
+                                        const item = findDyeItem(inventory, dyeName);
                                         if (!item || parseFloat(item.quantity || 0) <= 0) {
                                             shortages.dyes.push(`${dyeName}: ${item ? 'out of stock' : 'not in inventory'}`);
                                         }
@@ -2118,7 +2117,7 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
 {/* Recipe image or gradient icon */}
 {pan.type === "gradientTray" ? (
   (() => {
-    const dye = inventory.find(i => i.name === pan.gradientDye);
+    const dye = findDyeItem(inventory, pan.gradientDye);
     const baseColor = dye?.color || "#0d9488";
     return (
       <div
@@ -2133,8 +2132,8 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
   })()
 ) : pan.type === "dyeSquareTray" ? (
   (() => {
-    const dyeA = inventory.find(i => i.name === pan.squareColorA);
-    const dyeB = inventory.find(i => i.name === pan.squareColorB);
+    const dyeA = findDyeItem(inventory, pan.squareColorA);
+    const dyeB = findDyeItem(inventory, pan.squareColorB);
     const colorA = dyeA?.color || "#3b82f6";
     const colorB = dyeB?.color || "#ef4444";
     return (

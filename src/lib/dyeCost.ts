@@ -2,6 +2,8 @@
 // Mirrors the gram-conversion logic used when sessions become batches, so the
 // recipe estimate and the batch total agree.
 
+import { findDyeItem } from './dyeMatch';
+
 // Cost per gram of an inventory dye item. A dye's `cost` is ALWAYS stored as
 // cost-per-gram (purchase price ÷ ounces ÷ 28.35), independent of the on-hand
 // quantity unit (which is ounces) — so it's used directly, no conversion.
@@ -30,13 +32,10 @@ function gramsOfDye(amount: any, unit: string): number {
  */
 export function recipeDyeCost(recipe: any, inventory: any[]): number {
     if (!recipe) return 0;
-    const dyeItems = (inventory || []).filter((i) => i.category === 'dye');
-    const findDye = (name: string) =>
-        dyeItems.find((i) => String(i.name).toLowerCase() === String(name).toLowerCase());
 
     let total = 0;
     const add = (name: string, amount: any, unit: string) => {
-        const item = findDye(name);
+        const item = findDyeItem(inventory, name);
         if (!item) return;
         total += gramsOfDye(amount, unit) * costPerGram(item);
     };
