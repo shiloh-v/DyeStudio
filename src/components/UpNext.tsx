@@ -122,6 +122,33 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         if (pan.type === 'dyeSquareTray') return (parseFloat(pan.gradientHankSize) || 0) * 25;
         return pan.totalWeight || (pan.yarns || []).reduce((s, y) => s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
     };
+    // Thumbnail for a pan: the recipe/sketch photo if there is one, else a color
+    // swatch derived from its dye (trays), else '' → caller shows an emoji tile.
+    const panPhoto = (pan) => {
+        if (!pan) return '';
+        if (pan.recipe?.photo) return pan.recipe.photo;
+        if (pan.recipeId) {
+            const r = recipes.find(r => r.id === parseInt(pan.recipeId));
+            if (r?.photo) return r.photo;
+        }
+        if (pan.colorSketch?.photo) return pan.colorSketch.photo;
+        if (pan.colorSketchId) {
+            const s = colorSketches.find(s => s.id === parseInt(pan.colorSketchId));
+            if (s?.photo) return s.photo;
+        }
+        return '';
+    };
+    const panSwatch = (pan) => {
+        if (!pan) return '';
+        if (pan.type === 'gradientTray') return findDyeItem(inventory, pan.gradientDye)?.color || '';
+        if (pan.type === 'dyeSquareTray') return findDyeItem(inventory, pan.squareColorA)?.color || '';
+        return '';
+    };
+    const panEmoji = (pan) =>
+        pan?.type === 'gradientTray' ? '🎨'
+        : pan?.type === 'dyeSquareTray' ? '🔲'
+        : pan?.type === 'adHoc' ? '🎲'
+        : '🎨';
 
     // Read the dye-day note for a step. Live sessions store it on the pan; a
     // finished session reads it back from the batch it created.
@@ -1319,22 +1346,41 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                         {panGroups.slice(currentGroupPos + 1, currentGroupPos + 4).map((g, gi) => {
                                             const gp = g.indices.map(i => selectedSession.pans[i]);
                                             const wt = gp.reduce((s, p) => s + panWeight(p), 0);
+                                            const photo = panPhoto(gp[0]);
+                                            const swatch = panSwatch(gp[0]);
                                             return (
-                                                <div key={gi} className="p-3 bg-gray-50 rounded border">
-                                                    <div className="flex justify-between items-start gap-2">
-                                                        <span className="font-medium text-gray-900">
-                                                            {g.indices.length > 1 ? `Pans ${groupLabel(g)}` : `Pan #${g.indices[0] + 1}`}: {panTitle(gp[0])}
-                                                        </span>
-                                                        <span className="text-sm text-gray-500 whitespace-nowrap">{wt}g</span>
+                                                <div key={gi} className="p-3 bg-gray-50 rounded border flex gap-3">
+                                                    {photo ? (
+                                                        <img
+                                                            src={photo}
+                                                            alt={panTitle(gp[0])}
+                                                            className="w-12 h-12 rounded object-cover border border-gray-200 flex-shrink-0"
+                                                            onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+                                                        />
+                                                    ) : (
+                                                        <div
+                                                            className="w-12 h-12 rounded border border-gray-200 flex-shrink-0 flex items-center justify-center text-xl"
+                                                            style={swatch ? { background: swatch } : undefined}
+                                                        >
+                                                            {!swatch && panEmoji(gp[0])}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-start gap-2">
+                                                            <span className="font-medium text-gray-900">
+                                                                {g.indices.length > 1 ? `Pans ${groupLabel(g)}` : `Pan #${g.indices[0] + 1}`}: {panTitle(gp[0])}
+                                                            </span>
+                                                            <span className="text-sm text-gray-500 whitespace-nowrap">{wt}g</span>
+                                                        </div>
+                                                        {gp.map((p, pi) => {
+                                                            const summary = yarnSummary(p);
+                                                            return summary ? (
+                                                                <div key={pi} className="text-xs text-gray-600 mt-1">
+                                                                    {g.indices.length > 1 ? `Pan #${g.indices[pi] + 1}: ` : ''}{summary}
+                                                                </div>
+                                                            ) : null;
+                                                        })}
                                                     </div>
-                                                    {gp.map((p, pi) => {
-                                                        const summary = yarnSummary(p);
-                                                        return summary ? (
-                                                            <div key={pi} className="text-xs text-gray-600 mt-1">
-                                                                {g.indices.length > 1 ? `Pan #${g.indices[pi] + 1}: ` : ''}{summary}
-                                                            </div>
-                                                        ) : null;
-                                                    })}
                                                 </div>
                                             );
                                         })}
