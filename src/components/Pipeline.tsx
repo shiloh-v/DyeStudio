@@ -558,7 +558,36 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                                 </div>
                                             )}
                                         </div>
-                                        
+
+                                        {/* Cost breakdown — moved here from the Queue. Collapsed by default
+                                            so it stays out of the way until you're pricing. */}
+                                        {batch.costBreakdown && (
+                                            <details className="mb-2 text-xs">
+                                                <summary className="cursor-pointer text-green-800 font-medium select-none">
+                                                    💰 Cost: ${(batch.totalCost || 0).toFixed(2)}
+                                                    {batch.costPerSkein ? ` ($${batch.costPerSkein.toFixed(2)}/skein)` : ''}
+                                                </summary>
+                                                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded space-y-1">
+                                                    {([
+                                                        ['Yarn', batch.costBreakdown.yarn],
+                                                        ['Dye', batch.costBreakdown.dye],
+                                                        ['Chemicals', batch.costBreakdown.chemicals],
+                                                        ['Ball Bands', batch.costBreakdown.ballBands],
+                                                        ['Labels', batch.costBreakdown.labels],
+                                                    ] as [string, number][]).map(([label, val]) => (
+                                                        <div key={label} className="flex justify-between text-gray-700">
+                                                            <span>{label}:</span>
+                                                            <span className="font-medium">${(val || 0).toFixed(2)}</span>
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex justify-between border-t border-green-300 pt-1 mt-1 font-semibold text-green-900">
+                                                        <span>Total ({batch.costBreakdown.skeins} skeins):</span>
+                                                        <span>${(batch.costBreakdown.total || 0).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                        )}
+
                                         <div className="flex gap-1 mt-2">
                                             {statuses.map(s => {
                                                 if (s === batch.status) return null;

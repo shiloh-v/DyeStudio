@@ -436,7 +436,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             if (available < 25) {
                 inventoryWarnings.push(`${currentPan.gradientYarnBase} (${currentPan.gradientHankSize}g): need 25, have ${available} available after other planned sessions`);
             }
-        } else {
+        } else if (currentPan.type !== 'adHoc') {
+            // Ad Hoc pans have no planned yarns (they're logged later in the Queue),
+            // so skip the inventory check — otherwise the placeholder empty yarn
+            // triggers a phantom "need 1, have 0" warning.
             currentPan.yarns.forEach(yarn => {
                 const available = getEffectiveAvailable(yarn.base, yarn.hankSize);
                 const needed = parseInt(String(yarn.quantity));
