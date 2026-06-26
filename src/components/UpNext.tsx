@@ -97,7 +97,12 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const groupIndices = currentGroup ? currentGroup.indices : (currentPan ? [currentPanIndex] : []);
     const groupPans = groupIndices.map(i => selectedSession?.pans[i]).filter(Boolean);
     const isMultiPan = groupPans.length > 1;
-    const combinedWeight = groupPans.reduce((s, p) => s + (parseFloat(p?.totalWeight) || 0), 0);
+    // Each pan is dyed separately (side by side), so dye amounts are PER PAN —
+    // never summed. uniformWeight is set when every pan in the step shares a
+    // weight (the common case → show one amount labelled "for each pan"); when
+    // weights differ it's null and we show per-pan amounts.
+    const groupWeights = groupPans.map(p => parseFloat(p?.totalWeight) || 0);
+    const uniformWeight = groupWeights.length > 0 && groupWeights.every(w => w === groupWeights[0]) ? groupWeights[0] : null;
 
     // Display helpers used by the "Coming Up Next" preview (every pan type).
     const panTitle = (pan) =>
@@ -840,6 +845,56 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted. You can still add notes here.', 'success');
     };
 
+    // Scaled dye amounts for ONE pan at the given weight. Reused per-pan so a
+    // same-color group shows each pan's own amounts (never a summed total).
+    const renderScaledAmounts = (recipe, colorSketch, weight) => {
+        const isVar = colorSketch?.type === 'variegated' || recipe?.colorType === 'variegated';
+        return (
+            <div className="space-y-2">
+                {isVar
+                    ? scaleIngredients(recipe, weight, colorSketch).map((solution, idx) => (
+                        <div key={idx} className="border-2 border-teal-200 rounded-lg p-3 bg-teal-50">
+                            <div className="font-semibold text-teal-900 mb-2">
+                                {solution.name || `Solution ${idx + 1}`}
+                                {solution.scaledTargetMl && (
+                                    <span className="text-sm font-normal text-gray-600 ml-2">
+                                        → Add water to {solution.scaledTargetMl}ml
+                                    </span>
+                                )}
+                            </div>
+                            <div className="space-y-1 pl-3">
+                                {solution.dyes.map((dye, dIdx) => (
+                                    <div key={dIdx} className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-700">• {dye.name}</span>
+                                        <span className="text-blue-700 font-bold">
+                                            {dye.scaledAmount}{dye.unit}
+                                            <span className="text-xs text-gray-500 ml-1">
+                                                (orig: {dye.amount}{dye.unit})
+                                            </span>
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))
+                    : scaleIngredients(recipe, weight, colorSketch).map((ing, idx) => (
+                        <div key={idx} className="flex justify-between items-center p-3 bg-blue-50 rounded">
+                            <span className="font-medium text-gray-900">{ing.name}</span>
+                            <div className="text-right">
+                                <span className="text-blue-700 font-bold text-lg">
+                                    {ing.scaledAmount}{ing.unit}
+                                </span>
+                                <span className="text-xs text-gray-500 ml-2">
+                                    (original: {ing.amount}{ing.unit})
+                                </span>
+                            </div>
+                        </div>
+                    ))
+                }
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1151,8 +1206,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 </h3>
                                                 <p className="text-teal-700 font-medium mb-2">
                                                     {isMultiPan
-                                                        ? `Pans ${groupLabel(currentGroup)} — dye together`
-                                                        : `Pan #${currentPanIndex + 1}`} • {combinedWeight}g total{isMultiPan ? ` (${groupPans.map(p => `${p.totalWeight}g`).join(' + ')})` : ''}
+                                                        ? `Pans ${groupLabel(currentGroup)} — same color, side by side • ${groupPans.map(p => `${p.totalWeight}g`).join(' + ')}`
+                                                        : `Pan #${currentPanIndex + 1} • ${currentPan.totalWeight}g total`}
                                                 </p>
                                                 {currentRecipe?.colorType && (
                                                     <p className="text-sm text-gray-700">
@@ -1173,67 +1228,39 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                 {(currentRecipe || currentColorSketch) ? (
                                     <div className="bg-white rounded-lg p-4">
                                         <h4 className="font-semibold text-gray-900 mb-3">
-                                            {currentColorSketch ? (
-                                                <>
-                                                    🧪 Color Lab: {currentColorSketch.colorId}{currentColorSketch.customName ? ' - ' + currentColorSketch.customName : ''}
-                                                    <span className="text-sm text-gray-500 ml-2">
-                                                        (scaled from {currentColorSketch.yarnWeight}g to {combinedWeight}g)
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    Recipe: {currentRecipe.name}
-                                                    <span className="text-sm text-gray-500 ml-2">
-                                                        (scaled from {currentRecipe.yarnWeight}g to {combinedWeight}g{isMultiPan ? ` · for all ${groupPans.length} pans` : ''})
-                                                    </span>
-                                                </>
-                                            )}
+                                            {currentColorSketch
+                                                ? <>🧪 Color Lab: {currentColorSketch.colorId}{currentColorSketch.customName ? ' - ' + currentColorSketch.customName : ''}</>
+                                                : <>Recipe: {currentRecipe.name}</>}
                                         </h4>
-                                        <div className="space-y-2">
-                                            {(currentColorSketch?.type === 'variegated' || currentRecipe?.colorType === 'variegated') ? (
-                                                // Display scaled color solutions or variegated sections
-                                                scaleIngredients(currentRecipe, combinedWeight, currentColorSketch).map((solution, idx) => (
-                                                    <div key={idx} className="border-2 border-teal-200 rounded-lg p-3 bg-teal-50">
-                                                        <div className="font-semibold text-teal-900 mb-2">
-                                                            {solution.name || `Solution ${idx + 1}`}
-                                                            {solution.scaledTargetMl && (
-                                                                <span className="text-sm font-normal text-gray-600 ml-2">
-                                                                    → Add water to {solution.scaledTargetMl}ml
-                                                                </span>
-                                                            )}
+                                        {!isMultiPan ? (
+                                            <>
+                                                <p className="text-sm text-gray-500 mb-2">
+                                                    Scaled from {currentColorSketch ? currentColorSketch.yarnWeight : currentRecipe.yarnWeight}g to {currentPan.totalWeight}g
+                                                </p>
+                                                {renderScaledAmounts(currentRecipe, currentColorSketch, currentPan.totalWeight)}
+                                            </>
+                                        ) : uniformWeight != null ? (
+                                            <>
+                                                <p className="text-sm text-amber-700 font-medium mb-2">
+                                                    ⚠️ Mix this amount for EACH pan separately — {groupPans.length} pans, {uniformWeight}g each.
+                                                </p>
+                                                {renderScaledAmounts(currentRecipe, currentColorSketch, uniformWeight)}
+                                            </>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                <p className="text-sm text-amber-700 font-medium">
+                                                    ⚠️ Dye each pan separately — amounts differ by weight:
+                                                </p>
+                                                {groupPans.map((p, gi) => (
+                                                    <div key={gi}>
+                                                        <div className="font-semibold text-gray-700 mb-2">
+                                                            Pan #{groupIndices[gi] + 1} — {p.totalWeight}g
                                                         </div>
-                                                        <div className="space-y-1 pl-3">
-                                                            {solution.dyes.map((dye, dIdx) => (
-                                                                <div key={dIdx} className="flex justify-between items-center">
-                                                                    <span className="text-sm text-gray-700">• {dye.name}</span>
-                                                                    <span className="text-blue-700 font-bold">
-                                                                        {dye.scaledAmount}{dye.unit}
-                                                                        <span className="text-xs text-gray-500 ml-1">
-                                                                            (orig: {dye.amount}{dye.unit})
-                                                                        </span>
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                                                        {renderScaledAmounts(currentRecipe, currentColorSketch, parseFloat(p.totalWeight) || 0)}
                                                     </div>
-                                                ))
-                                            ) : (
-                                                // Display regular scaled ingredients (tonal or speckled)
-                                                scaleIngredients(currentRecipe, combinedWeight, currentColorSketch).map((ing, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center p-3 bg-blue-50 rounded">
-                                                        <span className="font-medium text-gray-900">{ing.name}</span>
-                                                        <div className="text-right">
-                                                            <span className="text-blue-700 font-bold text-lg">
-                                                                {ing.scaledAmount}{ing.unit}
-                                                            </span>
-                                                            <span className="text-xs text-gray-500 ml-2">
-                                                                (original: {ing.amount}{ing.unit})
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
