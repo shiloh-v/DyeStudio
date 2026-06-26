@@ -6,6 +6,7 @@ import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } 
 import { findDyeItem } from '../lib/dyeMatch';
 import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage } from '../lib/chemicals';
+import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -320,85 +321,6 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const currentColorSketch = currentPan?.type === 'colorLab' && currentPan?.colorSketch 
         ? currentPan.colorSketch 
         : null;
-
-    const scaleIngredients = (recipe, targetWeight, colorSketch = null) => {
-        // Use color sketch if available, otherwise use recipe
-        const source = colorSketch || recipe;
-        if (!source) return [];
-        
-        const baseWeight = colorSketch ? parseFloat(colorSketch.yarnWeight || 100) : parseFloat(recipe.yarnWeight || 100);
-        const scaleFactor = targetWeight / baseWeight;
-        
-        // Handle Color Lab sketch
-        if (colorSketch) {
-            if (colorSketch.type === 'tonal' && colorSketch.dyes) {
-                return colorSketch.dyes.map(dye => ({
-                    name: dye.color,
-                    amount: dye.amount,
-                    unit: dye.unit || 'ml',
-                    scaledAmount: (parseFloat(dye.amount || 0) * scaleFactor).toFixed(2)
-                }));
-            } else if (colorSketch.type === 'variegated' && colorSketch.sections) {
-                return colorSketch.sections.map(section => ({
-                    name: section.name,
-                    dyes: section.dyes.map(dye => ({
-                        name: dye.color,
-                        amount: dye.amount,
-                        unit: dye.unit || 'ml',
-                        scaledAmount: (parseFloat(dye.amount || 0) * scaleFactor).toFixed(2)
-                    }))
-                }));
-            } else if (colorSketch.type === 'speckled') {
-                const ingredients = [];
-                if (colorSketch.baseColors) {
-                    colorSketch.baseColors.forEach(base => {
-                        if (base.color) {
-                            ingredients.push({
-                                name: base.color + ' (base)',
-                                amount: base.amount,
-                                unit: base.unit || 'ml',
-                                scaledAmount: (parseFloat(base.amount || 0) * scaleFactor).toFixed(2)
-                            });
-                        }
-                    });
-                }
-                if (colorSketch.speckles) {
-                    colorSketch.speckles.forEach(speckle => {
-                        if (speckle.color) {
-                            ingredients.push({
-                                name: speckle.color + ' (speckle)',
-                                amount: speckle.amount,
-                                unit: speckle.unit || 'g',
-                                scaledAmount: (parseFloat(speckle.amount || 0) * scaleFactor).toFixed(2)
-                            });
-                        }
-                    });
-                }
-                return ingredients;
-            }
-            return [];
-        }
-        
-        // Handle regular recipe
-        if (recipe.colorType === 'variegated' && recipe.colorSolutions) {
-            // Scale color solutions
-            return recipe.colorSolutions.map(solution => ({
-                ...solution,
-                scaledTargetMl: solution.targetMl ? (parseFloat(solution.targetMl) * scaleFactor).toFixed(1) : '',
-                dyes: solution.dyes.map(dye => ({
-                    ...dye,
-                    scaledAmount: (parseFloat(dye.amount || 0) * scaleFactor).toFixed(2)
-                }))
-            }));
-        } else if (recipe.ingredients) {
-            // Scale regular ingredients
-            return recipe.ingredients.map(ing => ({
-                ...ing,
-                scaledAmount: (parseFloat(ing.amount) * scaleFactor).toFixed(2)
-            }));
-        }
-        return [];
-    };
 
     // Helper: Convert any cost to cost per gram
     const getCostPerGram = (item) => {
@@ -872,56 +794,6 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted. You can still add notes here.', 'success');
     };
 
-    // Scaled dye amounts for ONE pan at the given weight. Reused per-pan so a
-    // same-color group shows each pan's own amounts (never a summed total).
-    const renderScaledAmounts = (recipe, colorSketch, weight) => {
-        const isVar = colorSketch?.type === 'variegated' || recipe?.colorType === 'variegated';
-        return (
-            <div className="space-y-2">
-                {isVar
-                    ? scaleIngredients(recipe, weight, colorSketch).map((solution, idx) => (
-                        <div key={idx} className="border-2 border-teal-200 rounded-lg p-3 bg-teal-50">
-                            <div className="font-semibold text-teal-900 mb-2">
-                                {solution.name || `Solution ${idx + 1}`}
-                                {solution.scaledTargetMl && (
-                                    <span className="text-sm font-normal text-gray-600 ml-2">
-                                        → Add water to {solution.scaledTargetMl}ml
-                                    </span>
-                                )}
-                            </div>
-                            <div className="space-y-1 pl-3">
-                                {solution.dyes.map((dye, dIdx) => (
-                                    <div key={dIdx} className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-700">• {dye.name}</span>
-                                        <span className="text-blue-700 font-bold">
-                                            {dye.scaledAmount}{dye.unit}
-                                            <span className="text-xs text-gray-500 ml-1">
-                                                (orig: {dye.amount}{dye.unit})
-                                            </span>
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))
-                    : scaleIngredients(recipe, weight, colorSketch).map((ing, idx) => (
-                        <div key={idx} className="flex justify-between items-center p-3 bg-blue-50 rounded">
-                            <span className="font-medium text-gray-900">{ing.name}</span>
-                            <div className="text-right">
-                                <span className="text-blue-700 font-bold text-lg">
-                                    {ing.scaledAmount}{ing.unit}
-                                </span>
-                                <span className="text-xs text-gray-500 ml-2">
-                                    (original: {ing.amount}{ing.unit})
-                                </span>
-                            </div>
-                        </div>
-                    ))
-                }
-            </div>
-        );
-    };
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1264,14 +1136,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 <p className="text-sm text-gray-500 mb-2">
                                                     Scaled from {currentColorSketch ? currentColorSketch.yarnWeight : currentRecipe.yarnWeight}g to {currentPan.totalWeight}g
                                                 </p>
-                                                {renderScaledAmounts(currentRecipe, currentColorSketch, currentPan.totalWeight)}
+                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={currentPan.totalWeight} />
                                             </>
                                         ) : uniformWeight != null ? (
                                             <>
                                                 <p className="text-sm text-amber-700 font-medium mb-2">
                                                     ⚠️ Mix this amount for EACH pan separately — {groupPans.length} pans, {uniformWeight}g each.
                                                 </p>
-                                                {renderScaledAmounts(currentRecipe, currentColorSketch, uniformWeight)}
+                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={uniformWeight} />
                                             </>
                                         ) : (
                                             <div className="space-y-4">
@@ -1283,7 +1155,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                         <div className="font-semibold text-gray-700 mb-2">
                                                             Pan #{groupIndices[gi] + 1} — {p.totalWeight}g
                                                         </div>
-                                                        {renderScaledAmounts(currentRecipe, currentColorSketch, parseFloat(p.totalWeight) || 0)}
+                                                        <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={parseFloat(p.totalWeight) || 0} />
                                                     </div>
                                                 ))}
                                             </div>
