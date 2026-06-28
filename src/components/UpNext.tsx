@@ -67,11 +67,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
     // --- Same-color grouping ---------------------------------------------------
     // You dye two pans of the same color together, so consecutive pans that share
-    // a recipe + colorway collapse into one "step". Only plain pans group; trays,
-    // ad-hoc and color-lab pans always stand alone.
+    // a color collapse into one "step": plain pans by recipe + colorway, Color Lab
+    // pans by their sketch. Trays and ad-hoc pans always stand alone (null key).
+    // Prefixed keys keep the two types from ever grouping with each other.
     const groupKeyFor = (pan) => {
-        if (!pan || pan.type !== 'pan') return null; // null → never groups
-        return `${pan.recipeId || ''}|${(pan.colorway || '').trim().toLowerCase()}`;
+        if (!pan) return null;
+        if (pan.type === 'pan') return `pan|${pan.recipeId || ''}|${(pan.colorway || '').trim().toLowerCase()}`;
+        if (pan.type === 'colorLab') return `cl|${pan.colorSketchId || pan.colorSketch?.colorId || (pan.colorway || '').trim().toLowerCase()}`;
+        return null;
     };
     const panGroups = (() => {
         const pans = selectedSession?.pans || [];
