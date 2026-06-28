@@ -6,6 +6,7 @@ import { confirmDialog, promptDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
 import { findLabelItem } from '../lib/roleMatch';
+import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -558,7 +559,58 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                                 </div>
                                             )}
                                         </div>
-                                        
+
+                                        {/* Dye amounts — so you can see what you used right here when
+                                            adding notes, instead of hunting in the recipe. Computed from
+                                            the batch's recipe/sketch + its yarn weight. Collapsed. */}
+                                        {(() => {
+                                            const recipe = batch.recipeId ? recipes.find(r => r.id === parseInt(batch.recipeId)) : null;
+                                            const colorSketch = batch.colorSketch || null;
+                                            if (!recipe && !colorSketch) return null;
+                                            const weight = (batch.yarnDetails || []).reduce((s, y) => s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
+                                            if (!(weight > 0) || scaleIngredients(recipe, weight, colorSketch).length === 0) return null;
+                                            return (
+                                                <details className="mb-2 text-xs">
+                                                    <summary className="cursor-pointer text-blue-800 font-medium select-none">
+                                                        🧪 Dye amounts (at {weight}g)
+                                                    </summary>
+                                                    <div className="mt-2">
+                                                        <ScaledAmounts recipe={recipe} colorSketch={colorSketch} weight={weight} />
+                                                        <p className="text-[10px] text-gray-400 mt-1">Based on the current recipe/sketch.</p>
+                                                    </div>
+                                                </details>
+                                            );
+                                        })()}
+
+                                        {/* Cost breakdown — moved here from the Queue. Collapsed by default
+                                            so it stays out of the way until you're pricing. */}
+                                        {batch.costBreakdown && (
+                                            <details className="mb-2 text-xs">
+                                                <summary className="cursor-pointer text-green-800 font-medium select-none">
+                                                    💰 Cost: ${(batch.totalCost || 0).toFixed(2)}
+                                                    {batch.costPerSkein ? ` ($${batch.costPerSkein.toFixed(2)}/skein)` : ''}
+                                                </summary>
+                                                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded space-y-1">
+                                                    {([
+                                                        ['Yarn', batch.costBreakdown.yarn],
+                                                        ['Dye', batch.costBreakdown.dye],
+                                                        ['Chemicals', batch.costBreakdown.chemicals],
+                                                        ['Ball Bands', batch.costBreakdown.ballBands],
+                                                        ['Labels', batch.costBreakdown.labels],
+                                                    ] as [string, number][]).map(([label, val]) => (
+                                                        <div key={label} className="flex justify-between text-gray-700">
+                                                            <span>{label}:</span>
+                                                            <span className="font-medium">${(val || 0).toFixed(2)}</span>
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex justify-between border-t border-green-300 pt-1 mt-1 font-semibold text-green-900">
+                                                        <span>Total ({batch.costBreakdown.skeins} skeins):</span>
+                                                        <span>${(batch.costBreakdown.total || 0).toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            </details>
+                                        )}
+
                                         <div className="flex gap-1 mt-2">
                                             {statuses.map(s => {
                                                 if (s === batch.status) return null;

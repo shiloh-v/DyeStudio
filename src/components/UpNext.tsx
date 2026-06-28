@@ -6,6 +6,7 @@ import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } 
 import { findDyeItem } from '../lib/dyeMatch';
 import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage } from '../lib/chemicals';
+import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -38,9 +39,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         return [...(yarnBases[baseName] || [])].sort((a, b) => parseFloat(a) - parseFloat(b));
     };
 
-    // Get all non-archived sessions with pans
+    // Non-archived sessions with pans — PLUS the currently-selected session even
+    // if it was just finished, so you can keep adding notes after completing it.
     const upcomingSessions = dyeSessions
-        .filter(s => !s.archived && s.pans.length > 0)
+        .filter(s => (!s.archived || s.id.toString() === selectedSessionId) && s.pans.length > 0)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Restore the saved session if it's still active; otherwise auto-select the
@@ -60,6 +62,147 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
     const selectedSession = dyeSessions.find(s => s.id === parseInt(selectedSessionId));
     const currentPan = selectedSession?.pans[currentPanIndex];
+    // A finished (archived) session is shown read-only for review + note-taking.
+    const isFinished = !!selectedSession?.archived;
+
+    // --- Same-color grouping ---------------------------------------------------
+    // You dye two pans of the same color together, so consecutive pans that share
+    // a recipe + colorway collapse into one "step". Only plain pans group; trays,
+    // ad-hoc and color-lab pans always stand alone.
+    const groupKeyFor = (pan) => {
+        if (!pan || pan.type !== 'pan') return null; // null → never groups
+        return `${pan.recipeId || ''}|${(pan.colorway || '').trim().toLowerCase()}`;
+    };
+    const panGroups = (() => {
+        const pans = selectedSession?.pans || [];
+        const groups: { indices: number[]; key: string | null }[] = [];
+        let i = 0;
+        while (i < pans.length) {
+            const key = groupKeyFor(pans[i]);
+            const indices = [i];
+            let j = i + 1;
+            while (key !== null && j < pans.length && groupKeyFor(pans[j]) === key) {
+                indices.push(j);
+                j++;
+            }
+            groups.push({ indices, key });
+            i = j;
+        }
+        return groups;
+    })();
+    const currentGroup = panGroups.find(g => g.indices.includes(currentPanIndex)) || panGroups[0];
+    const currentGroupPos = currentGroup ? panGroups.indexOf(currentGroup) : 0;
+    const groupIsDone = (g) => !!g && g.indices.every(i => completedPans.has(i));
+    // Derived view of the current step's pans (used by the regular-pan card so a
+    // same-color group shows combined weight + each pan's yarns).
+    const groupIndices = currentGroup ? currentGroup.indices : (currentPan ? [currentPanIndex] : []);
+    const groupPans = groupIndices.map(i => selectedSession?.pans[i]).filter(Boolean);
+    const isMultiPan = groupPans.length > 1;
+    // Each pan is dyed separately (side by side), so dye amounts are PER PAN —
+    // never summed. uniformWeight is set when every pan in the step shares a
+    // weight (the common case → show one amount labelled "for each pan"); when
+    // weights differ it's null and we show per-pan amounts.
+    const groupWeights = groupPans.map(p => parseFloat(p?.totalWeight) || 0);
+    const uniformWeight = groupWeights.length > 0 && groupWeights.every(w => w === groupWeights[0]) ? groupWeights[0] : null;
+
+    // Display helpers used by the "Coming Up Next" preview (every pan type).
+    const panTitle = (pan) =>
+        pan.type === 'gradientTray' ? `🎨 ${pan.gradientDye} Gradient`
+        : pan.type === 'dyeSquareTray' ? `🔲 ${pan.squareColorA} × ${pan.squareColorB} Dye Square`
+        : pan.type === 'adHoc' ? `🎲 ${pan.adHocLabel || 'Ad Hoc Experiment'}`
+        : (pan.colorway || 'Pan');
+    const panYarns = (pan) => {
+        if (pan.type === 'gradientTray') return [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 10 }];
+        if (pan.type === 'dyeSquareTray') return [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 25 }];
+        return pan.yarns || [];
+    };
+    const yarnSummary = (pan) =>
+        panYarns(pan).filter(y => y.base).map(y => `${y.quantity}× ${y.base} (${y.hankSize}g)`).join(', ');
+    const panWeight = (pan) => {
+        if (pan.type === 'gradientTray') return (parseFloat(pan.gradientHankSize) || 0) * 10;
+        if (pan.type === 'dyeSquareTray') return (parseFloat(pan.gradientHankSize) || 0) * 25;
+        return pan.totalWeight || (pan.yarns || []).reduce((s, y) => s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
+    };
+    // Thumbnail for a pan: the recipe/sketch photo if there is one, else a color
+    // swatch derived from its dye (trays), else '' → caller shows an emoji tile.
+    const panPhoto = (pan) => {
+        if (!pan) return '';
+        if (pan.recipe?.photo) return pan.recipe.photo;
+        if (pan.recipeId) {
+            const r = recipes.find(r => r.id === parseInt(pan.recipeId));
+            if (r?.photo) return r.photo;
+        }
+        if (pan.colorSketch?.photo) return pan.colorSketch.photo;
+        if (pan.colorSketchId) {
+            const s = colorSketches.find(s => s.id === parseInt(pan.colorSketchId));
+            if (s?.photo) return s.photo;
+        }
+        return '';
+    };
+    const panSwatch = (pan) => {
+        if (!pan) return '';
+        if (pan.type === 'gradientTray') return findDyeItem(inventory, pan.gradientDye)?.color || '';
+        if (pan.type === 'dyeSquareTray') return findDyeItem(inventory, pan.squareColorA)?.color || '';
+        return '';
+    };
+    const panEmoji = (pan) =>
+        pan?.type === 'gradientTray' ? '🎨'
+        : pan?.type === 'dyeSquareTray' ? '🔲'
+        : pan?.type === 'adHoc' ? '🎲'
+        : '🎨';
+
+    // Read the dye-day note for a step. Live sessions store it on the pan; a
+    // finished session reads it back from the batch it created.
+    const noteValueFor = (indices) => {
+        if (isFinished) {
+            const b = batches.find(b =>
+                b.sourceSessionId === selectedSession?.id && indices.includes(b.sourcePanIndex));
+            return b?.batchNotes || '';
+        }
+        return selectedSession?.pans[indices[0]]?.experimentNotes || '';
+    };
+
+    // Write the dye-day note for every pan in a step. Live → onto the pans (and
+    // the linked color sketch, so it survives); finished → onto the batches.
+    const updatePanNotes = (indices, text) => {
+        const idxSet = new Set(indices);
+        if (isFinished) {
+            saveBatches(batches.map(b =>
+                (b.sourceSessionId === selectedSession?.id && idxSet.has(b.sourcePanIndex))
+                    ? { ...b, batchNotes: text } : b));
+            return;
+        }
+        const sketchIds = new Set(
+            indices.map(i => selectedSession?.pans[i]?.colorSketchId).filter(Boolean));
+        saveDyeSessions(dyeSessions.map(s =>
+            s.id === selectedSession?.id
+                ? { ...s, pans: s.pans.map((p, i) => idxSet.has(i) ? { ...p, experimentNotes: text } : p) }
+                : s));
+        if (sketchIds.size > 0) {
+            saveColorSketches(colorSketches.map(sketch =>
+                sketchIds.has(sketch.id) ? { ...sketch, experimentNotes: text } : sketch));
+        }
+    };
+
+    // Prominent, always-visible notes box. Placed right under the action buttons
+    // for every pan type so you actually see (and use) it on dye day.
+    const notesBox = (indices) => (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mt-4">
+            <h4 className="font-semibold text-amber-900 mb-2">📝 Dye-Day Notes{indices.length > 1 ? ' (applies to both pans)' : ''}</h4>
+            <textarea
+                value={noteValueFor(indices)}
+                onChange={(e) => updatePanNotes(indices, e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 resize-y bg-white"
+                rows={3}
+                placeholder="Anything you changed or noticed — dye tweaks, technique, results vs. expected, what to do differently next time."
+            />
+            <p className="text-xs text-amber-700 mt-2">
+                {isFinished
+                    ? '💡 Saved to this batch in Pipeline.'
+                    : '💡 Flows through to the batch in Pipeline when you finish the session.'}
+            </p>
+        </div>
+    );
 
     // Persist the Queue position so it survives navigating away/back.
     useEffect(() => { localStorage.setItem('queue_session', selectedSessionId); }, [selectedSessionId]);
@@ -79,72 +222,91 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const saveCompleted = (set) =>
         localStorage.setItem('queue_done_' + selectedSessionId, JSON.stringify([...set]));
 
-    // Mark the current pan dyed (fills its dot) and advance to the next.
-    const completePan = () => {
+    // Mark every pan in the current step dyed (fills its dot) and advance.
+    const completeGroup = () => {
         const next = new Set(completedPans);
-        next.add(currentPanIndex);
+        (currentGroup?.indices || [currentPanIndex]).forEach(i => next.add(i));
         setCompletedPans(next);
         saveCompleted(next);
-        if (currentPanIndex < selectedSession.pans.length - 1) setCurrentPanIndex(currentPanIndex + 1);
+        if (currentGroupPos < panGroups.length - 1) {
+            setCurrentPanIndex(panGroups[currentGroupPos + 1].indices[0]);
+        }
     };
 
-    // Undo "dyed" for a pan (no navigation).
-    const unmarkPan = (idx) => {
+    // Undo "dyed" for the whole current step (no navigation).
+    const unmarkGroup = () => {
         const next = new Set(completedPans);
-        next.delete(idx);
+        (currentGroup?.indices || [currentPanIndex]).forEach(i => next.delete(i));
         setCompletedPans(next);
         saveCompleted(next);
     };
 
-    // Shared pan navigation (Back / Skip / Mark Dyed + jump dots + unmark),
-    // used by every pan type. Returns elements (closes over current state).
+    const goToPreviousGroup = () => {
+        if (currentGroupPos > 0) setCurrentPanIndex(panGroups[currentGroupPos - 1].indices[0]);
+    };
+    const goToNextGroup = () => {
+        if (currentGroupPos < panGroups.length - 1) setCurrentPanIndex(panGroups[currentGroupPos + 1].indices[0]);
+    };
+
+    // Label for a step's dot / heading: "3" for one pan, "3-4" for a group.
+    const groupLabel = (g) => g.indices.length > 1
+        ? `${g.indices[0] + 1}-${g.indices[g.indices.length - 1] + 1}`
+        : `${g.indices[0] + 1}`;
+
+    // Shared step navigation (Back / Skip / Mark Dyed + jump dots + unmark),
+    // used by every pan type. Steps over groups, not individual pans. A finished
+    // session is read-only, so it shows the jump dots only.
     const panNav = () => (
         <>
-            <div className="flex gap-2 w-full">
-                <button
-                    onClick={goToPreviousPan}
-                    disabled={currentPanIndex === 0}
-                    className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    ← Back
-                </button>
-                <button
-                    onClick={() => currentPanIndex < selectedSession.pans.length - 1 && setCurrentPanIndex(currentPanIndex + 1)}
-                    disabled={currentPanIndex >= selectedSession.pans.length - 1}
-                    title="Skip for now — come back via the pan numbers below"
-                    className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Skip ⏭
-                </button>
-                <button
-                    onClick={completePan}
-                    className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
-                >
-                    {completedPans.has(currentPanIndex) ? 'Next Pan →' : '✓ Mark Dyed'}
-                </button>
-            </div>
-            <div className="flex gap-1.5 overflow-x-auto mt-3 px-1 py-2">
-                {selectedSession.pans.map((p, i) => (
+            {!isFinished && (
+                <div className="flex gap-2 w-full">
                     <button
-                        key={i}
-                        onClick={() => setCurrentPanIndex(i)}
-                        title={`Pan ${i + 1}${completedPans.has(i) ? ' — dyed' : ''}`}
-                        className={`flex-shrink-0 w-9 h-9 rounded-full text-sm font-semibold transition-colors ${
-                            completedPans.has(i)
+                        onClick={goToPreviousGroup}
+                        disabled={currentGroupPos === 0}
+                        className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        ← Back
+                    </button>
+                    <button
+                        onClick={goToNextGroup}
+                        disabled={currentGroupPos >= panGroups.length - 1}
+                        title="Skip for now — come back via the step numbers below"
+                        className="px-5 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Skip ⏭
+                    </button>
+                    <button
+                        onClick={completeGroup}
+                        className="flex-1 px-6 py-3 rounded-lg font-semibold text-lg shadow-md transition-colors bg-teal-600 text-white hover:bg-teal-700"
+                    >
+                        {groupIsDone(currentGroup)
+                            ? 'Next →'
+                            : (currentGroup?.indices.length > 1 ? '✓ Mark Both Dyed' : '✓ Mark Dyed')}
+                    </button>
+                </div>
+            )}
+            <div className="flex gap-1.5 overflow-x-auto mt-3 px-1 py-2">
+                {panGroups.map((g, gi) => (
+                    <button
+                        key={gi}
+                        onClick={() => setCurrentPanIndex(g.indices[0])}
+                        title={`${g.indices.length > 1 ? 'Pans' : 'Pan'} ${groupLabel(g)}${groupIsDone(g) ? ' — dyed' : ''}`}
+                        className={`flex-shrink-0 min-w-9 h-9 px-2 rounded-full text-sm font-semibold transition-colors ${
+                            groupIsDone(g)
                                 ? 'bg-teal-600 text-white'
                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        } ${i === currentPanIndex ? 'ring-2 ring-teal-400' : ''}`}
+                        } ${gi === currentGroupPos ? 'ring-2 ring-teal-400' : ''}`}
                     >
-                        {i + 1}
+                        {groupLabel(g)}
                     </button>
                 ))}
             </div>
-            {completedPans.has(currentPanIndex) && (
+            {!isFinished && groupIsDone(currentGroup) && (
                 <button
-                    onClick={() => unmarkPan(currentPanIndex)}
+                    onClick={unmarkGroup}
                     className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline bg-transparent"
                 >
-                    ↩ Unmark this pan as dyed
+                    ↩ Unmark {currentGroup?.indices.length > 1 ? 'these pans' : 'this pan'} as dyed
                 </button>
             )}
         </>
@@ -159,85 +321,6 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const currentColorSketch = currentPan?.type === 'colorLab' && currentPan?.colorSketch 
         ? currentPan.colorSketch 
         : null;
-
-    const scaleIngredients = (recipe, targetWeight, colorSketch = null) => {
-        // Use color sketch if available, otherwise use recipe
-        const source = colorSketch || recipe;
-        if (!source) return [];
-        
-        const baseWeight = colorSketch ? parseFloat(colorSketch.yarnWeight || 100) : parseFloat(recipe.yarnWeight || 100);
-        const scaleFactor = targetWeight / baseWeight;
-        
-        // Handle Color Lab sketch
-        if (colorSketch) {
-            if (colorSketch.type === 'tonal' && colorSketch.dyes) {
-                return colorSketch.dyes.map(dye => ({
-                    name: dye.color,
-                    amount: dye.amount,
-                    unit: dye.unit || 'ml',
-                    scaledAmount: (parseFloat(dye.amount || 0) * scaleFactor).toFixed(2)
-                }));
-            } else if (colorSketch.type === 'variegated' && colorSketch.sections) {
-                return colorSketch.sections.map(section => ({
-                    name: section.name,
-                    dyes: section.dyes.map(dye => ({
-                        name: dye.color,
-                        amount: dye.amount,
-                        unit: dye.unit || 'ml',
-                        scaledAmount: (parseFloat(dye.amount || 0) * scaleFactor).toFixed(2)
-                    }))
-                }));
-            } else if (colorSketch.type === 'speckled') {
-                const ingredients = [];
-                if (colorSketch.baseColors) {
-                    colorSketch.baseColors.forEach(base => {
-                        if (base.color) {
-                            ingredients.push({
-                                name: base.color + ' (base)',
-                                amount: base.amount,
-                                unit: base.unit || 'ml',
-                                scaledAmount: (parseFloat(base.amount || 0) * scaleFactor).toFixed(2)
-                            });
-                        }
-                    });
-                }
-                if (colorSketch.speckles) {
-                    colorSketch.speckles.forEach(speckle => {
-                        if (speckle.color) {
-                            ingredients.push({
-                                name: speckle.color + ' (speckle)',
-                                amount: speckle.amount,
-                                unit: speckle.unit || 'g',
-                                scaledAmount: (parseFloat(speckle.amount || 0) * scaleFactor).toFixed(2)
-                            });
-                        }
-                    });
-                }
-                return ingredients;
-            }
-            return [];
-        }
-        
-        // Handle regular recipe
-        if (recipe.colorType === 'variegated' && recipe.colorSolutions) {
-            // Scale color solutions
-            return recipe.colorSolutions.map(solution => ({
-                ...solution,
-                scaledTargetMl: solution.targetMl ? (parseFloat(solution.targetMl) * scaleFactor).toFixed(1) : '',
-                dyes: solution.dyes.map(dye => ({
-                    ...dye,
-                    scaledAmount: (parseFloat(dye.amount || 0) * scaleFactor).toFixed(2)
-                }))
-            }));
-        } else if (recipe.ingredients) {
-            // Scale regular ingredients
-            return recipe.ingredients.map(ing => ({
-                ...ing,
-                scaledAmount: (parseFloat(ing.amount) * scaleFactor).toFixed(2)
-            }));
-        }
-        return [];
-    };
 
     // Helper: Convert any cost to cost per gram
     const getCostPerGram = (item) => {
@@ -517,6 +600,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
+                    sourceSessionId: selectedSession.id,
+                    sourcePanIndex: idx,
                 };
             } else if (pan.type === 'dyeSquareTray') {
                 return {
@@ -535,6 +620,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
+                    sourceSessionId: selectedSession.id,
+                    sourcePanIndex: idx,
                 };
             } else if (pan.type === 'adHoc') {
                 const adHocName = pan.adHocLabel || 'Ad Hoc Experiment';
@@ -558,6 +645,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
+                    sourceSessionId: selectedSession.id,
+                    sourcePanIndex: idx,
                 };
             } else {
                 return {
@@ -579,6 +668,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
+                    sourceSessionId: selectedSession.id,
+                    sourcePanIndex: idx,
                 };
             }
         });
@@ -693,19 +784,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         );
         saveDyeSessions(updatedSessions);
 
-        // Reset selection
+        // Keep the (now archived) session selected so you can still add notes to
+        // it — they route to the batches we just created. It drops out of the
+        // Queue once you switch to another session.
         localStorage.removeItem('queue_done_' + selectedSession.id);
         setCurrentPanIndex(0);
-        setSelectedSessionId('');
         setFinishing(false);
 
-        toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted.', 'success');
-    };
-
-    const goToPreviousPan = () => {
-        if (currentPanIndex > 0) {
-            setCurrentPanIndex(currentPanIndex - 1);
-        }
+        toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted. You can still add notes here.', 'success');
     };
 
     return (
@@ -737,19 +823,30 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                 >
                                     {upcomingSessions.map(session => (
                                         <option key={session.id} value={session.id}>
-                                            {session.name} - {DateUtils.formatDate(session.date)} ({session.pans.length} pans)
+                                            {session.archived ? '✓ ' : ''}{session.name} - {DateUtils.formatDate(session.date)} ({session.pans.length} pans){session.archived ? ' — finished' : ''}
                                         </option>
                                     ))}
                                 </select>
                             </div>
-                            <button
-                                onClick={finishSession}
-                                disabled={finishing}
-                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {finishing ? 'Finishing…' : '🏁 Finish Session'}
-                            </button>
+                            {isFinished ? (
+                                <div className="px-6 py-3 rounded-lg bg-teal-50 border-2 border-teal-300 text-teal-800 font-medium whitespace-nowrap">
+                                    ✓ Finished
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={finishSession}
+                                    disabled={finishing}
+                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {finishing ? 'Finishing…' : '🏁 Finish Session'}
+                                </button>
+                            )}
                         </div>
+                        {isFinished && (
+                            <p className="text-sm text-gray-500 mt-2">
+                                This session is finished. Notes you add below save straight to its batches in Pipeline.
+                            </p>
+                        )}
                     </div>
 
                     {selectedSession && currentPan && (
@@ -758,10 +855,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                             <div className="bg-white rounded-lg card-shadow p-4">
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="text-sm font-medium text-gray-700">
-                                        Pan {currentPanIndex + 1} of {selectedSession.pans.length}
+                                        Step {currentGroupPos + 1} of {panGroups.length}
+                                        {currentGroup && currentGroup.indices.length > 1
+                                            ? ` · Pans ${groupLabel(currentGroup)}`
+                                            : ` · Pan ${currentPanIndex + 1}`}
                                     </span>
                                     <span className="text-sm text-gray-500">
-                                        {completedPans.size} of {selectedSession.pans.length} dyed ({Math.round((completedPans.size / selectedSession.pans.length) * 100)}%)
+                                        {completedPans.size} of {selectedSession.pans.length} pans dyed ({Math.round((completedPans.size / selectedSession.pans.length) * 100)}%)
                                     </span>
                                 </div>
                                 <div className="w-full bg-gray-200 rounded-full h-3">
@@ -813,8 +913,9 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         {panNav()}
+                                        {notesBox([currentPanIndex])}
                                     </>
                                 ) : currentPan.type === 'dyeSquareTray' ? (
                                     // Dye Square Tray Display
@@ -848,8 +949,9 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         {panNav()}
+                                        {notesBox([currentPanIndex])}
                                     </>
                                 ) : currentPan.type === 'adHoc' ? (
                                     // Ad Hoc Pan Display - editable everything
@@ -978,27 +1080,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     )}
                                                 </div>
 
-                                                {/* Prominent Dyeing Notes */}
-                                                <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-4 mb-4">
-                                                    <h4 className="font-semibold text-amber-900 mb-2">🎲 Dyeing Notes</h4>
-                                                    <textarea
-                                                        value={currentPan.experimentNotes || ''}
-                                                        onChange={(e) => updateAdHocPan({ experimentNotes: e.target.value })}
-                                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 resize-y bg-white"
-                                                        rows={5}
-                                                        placeholder="What did you do? Capture it now so you can recreate it (or avoid it) later.
-Examples:
-- Dyes used and approximate amounts
-- Technique (low water immersion, hand-painted, etc.)
-- Results vs. what you expected
-- What to change next time"
-                                                    />
-                                                    <p className="text-xs text-amber-700 mt-2">
-                                                        💡 These notes flow through to the batch in Pipeline so you'll have a record.
-                                                    </p>
-                                                </div>
-
                                                 {panNav()}
+                                                {notesBox([currentPanIndex])}
                                             </>
                                         );
                                     })()
@@ -1021,7 +1104,9 @@ Examples:
                                                     🎨 {currentPan.colorway}
                                                 </h3>
                                                 <p className="text-teal-700 font-medium mb-2">
-                                                    Pan #{currentPanIndex + 1} • {currentPan.totalWeight}g total
+                                                    {isMultiPan
+                                                        ? `Pans ${groupLabel(currentGroup)} — same color, side by side • ${groupPans.map(p => `${p.totalWeight}g`).join(' + ')}`
+                                                        : `Pan #${currentPanIndex + 1} • ${currentPan.totalWeight}g total`}
                                                 </p>
                                                 {currentRecipe?.colorType && (
                                                     <p className="text-sm text-gray-700">
@@ -1035,72 +1120,46 @@ Examples:
                                     {panNav()}
                                 </div>
 
+                                {notesBox(groupIndices)}
+
                                 {/* Recipe & Scaled Ingredients (scaled dye amounts — the
                                     primary thing while dyeing, kept right under the nav) */}
                                 {(currentRecipe || currentColorSketch) ? (
                                     <div className="bg-white rounded-lg p-4">
                                         <h4 className="font-semibold text-gray-900 mb-3">
-                                            {currentColorSketch ? (
-                                                <>
-                                                    🧪 Color Lab: {currentColorSketch.colorId}{currentColorSketch.customName ? ' - ' + currentColorSketch.customName : ''}
-                                                    <span className="text-sm text-gray-500 ml-2">
-                                                        (scaled from {currentColorSketch.yarnWeight}g to {currentPan.totalWeight}g)
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    Recipe: {currentRecipe.name}
-                                                    <span className="text-sm text-gray-500 ml-2">
-                                                        (scaled from {currentRecipe.yarnWeight}g to {currentPan.totalWeight}g)
-                                                    </span>
-                                                </>
-                                            )}
+                                            {currentColorSketch
+                                                ? <>🧪 Color Lab: {currentColorSketch.colorId}{currentColorSketch.customName ? ' - ' + currentColorSketch.customName : ''}</>
+                                                : <>Recipe: {currentRecipe.name}</>}
                                         </h4>
-                                        <div className="space-y-2">
-                                            {(currentColorSketch?.type === 'variegated' || currentRecipe?.colorType === 'variegated') ? (
-                                                // Display scaled color solutions or variegated sections
-                                                scaleIngredients(currentRecipe, currentPan.totalWeight, currentColorSketch).map((solution, idx) => (
-                                                    <div key={idx} className="border-2 border-teal-200 rounded-lg p-3 bg-teal-50">
-                                                        <div className="font-semibold text-teal-900 mb-2">
-                                                            {solution.name || `Solution ${idx + 1}`}
-                                                            {solution.scaledTargetMl && (
-                                                                <span className="text-sm font-normal text-gray-600 ml-2">
-                                                                    → Add water to {solution.scaledTargetMl}ml
-                                                                </span>
-                                                            )}
+                                        {!isMultiPan ? (
+                                            <>
+                                                <p className="text-sm text-gray-500 mb-2">
+                                                    Scaled from {currentColorSketch ? currentColorSketch.yarnWeight : currentRecipe.yarnWeight}g to {currentPan.totalWeight}g
+                                                </p>
+                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={currentPan.totalWeight} />
+                                            </>
+                                        ) : uniformWeight != null ? (
+                                            <>
+                                                <p className="text-sm text-amber-700 font-medium mb-2">
+                                                    ⚠️ Mix this amount for EACH pan separately — {groupPans.length} pans, {uniformWeight}g each.
+                                                </p>
+                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={uniformWeight} />
+                                            </>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                <p className="text-sm text-amber-700 font-medium">
+                                                    ⚠️ Dye each pan separately — amounts differ by weight:
+                                                </p>
+                                                {groupPans.map((p, gi) => (
+                                                    <div key={gi}>
+                                                        <div className="font-semibold text-gray-700 mb-2">
+                                                            Pan #{groupIndices[gi] + 1} — {p.totalWeight}g
                                                         </div>
-                                                        <div className="space-y-1 pl-3">
-                                                            {solution.dyes.map((dye, dIdx) => (
-                                                                <div key={dIdx} className="flex justify-between items-center">
-                                                                    <span className="text-sm text-gray-700">• {dye.name}</span>
-                                                                    <span className="text-blue-700 font-bold">
-                                                                        {dye.scaledAmount}{dye.unit}
-                                                                        <span className="text-xs text-gray-500 ml-1">
-                                                                            (orig: {dye.amount}{dye.unit})
-                                                                        </span>
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
+                                                        <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={parseFloat(p.totalWeight) || 0} />
                                                     </div>
-                                                ))
-                                            ) : (
-                                                // Display regular scaled ingredients (tonal or speckled)
-                                                scaleIngredients(currentRecipe, currentPan.totalWeight, currentColorSketch).map((ing, idx) => (
-                                                    <div key={idx} className="flex justify-between items-center p-3 bg-blue-50 rounded">
-                                                        <span className="font-medium text-gray-900">{ing.name}</span>
-                                                        <div className="text-right">
-                                                            <span className="text-blue-700 font-bold text-lg">
-                                                                {ing.scaledAmount}{ing.unit}
-                                                            </span>
-                                                            <span className="text-xs text-gray-500 ml-2">
-                                                                (original: {ing.amount}{ing.unit})
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
@@ -1110,18 +1169,29 @@ Examples:
                                     </div>
                                 )}
 
-                                {/* Yarns in Pan */}
+                                {/* Yarns in Pan(s) */}
                                 <div className="bg-white rounded-lg p-4 mb-4 mt-4">
-                                    <h4 className="font-semibold text-gray-900 mb-3">Yarns in This Pan:</h4>
-                                    <div className="space-y-2">
-                                        {currentPan.yarns.map((yarn, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
-                                                <span className="font-medium">
-                                                    {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
-                                                </span>
-                                                <span className="text-teal-700 font-semibold">
-                                                    {yarn.quantity * parseFloat(yarn.hankSize)}g total
-                                                </span>
+                                    <h4 className="font-semibold text-gray-900 mb-3">{isMultiPan ? 'Yarns in These Pans:' : 'Yarns in This Pan:'}</h4>
+                                    <div className="space-y-3">
+                                        {groupPans.map((p, gi) => (
+                                            <div key={gi}>
+                                                {isMultiPan && (
+                                                    <div className="text-sm font-semibold text-gray-600 mb-1">
+                                                        Pan #{groupIndices[gi] + 1} • {p.totalWeight}g
+                                                    </div>
+                                                )}
+                                                <div className="space-y-2">
+                                                    {(p.yarns || []).map((yarn, idx) => (
+                                                        <div key={idx} className="flex justify-between items-center p-3 bg-teal-50 rounded border-l-4 border-teal-500">
+                                                            <span className="font-medium">
+                                                                {yarn.quantity}x {yarn.base} ({yarn.hankSize}g each)
+                                                            </span>
+                                                            <span className="text-teal-700 font-semibold">
+                                                                {yarn.quantity * parseFloat(yarn.hankSize)}g total
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1135,147 +1205,60 @@ Examples:
                                     </div>
                                 )}
 
-                                {/* Editable Notes Section for Color Lab */}
-                                {currentColorSketch && (
-                                    <div className="bg-teal-50 border-2 border-teal-300 rounded-lg p-4 mt-4">
-                                        <h4 className="font-semibold text-teal-900 mb-2">📝 Experiment Notes</h4>
-                                        <textarea
-                                            value={currentPan.experimentNotes || ''}
-                                            onChange={(e) => {
-                                                const newNotes = e.target.value;
-                                                
-                                                // Update the pan in the dye session
-                                                const updatedSessions = dyeSessions.map(session => {
-                                                    if (session.id === selectedSession.id) {
-                                                        return {
-                                                            ...session,
-                                                            pans: session.pans.map((pan, idx) => 
-                                                                idx === currentPanIndex 
-                                                                    ? { ...pan, experimentNotes: newNotes }
-                                                                    : pan
-                                                            )
-                                                        };
-                                                    }
-                                                    return session;
-                                                });
-                                                saveDyeSessions(updatedSessions);
-                                                
-                                                // Also update the original color sketch
-                                                if (currentPan.colorSketchId) {
-                                                    const updatedSketches = colorSketches.map(sketch =>
-                                                        sketch.id === currentPan.colorSketchId
-                                                            ? { ...sketch, experimentNotes: newNotes }
-                                                            : sketch
-                                                    );
-                                                    saveColorSketches(updatedSketches);
-                                                }
-                                            }}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 resize-y"
-                                            rows={4}
-                                            placeholder="Add notes about this color experiment...
-Examples:
-- Dye absorption observations
-- Color results vs. expected
-- Adjustments made during dyeing
-- Ideas for next iteration"
-                                        />
-                                        <p className="text-xs text-teal-600 mt-2">
-                                            💡 Use this to track what works and what doesn't for future reference
-                                        </p>
-                                    </div>
-                                )}
                                 </>
                                 )}
 
                             </div>
 
-                            {/* Upcoming Pans Preview */}
-                            {currentPanIndex < selectedSession.pans.length - 1 && (
+                            {/* Upcoming Steps Preview — color, weight and yarns for each */}
+                            {!isFinished && currentGroupPos < panGroups.length - 1 && (
                                 <div className="bg-white rounded-lg card-shadow p-4">
                                     <h4 className="font-semibold text-gray-700 mb-3">Coming Up Next:</h4>
                                     <div className="space-y-2">
-                                        {selectedSession.pans.slice(currentPanIndex + 1, currentPanIndex + 4).map((pan, idx) => (
-                                            <div key={pan.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border">
-                                                <div>
-                                                    <span className="font-medium text-gray-900">
-                                                        Pan #{currentPanIndex + idx + 2}: {pan.colorway}
-                                                    </span>
-                                                    <span className="text-sm text-gray-500 ml-2">
-                                                        ({pan.totalWeight}g)
-                                                    </span>
+                                        {panGroups.slice(currentGroupPos + 1, currentGroupPos + 4).map((g, gi) => {
+                                            const gp = g.indices.map(i => selectedSession.pans[i]);
+                                            const wt = gp.reduce((s, p) => s + panWeight(p), 0);
+                                            const photo = panPhoto(gp[0]);
+                                            const swatch = panSwatch(gp[0]);
+                                            return (
+                                                <div key={gi} className="p-3 bg-gray-50 rounded border flex gap-3">
+                                                    {photo ? (
+                                                        <img
+                                                            src={photo}
+                                                            alt={panTitle(gp[0])}
+                                                            className="w-12 h-12 rounded object-cover border border-gray-200 flex-shrink-0"
+                                                            onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+                                                        />
+                                                    ) : (
+                                                        <div
+                                                            className="w-12 h-12 rounded border border-gray-200 flex-shrink-0 flex items-center justify-center text-xl"
+                                                            style={swatch ? { background: swatch } : undefined}
+                                                        >
+                                                            {!swatch && panEmoji(gp[0])}
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-start gap-2">
+                                                            <span className="font-medium text-gray-900">
+                                                                {g.indices.length > 1 ? `Pans ${groupLabel(g)}` : `Pan #${g.indices[0] + 1}`}: {panTitle(gp[0])}
+                                                            </span>
+                                                            <span className="text-sm text-gray-500 whitespace-nowrap">{wt}g</span>
+                                                        </div>
+                                                        {gp.map((p, pi) => {
+                                                            const summary = yarnSummary(p);
+                                                            return summary ? (
+                                                                <div key={pi} className="text-xs text-gray-600 mt-1">
+                                                                    {g.indices.length > 1 ? `Pan #${g.indices[pi] + 1}: ` : ''}{summary}
+                                                                </div>
+                                                            ) : null;
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
-
-                            {/* Cost Breakdown */}
-                            {(() => {
-                                const costs = calculatePanCosts(currentPan, currentRecipe);
-                                return (
-                                    <div className="bg-green-50 border-2 border-green-300 rounded-lg p-4 mt-4">
-                                        <h4 className="font-semibold text-green-900 mb-3">💰 Cost Breakdown</h4>
-                                        <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-700">Yarn:</span>
-                                                <span className="font-medium">${costs.yarn.toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-700">Dye:</span>
-                                                <span className="font-medium">${costs.dye.toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-700">Chemicals:</span>
-                                                <span className="font-medium">${costs.chemicals.toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-700">Ball Bands:</span>
-                                                <span className="font-medium">${costs.ballBands.toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-700">Labels:</span>
-                                                <span className="font-medium">${costs.labels.toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                        <div className="border-t-2 border-green-400 pt-2">
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-bold text-green-900">Total Cost:</span>
-                                                <span className="font-bold text-xl text-green-900">${costs.total.toFixed(2)}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center mt-1">
-                                                <span className="text-sm text-gray-700">Average ({costs.skeins} skeins):</span>
-                                                <span className="font-semibold text-green-800">${costs.perSkein.toFixed(2)}/skein</span>
-                                            </div>
-                                            
-                                            {/* Per-skein details grouped by base+size */}
-                                            {costs.skeinDetails && costs.skeinDetails.length > 0 && (() => {
-                                                // Group by base+hankSize
-                                                const grouped = costs.skeinDetails.reduce<Record<string, { count: number; cost: number }>>((acc, skein) => {
-                                                    const key = `${skein.base} ${skein.hankSize}g`;
-                                                    if (!acc[key]) {
-                                                        acc[key] = { count: 0, cost: skein.cost };
-                                                    }
-                                                    acc[key].count++;
-                                                    return acc;
-                                                }, {});
-                                                
-                                                return (
-                                                    <div className="mt-3 pt-2 border-t border-green-300">
-                                                        <div className="text-xs font-semibold text-green-900 mb-1">Cost per skein type:</div>
-                                                        {Object.entries(grouped).map(([key, {count, cost}]) => (
-                                                            <div key={key} className="flex justify-between text-xs text-gray-700">
-                                                                <span>{count}x {key}:</span>
-                                                                <span className="font-medium">${cost.toFixed(2)} each</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                );
-                                            })()}
-                                        </div>
-                                    </div>
-                                );
-                            })()}
                         </>
                     )}
                 </>
