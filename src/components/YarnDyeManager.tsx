@@ -144,7 +144,11 @@ export function YarnDyeManager() {
             console.warn('Attempting to save empty batches when batches exist - this will be blocked by StorageManager');
         }
         setBatches(newBatches);
-        await StorageManager.set('batches', newBatches);
+        const ok = await StorageManager.set('batches', newBatches);
+        // Roll back the optimistic update so the UI never shows batches that
+        // aren't in the database (they'd vanish on reload).
+        if (!ok) setBatches(batches);
+        return ok;
     };
 
     const saveSales = async (newSales) => {

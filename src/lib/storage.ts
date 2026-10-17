@@ -87,31 +87,31 @@ function toDbShape(key: CollectionKey, items: Row[]): Row[] {
 }
 
 /**
- * Upsert rows keyed on `id`, retrying once if the DB rejects an unknown column
- * (the schema has accumulated stray fields over time). Returns true on success.
+ * Upsert rows keyed on `id`. If the DB rejects an unknown column (the schema
+ * has accumulated stray fields over time), strip it and retry — repeatedly, so
+ * several missing columns can't sink the whole save. Returns true on success.
  */
 async function upsertWithRetry(key: CollectionKey, items: Row[]): Promise<boolean> {
-  const { error } = await supabase.from(key).upsert(items, { onConflict: 'id' });
-  if (!error) return true;
-
-  console.error(`Error upserting ${key}:`, error.message, error);
-
-  // Strip a single unknown column and retry once (PostgREST names it in the message).
-  if (error.message.includes('Could not find') && error.message.includes('column')) {
-    const match = error.message.match(/Could not find the '(\w+)' column/);
-    if (match) {
-      const badColumn = match[1];
-      console.warn(`Stripping unknown column "${badColumn}" and retrying upsert...`);
-      const stripped = items.map(({ [badColumn]: _removed, ...rest }) => rest);
-      const { error: retryError } = await supabase.from(key).upsert(stripped, { onConflict: 'id' });
-      if (retryError) {
-        console.error(`Retry failed for ${key}:`, retryError);
-        return false;
-      }
-      console.log(`Retry succeeded for ${key} (stripped "${badColumn}")`);
+  let rows = items;
+  const stripped: string[] = [];
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const { error } = await supabase.from(key).upsert(rows, { onConflict: 'id' });
+    if (!error) {
+      if (stripped.length) console.warn(`Saved ${key} without unknown column(s): ${stripped.join(', ')}`);
       return true;
     }
+
+    // PostgREST names the missing column in the message.
+    const match = error.message.match(/Could not find the '(\w+)' column/);
+    if (!match || stripped.includes(match[1])) {
+      console.error(`Error upserting ${key}:`, error.message, error);
+      return false;
+    }
+    const badColumn = match[1];
+    stripped.push(badColumn);
+    rows = rows.map(({ [badColumn]: _removed, ...rest }) => rest);
   }
+  console.error(`Gave up upserting ${key} after stripping: ${stripped.join(', ')}`);
   return false;
 }
 
