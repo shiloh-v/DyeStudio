@@ -115,6 +115,29 @@ async function upsertWithRetry(key: CollectionKey, items: Row[]): Promise<boolea
   return false;
 }
 
+// PostgREST caps every response at 1000 rows (Supabase default max-rows), so a
+// plain select silently truncates big tables — and a truncated load followed by
+// a save would DELETE the missing rows. Page through with .range() instead.
+const PAGE = 1000;
+async function selectAll(key: CollectionKey, columns: string, userId: string): Promise<{ data: Row[]; error: any }> {
+  const all: Row[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(key)
+      .select(columns)
+      .eq('user_id', userId)
+      .order('id')
+      .range(from, from + PAGE - 1);
+    if (error) return { data: all, error };
+    all.push(...((data as Row[]) || []));
+    if (!data || data.length < PAGE) return { data: all, error: null };
+  }
+}
+
+// Upsert in chunks so a large import (thousands of Shopify lines) stays well
+// under request-size limits.
+const UPSERT_CHUNK = 500;
+
 export const StorageManager = {
   async get(key: CollectionKey | 'settings'): Promise<any> {
     try {
@@ -133,7 +156,7 @@ export const StorageManager = {
         return data?.settings_data || null;
       }
 
-      const { data, error } = await supabase.from(key).select('*').eq('user_id', userId);
+      const { data, error } = await selectAll(key, '*', userId);
       if (error) {
         console.error(`Error fetching ${key}:`, error.message, error);
         return [];
@@ -207,8 +230,8 @@ export const StorageManager = {
       //    We never delete first, so a failed/interrupted write cannot wipe data
       //    — this is the core fix for the old delete-all-then-insert pattern.
       const items = toDbShape(key, clean(value, userId));
-      if (items.length > 0) {
-        const ok = await upsertWithRetry(key, items);
+      for (let i = 0; i < items.length; i += UPSERT_CHUNK) {
+        const ok = await upsertWithRetry(key, items.slice(i, i + UPSERT_CHUNK));
         if (!ok) return false;
       }
 
@@ -217,10 +240,7 @@ export const StorageManager = {
       const keepIds = new Set(
         value.map((it: Row) => Number(it.id)).filter((n: number) => Number.isFinite(n))
       );
-      const { data: existing, error: exErr } = await supabase
-        .from(key)
-        .select('id')
-        .eq('user_id', userId);
+      const { data: existing, error: exErr } = await selectAll(key, 'id', userId);
 
       if (exErr) {
         // The upsert already succeeded; a failed diff just leaves stale rows
@@ -230,15 +250,17 @@ export const StorageManager = {
         const removedIds = (existing || [])
           .map((r: Row) => Number(r.id))
           .filter((id: number) => Number.isFinite(id) && !keepIds.has(id));
-        if (removedIds.length > 0) {
+        // Chunked so the id list stays within URL-length limits.
+        for (let i = 0; i < removedIds.length; i += 200) {
+          const chunk = removedIds.slice(i, i + 200);
           const { error: delErr } = await supabase
             .from(key)
             .delete()
             .eq('user_id', userId)
-            .in('id', removedIds);
+            .in('id', chunk);
           if (delErr) console.error(`Error deleting removed ${key} rows:`, delErr.message);
-          else console.log(`Removed ${removedIds.length} ${key} row(s)`);
         }
+        if (removedIds.length > 0) console.log(`Removed ${removedIds.length} ${key} row(s)`);
       }
 
       console.log(`Saved ${value.length} items to ${key}`);

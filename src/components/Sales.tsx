@@ -105,7 +105,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
             </div>
 
             <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg px-4 py-3">
-                📦 These are <strong>projections</strong> from your finished stock (expected list prices), not realized sales. Actual sales will arrive once Shopify is connected.
+                📦 These are <strong>projections</strong> from your finished stock (expected list prices), not realized sales. For actual Shopify sales, see the 📈 Demand tab.
             </div>
 
             {/* Stats */}
