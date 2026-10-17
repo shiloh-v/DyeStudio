@@ -39,10 +39,17 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         return [...(yarnBases[baseName] || [])].sort((a, b) => parseFloat(a) - parseFloat(b));
     };
 
+    // A finished session whose batches never reached Pipeline (e.g. the batch
+    // save failed). Older batches predate sourceSessionId, so also match the
+    // "...session: <name>" note every finished batch carries.
+    const isMissingBatches = (s) => !!s.archived && batches.length > 0 && !batches.some(b =>
+        b.sourceSessionId === s.id || (b.notes || '').endsWith(`session: ${s.name}`));
+
     // Non-archived sessions with pans — PLUS the currently-selected session even
-    // if it was just finished, so you can keep adding notes after completing it.
+    // if it was just finished, so you can keep adding notes after completing it,
+    // and any finished session that's missing its Pipeline batches.
     const upcomingSessions = dyeSessions
-        .filter(s => (!s.archived || s.id.toString() === selectedSessionId) && s.pans.length > 0)
+        .filter(s => (!s.archived || s.id.toString() === selectedSessionId || isMissingBatches(s)) && s.pans.length > 0)
         .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     // Restore the saved session if it's still active; otherwise auto-select the
@@ -64,6 +71,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const currentPan = selectedSession?.pans[currentPanIndex];
     // A finished (archived) session is shown read-only for review + note-taking.
     const isFinished = !!selectedSession?.archived;
+    const needsPipeline = !!selectedSession && isMissingBatches(selectedSession);
 
     // --- Same-color grouping ---------------------------------------------------
     // You dye two pans of the same color together, so consecutive pans that share
@@ -554,17 +562,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         return costs;
     };
 
-    const finishSession = async () => {
-        if (!selectedSession) return;
-        if (selectedSession.archived) { toast('This session is already finished.', 'error'); return; }
-        if (finishing) return;
-
-        const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn, dye and acid from inventory\n- Remove this session from Dye Sessions`;
-
-        if (!(await confirmDialog({ title: 'Finish session', message: confirmMessage, confirmText: 'Finish' }))) return;
-
-        setFinishing(true);
-
+    // One Pipeline batch per pan of a session (costs + yarn details included).
+    const buildSessionBatches = (session) => {
         // Get next batch ID number
         const getNextBatchId = () => {
             const existingBatchIds = batches
@@ -581,7 +580,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
         // Create batches for each pan with yarn details and costs
         const movedAt = new Date().toISOString();
-        const newBatches = selectedSession.pans.map((pan, idx) => {
+        return session.pans.map((pan, idx) => {
             const recipe = pan.recipe || (pan.recipeId ? recipes.find(r => r.id === parseInt(pan.recipeId)) : null);
             const costs = calculatePanCosts(pan, recipe);
             const batchId = `B-${String(nextBatchNum + idx).padStart(3, '0')}`;
@@ -596,14 +595,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: `${pan.gradientDye} Gradient`,
                     skeins: 10,
                     status: 'dyeing',
-                    startDate: selectedSession.date,
-                    notes: `Gradient tray from session: ${selectedSession.name}`,
+                    startDate: session.date,
+                    notes: `Gradient tray from session: ${session.name}`,
                     yarnDetails: [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 10 }],
                     costBreakdown: costs,
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
-                    sourceSessionId: selectedSession.id,
+                    sourceSessionId: session.id,
                     sourcePanIndex: idx,
                 };
             } else if (pan.type === 'dyeSquareTray') {
@@ -616,14 +615,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: `${pan.squareColorA} × ${pan.squareColorB} Dye Square`,
                     skeins: 25,
                     status: 'dyeing',
-                    startDate: selectedSession.date,
-                    notes: `Dye square tray from session: ${selectedSession.name}`,
+                    startDate: session.date,
+                    notes: `Dye square tray from session: ${session.name}`,
                     yarnDetails: [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 25 }],
                     costBreakdown: costs,
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
-                    sourceSessionId: selectedSession.id,
+                    sourceSessionId: session.id,
                     sourcePanIndex: idx,
                 };
             } else if (pan.type === 'adHoc') {
@@ -638,8 +637,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: adHocName,
                     skeins: adHocYarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0),
                     status: 'dyeing',
-                    startDate: selectedSession.date,
-                    notes: `Ad hoc pan from session: ${selectedSession.name}`,
+                    startDate: session.date,
+                    notes: `Ad hoc pan from session: ${session.name}`,
                     experimentNotes: pan.experimentNotes || '',
                     batchNotes: '',
                     yarnDetails: adHocYarns,
@@ -648,7 +647,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
-                    sourceSessionId: selectedSession.id,
+                    sourceSessionId: session.id,
                     sourcePanIndex: idx,
                 };
             } else {
@@ -661,8 +660,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: pan.colorway,
                     skeins: pan.yarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0),
                     status: 'dyeing',
-                    startDate: selectedSession.date,
-                    notes: `From session: ${selectedSession.name}`,
+                    startDate: session.date,
+                    notes: `From session: ${session.name}`,
                     experimentNotes: pan.experimentNotes || '', // Preserve experiment notes from Up Next
                     batchNotes: '', // For notes added during pipeline stages
                     yarnDetails: pan.yarns,
@@ -671,13 +670,46 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     totalCost: costs.total,
                     costPerSkein: costs.perSkein,
                     lastMovedAt: movedAt,
-                    sourceSessionId: selectedSession.id,
+                    sourceSessionId: session.id,
                     sourcePanIndex: idx,
                 };
             }
         });
+    };
 
-        saveBatches([...batches, ...newBatches]);
+    // Recovery for a finished session with no batches: create them without
+    // touching inventory (that was already deducted when it was finished).
+    const sendToPipeline = async () => {
+        if (!selectedSession || !needsPipeline || finishing) return;
+        if (!(await confirmDialog({
+            title: 'Send to Pipeline',
+            message: `Create ${selectedSession.pans.length} batches in Pipeline (Dyeing) for "${selectedSession.name}"?\n\nInventory is NOT deducted again.`,
+            confirmText: 'Send',
+        }))) return;
+        setFinishing(true);
+        const ok = await saveBatches([...batches, ...buildSessionBatches(selectedSession)]);
+        setFinishing(false);
+        if (ok) toast(`Added ${selectedSession.pans.length} batches to Pipeline.`, 'success');
+        else toast('Could not save the batches to Pipeline. Please try again.', 'error');
+    };
+
+    const finishSession = async () => {
+        if (!selectedSession) return;
+        if (selectedSession.archived) { toast('This session is already finished.', 'error'); return; }
+        if (finishing) return;
+
+        const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn, dye and acid from inventory\n- Remove this session from Dye Sessions`;
+
+        if (!(await confirmDialog({ title: 'Finish session', message: confirmMessage, confirmText: 'Finish' }))) return;
+
+        setFinishing(true);
+
+        const newBatches = buildSessionBatches(selectedSession);
+        if (!(await saveBatches([...batches, ...newBatches]))) {
+            setFinishing(false);
+            toast('Could not save the new batches to Pipeline, so nothing was deducted or archived. Please try again.', 'error');
+            return;
+        }
 
         // ---- Deduct consumed inventory: yarn + dye + acid ----
         const UNIT_G = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
@@ -831,7 +863,15 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                     ))}
                                 </select>
                             </div>
-                            {isFinished ? (
+                            {needsPipeline ? (
+                                <button
+                                    onClick={sendToPipeline}
+                                    disabled={finishing}
+                                    className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {finishing ? 'Sending…' : '📤 Send to Pipeline'}
+                                </button>
+                            ) : isFinished ? (
                                 <div className="px-6 py-3 rounded-lg bg-teal-50 border-2 border-teal-300 text-teal-800 font-medium whitespace-nowrap">
                                     ✓ Finished
                                 </div>
@@ -845,7 +885,11 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                 </button>
                             )}
                         </div>
-                        {isFinished && (
+                        {needsPipeline ? (
+                            <p className="text-sm text-amber-700 mt-2">
+                                This session was finished but its batches never made it to Pipeline. Send them now — inventory won't be deducted again.
+                            </p>
+                        ) : isFinished && (
                             <p className="text-sm text-gray-500 mt-2">
                                 This session is finished. Notes you add below save straight to its batches in Pipeline.
                             </p>
