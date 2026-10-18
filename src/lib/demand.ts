@@ -634,40 +634,50 @@ export function gradientTrayYarn(sessions: any[], ctx: DemandContext): { base: s
  * Group a restock's pans into batches: whole colorway pairs only, up to
  * 8 colorways + a gradient tray while dyes still need gradients, else 9.
  */
+export const LAB_TESTS_PER_BATCH = 2;
+
 export function planBatches(pans: any[], gradientDyes: string[], trayYarn: { base: string; hankSize: number }) {
     const groups: any[][] = [];
     for (const p of pans) {
         const g = groups[groups.length - 1];
-        if (g && g[0].colorway === p.colorway) g.push(p); else groups.push([p]);
+        if (g && g[0].colorway === p.colorway && g[0].type === p.type) g.push(p); else groups.push([p]);
     }
     const dyes = [...gradientDyes];
-    const batches: any[][] = [];
-    let cur: any[] = [];
-    let racks = 0;
-    let trayAdded = false;
-    const open = () => {
-        cur = []; racks = 0; trayAdded = false;
-        if (dyes.length) {
-            cur.push({
-                id: Date.now() + batches.length / 100 + 0.5,
-                type: 'gradientTray',
-                gradientDye: dyes.shift(),
-                gradientYarnBase: trayYarn.base,
-                gradientHankSize: trayYarn.hankSize,
-                depths: GRADIENT_DEPTHS,
-            });
-            racks = 1; trayAdded = true;
-        }
-        batches.push(cur);
+    type B = { items: any[]; racks: number; tray: any | null; labs: number };
+    const batches: B[] = [];
+    const open = (): B => {
+        const tray = dyes.length ? {
+            id: Date.now() + batches.length / 100 + 0.5,
+            type: 'gradientTray',
+            gradientDye: dyes.shift(),
+            gradientYarnBase: trayYarn.base,
+            gradientHankSize: trayYarn.hankSize,
+            depths: GRADIENT_DEPTHS,
+        } : null;
+        const b: B = { items: [], racks: tray ? 1 : 0, tray, labs: 0 };
+        batches.push(b);
+        return b;
     };
-    for (const g of groups) {
+    // Color Lab tests claim their slots first: LAB_TESTS_PER_BATCH per batch.
+    const labGroups = groups.filter((g) => g[0].type === 'colorLab');
+    labGroups.forEach((g, i) => {
+        const b = batches[Math.floor(i / LAB_TESTS_PER_BATCH)] || open();
+        b.items.push(...g);
+        b.racks += Math.ceil(g.length / 2);
+        b.labs++;
+    });
+    // Colorways then fill batches in order (first batch with room).
+    for (const g of groups.filter((x) => x[0].type !== 'colorLab')) {
         const need = Math.ceil(g.length / 2);
-        if (!batches.length || racks + need > RACKS_PER_BATCH) open();
-        // Colorways first, tray last (it's the "extra" rack in the oven).
-        cur.splice(trayAdded ? cur.length - 1 : cur.length, 0, ...g);
-        racks += need;
+        const b = batches.find((x) => x.racks + need <= RACKS_PER_BATCH) || open();
+        b.items.push(...g);
+        b.racks += need;
     }
-    return batches;
+    // Within a batch: colorways, then Color Lab tests, tray last.
+    return batches.map((b) => {
+        const ordered = [...b.items.filter((p) => p.type !== 'colorLab'), ...b.items.filter((p) => p.type === 'colorLab')];
+        return b.tray ? [...ordered, b.tray] : ordered;
+    });
 }
 
 export interface RestockOptions {
@@ -822,13 +832,15 @@ export function planRestock(input: RestockPlanInput) {
         .map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest }));
     const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
     const asEmpty = (c: string) => ({ colorway: c, recipeId: recipes.find((r) => r.name === c)?.id, base: '', hankSize: 0, qty: 0 });
-    // Color Lab tests ride along as pairs, filled in the shop's overall mix.
+    // Color Lab tests: a pair per sketch — one Nova Fingering pan, one Luna DK
+    // pan, each 5 minis + 50s or fulls (whichever that base sells more of).
     const labByName = new Map<string, any>();
     for (const k of input.labTests || []) {
         const name = String(k.customName || k.colorId || 'Color Lab test');
         if (!chosen.some((c) => c.colorway === name) && !manual.includes(name)) labByName.set(name, k);
     }
-    const base = [...chosen, ...manual.map(asEmpty), ...[...labByName.keys()].map((n) => ({ colorway: n, recipeId: undefined, base: '', hankSize: 0, qty: 0 }))];
+    const labPans = [...labByName.entries()].flatMap(([name, sk]) => labTestPans(name, sk, ctx, input.units));
+    const base = [...chosen, ...manual.map(asEmpty)];
 
     const gradientDyes = dyesNeedingGradient(input.inventory, input.gradients, input.sessions);
     const trayYarn = gradientTrayYarn(input.sessions, ctx);
@@ -846,25 +858,21 @@ export function planRestock(input: RestockPlanInput) {
             mix: (cw) => salesMix(cw, input.inWindow, input.units),
             stock: free,
         });
-        const pans = built.pans.map((p) => {
-            const sk = labByName.get(p.colorway);
-            if (!sk) return p;
-            return { ...p, type: 'colorLab', recipeId: '', recipe: null, colorSketchId: String(sk.id), colorSketch: sk, notes: 'Color Lab test' };
-        });
+        const pans = [...built.pans, ...labPans];
         return { ...built, pans, batches: planBatches(pans, gradientDyes, trayYarn) };
     };
     let result = build(base);
     let extras: string[] = [];
     if (input.fill && (result.batches.length || input.forceBatch)) {
-        const last = result.batches[result.batches.length - 1];
+        // Free racks across ALL batches (an empty forced batch still gets its tray).
         const isPan = (p: any) => p.type === 'pan' || p.type === 'colorLab';
-        const used = last
-            ? last.filter(isPan).length / 2 + last.filter((p) => p.type === 'gradientTray').length
-            : (gradientDyes.length ? 1 : 0); // an empty forced batch still gets its tray
-        const freeRacks = RACKS_PER_BATCH - Math.ceil(used);
+        const usedIn = (b: any[]) => Math.ceil(b.filter(isPan).length / 2) + b.filter((p) => p.type === 'gradientTray').length;
+        const freeRacks = result.batches.length
+            ? result.batches.reduce((t, b) => t + RACKS_PER_BATCH - usedIn(b), 0)
+            : RACKS_PER_BATCH - (gradientDyes.length ? 1 : 0);
         if (freeRacks > 0) {
             // Skip colorways already in this plan or in an upcoming session.
-            const taken = new Set(base.map((c) => c.colorway));
+            const taken = new Set([...base.map((c) => c.colorway), ...labByName.keys()]);
             for (const sess of input.sessions || []) {
                 if (sess?.archived) continue;
                 for (const p of sess.pans || []) {
@@ -960,4 +968,43 @@ export function labTestCandidates(sketches: any[], sessions: any[], recipes: Rec
         .filter((k) => !k.archived && !recipeNames.has(normText(k.customName || k.colorId)))
         .map((k) => ({ sketch: k, name: String(k.customName || k.colorId || 'Color Lab test'), tested: tested.has(String(k.id)) }))
         .sort((a, b) => Number(a.tested) - Number(b.tested) || Number(a.sketch.id) - Number(b.sketch.id));
+}
+
+
+/** Bases Color Lab tests are dyed on (one pan each). */
+export const LAB_TEST_BASES = ['Nova Fingering', 'Luna DK'];
+export const LAB_MINIS_PER_PAN = 5;
+
+/**
+ * A Color Lab test pair: one pan per test base, each 5 minis (20g) topped to
+ * 300g with 50s or fulls — whichever size that base sells more of (only sizes
+ * in the Yarn Bases catalog).
+ */
+export function labTestPans(name: string, sketch: any, ctx: DemandContext, units: Unit[]) {
+    return LAB_TEST_BASES.map((wanted, i) => {
+        const entry = ctx.catalog.find((b) => normText(b.myName) === normText(wanted));
+        const baseName = entry?.myName || wanted;
+        const sizes = new Set((entry?.sizes || []).map((z) => Number(z.amount)));
+        const sold = (h: number) => units.filter((u) => u.base === baseName && u.hankSize === h).reduce((t, u) => t + u.qty, 0);
+        const options = [100, 50].filter((h) => !entry || sizes.has(h));
+        const big = options.sort((a, b) => sold(b) - sold(a) || b - a)[0] || 100;
+        const miniGrams = 20 * LAB_MINIS_PER_PAN;
+        const yarns = [
+            { base: baseName, hankSize: 20, quantity: LAB_MINIS_PER_PAN },
+            { base: baseName, hankSize: big, quantity: Math.round((PAN_GRAMS - miniGrams) / big) },
+        ];
+        return {
+            id: Date.now() + Math.random(),
+            type: 'colorLab',
+            colorway: name,
+            recipeId: '',
+            recipe: null,
+            colorSketchId: String(sketch.id),
+            colorSketch: sketch,
+            capacity: PAN_GRAMS,
+            yarns,
+            totalWeight: yarns.reduce((t, y) => t + y.hankSize * y.quantity, 0),
+            notes: `Color Lab test (${baseName} pan ${i + 1} of 2)`,
+        };
+    });
 }
