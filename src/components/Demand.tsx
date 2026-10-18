@@ -18,7 +18,7 @@ const money = (n: number) => `$${(n || 0).toLocaleString('en-US', { minimumFract
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
 
-export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, gradients = [], setActiveTab }) {
+export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, gradients = [], colorSketches = [], setActiveTab }) {
     const today = DateUtils.getTodayEST();
     const [schemaOk, setSchemaOk] = useState<boolean | null>(null);
     const [busy, setBusy] = useState(false);
@@ -32,6 +32,11 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const [edits, setEdits] = useState<PlanEdits>(() => demandPrefs.planEdits());
     useEffect(() => { demandPrefs.set('demand_plan_edits', edits); }, [edits]);
     const [addPick, setAddPick] = useState('');
+    // Yarn-to-order horizon (months of dyeing, batches per month; null = history).
+    const [yarnMonths, setYarnMonths] = useState<number>(() => demandPrefs.yarnMonths());
+    const [pace, setPace] = useState<number | null>(() => demandPrefs.batchesPerMonth());
+    useEffect(() => { demandPrefs.set('demand_yarn_months', yarnMonths); }, [yarnMonths]);
+    useEffect(() => { demandPrefs.set('demand_batches_per_month', pace); }, [pace]);
     const ordersInput = useRef<HTMLInputElement>(null);
     const invInput = useRef<HTMLInputElement>(null);
 
@@ -42,8 +47,8 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const allLines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
     // Shared with Dashboard / Inventory / Recipes so every tab shows the same numbers.
     const D = useMemo(
-        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, planEdits: edits, windowIdx, targetWeeks, today }),
-        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, edits, windowIdx, targetWeeks, today]
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches, planEdits: edits, yarnMonths, batchesPerMonth: pace, windowIdx, targetWeeks, today }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches, edits, yarnMonths, pace, windowIdx, targetWeeks, today]
     );
     const { ctx, lines, units, firstDate, windowDays, inWindow, getCost, supply, suggestions, yarnOrder, toBuy, yarnOrderCost } = D;
     const snapshot = settings?.shopifyInventory || null;
@@ -153,13 +158,22 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     // ---------- Dye next → draft session ----------
 
     const plan = D.plan;
-    const planPans = plan.batches.flat().filter((p) => p.type === 'pan');
+    const planPans = plan.batches.flat().filter((p) => p.type === 'pan' || p.type === 'colorLab');
     const planColorways = [...new Set(planPans.map((p) => p.colorway))];
     const removeColorway = (c: string) => setEdits((e) => ({ ...e, removed: [...new Set([...e.removed, c])], added: e.added.filter((x) => x !== c) }));
     const addColorway = (c: string) => c && setEdits((e) => ({ ...e, added: [...new Set([...e.added, c])], removed: e.removed.filter((x) => x !== c) }));
-    const edited = edits.removed.length > 0 || edits.added.length > 0;
+    const labIds = edits.labTests || [];
+    const addLabTest = (id: string) => id && setEdits((e) => ({ ...e, labTests: [...new Set([...(e.labTests || []), id])] }));
+    const removeLabTest = (id: string) => setEdits((e) => ({ ...e, labTests: (e.labTests || []).filter((x) => x !== id) }));
+    // Nothing running low: plan a batch anyway, starting with untested Color Lab sketches.
+    const planAnyway = () => setEdits((e) => ({
+        ...e,
+        forceBatch: true,
+        labTests: (e.labTests || []).length ? e.labTests : D.labCandidates.filter((c) => !c.tested).slice(0, 4).map((c) => String(c.sketch.id)),
+    }));
+    const edited = edits.removed.length > 0 || edits.added.length > 0 || labIds.length > 0 || !!edits.forceBatch;
     const resetPlan = () => {
-        const fresh = { removed: [], added: [], fill: edits.fill };
+        const fresh = { removed: [], added: [], fill: edits.fill, labTests: [], forceBatch: false };
         // Save now: drafting navigates away before the effect would persist it.
         demandPrefs.set('demand_plan_edits', fresh);
         setEdits(fresh);
@@ -176,14 +190,15 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
         const label = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const notes = `Drafted from Demand (${win.label} of Shopify sales, ${targetWeeks}-week target).` +
             (plan.topUps ? ` Pans topped up to ${PAN_GRAMS}g in each color's sales mix (see pan notes).` : '') +
-            (plan.extras.length ? ` Batch filled with next best sellers: ${plan.extras.join(', ')}.` : '');
+            (plan.extras.length ? ` Batch filled with next best sellers: ${plan.extras.join(', ')}.` : '') +
+            (plan.labTests.length ? ` Color Lab tests: ${plan.labTests.join(', ')}.` : '');
         const parts = plan.batches.length;
         const created = plan.batches.map((load, i) => {
             const tray = load.find((p) => p.type === 'gradientTray');
             return {
                 id: Date.now() + i,
                 sessionId: `DS-${String(next++).padStart(3, '0')}`,
-                name: `Restock – ${label}${parts > 1 ? ` (${i + 1} of ${parts})` : ''}`,
+                name: `${load.some((p) => p.type === 'colorLab') ? 'Test & restock' : 'Restock'} – ${label}${parts > 1 ? ` (${i + 1} of ${parts})` : ''}`,
                 date: today,
                 pans: load,
                 notes: notes + (tray ? ` Gradient tray: ${tray.gradientDye}.` : ''),
@@ -333,10 +348,15 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                         setAddPick={setAddPick}
                         recipes={recipes}
                         onCreate={createDraftSessions}
+                        labCandidates={D.labCandidates}
+                        labIds={labIds}
+                        addLabTest={addLabTest}
+                        removeLabTest={removeLabTest}
+                        planAnyway={planAnyway}
                     />
 
                     {/* Yarn to order */}
-                    <YarnToOrder rows={yarnOrder} toBuy={toBuy} total={yarnOrderCost} targetWeeks={targetWeeks} />
+                    <YarnToOrder rows={yarnOrder} toBuy={toBuy} total={yarnOrderCost} horizon={D.horizon} yarnMonths={yarnMonths} setYarnMonths={setYarnMonths} pace={pace} setPace={setPace} />
 
                     {/* Best sellers */}
                     <div className="bg-white rounded-lg card-shadow p-6">
@@ -643,7 +663,7 @@ function Mapper({ rows, recipes, kits, settings, saveSettings, onClose }) {
 }
 
 /** Undyed yarn to buy, rounded to supplier packs, grouped by supplier. */
-function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
+function YarnToOrder({ rows, toBuy, total, horizon, yarnMonths, setYarnMonths, pace, setPace }) {
     const [showCovered, setShowCovered] = useState(false);
     const covered = rows.filter((r) => r.short === 0);
     const bySupplier = new Map<string, typeof toBuy>();
@@ -665,6 +685,7 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
             <td className="py-2 pr-4"><span className="font-medium text-gray-900">{label(r)}</span>{r.sku && <span className="text-xs text-gray-500"> · SKU {r.sku}</span>}</td>
             <td className="py-2 pr-4 text-right tabular-nums">{r.forDyeNext || '—'}</td>
             <td className="py-2 pr-4 text-right tabular-nums">{r.forPlanned || '—'}</td>
+            <td className="py-2 pr-4 text-right tabular-nums">{r.forProjected || '—'}</td>
             <td className="py-2 pr-4 text-right tabular-nums">{r.keep || '—'}</td>
             <td className="py-2 pr-4 text-right tabular-nums">{r.have}</td>
             <td className="py-2 pr-4 text-right tabular-nums font-semibold">{r.short ? `${r.packs} × ${r.packSize}` : '✓'}</td>
@@ -677,6 +698,7 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
                 <th className="py-2 pr-4">Base · size</th>
                 <th className="py-2 pr-4 text-right" title="Skeins the batch plan below needs (pans + gradient trays)">This plan</th>
                 <th className="py-2 pr-4 text-right" title="Skeins your already-planned dye sessions need">Sessions</th>
+                <th className="py-2 pr-4 text-right" title="Typical batches projected for the rest of the stock-up period, in your overall sales mix">Projected</th>
                 <th className="py-2 pr-4 text-right" title="Low-stock minimum set on the Inventory item">Keep</th>
                 <th className="py-2 pr-4 text-right" title="Undyed skeins in Inventory">Have</th>
                 <th className="py-2 pr-4 text-right">Order (packs)</th>
@@ -690,8 +712,24 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
                 <h3 className="text-lg font-semibold">🧶 Yarn to order</h3>
                 {toBuy.length > 0 && <button onClick={copy} className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium">📋 Copy order list</button>}
             </div>
+            <div className="text-sm text-gray-600 mb-2 flex flex-wrap items-center gap-2">
+                Stock up for
+                <input type="number" min={0} max={12} step={0.5} value={yarnMonths}
+                    onChange={(e) => setYarnMonths(Math.max(0, Math.min(12, parseFloat(e.target.value) || 0)))}
+                    className="w-16 border border-gray-300 rounded px-2 py-1" aria-label="Months of dyeing to stock up for" />
+                months of dyeing at
+                <input type="number" min={0.5} max={8} step={0.1} value={pace ?? horizon.historyPace}
+                    onChange={(e) => setPace(Math.max(0.5, Math.min(8, parseFloat(e.target.value) || 1)))}
+                    className="w-16 border border-gray-300 rounded px-2 py-1" aria-label="Batches per month" />
+                batches/month
+                {pace == null
+                    ? <span className="text-xs text-gray-500">(from your history)</span>
+                    : <button onClick={() => setPace(null)} className="text-xs text-teal-700 hover:underline">use history ({horizon.historyPace})</button>}
+            </div>
             <p className="text-sm text-gray-500 mb-4">
-                Undyed skeins for the batch plan above and your already-planned sessions, plus each item's low-stock minimum, minus what's in Inventory. Rounded up to the pack sizes in Yarn Bases.
+                {horizon.horizonBatches} batch{horizon.horizonBatches === 1 ? '' : 'es'}: {horizon.upcomingSessions} already planned in Dye Sessions + {horizon.planBatches} in the plan above
+                {horizon.projectedBatches > 0 && <> + <strong>{horizon.projectedBatches} projected</strong> (typical batches in your overall sales mix)</>}.
+                Plus each item's low-stock minimum, minus what's in Inventory, rounded up to the pack sizes in Yarn Bases.
             </p>
             {rows.length === 0 ? <p className="text-sm text-gray-600">Nothing planned, so no yarn needed.</p> : (
                 <>
@@ -719,7 +757,8 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
 }
 
 /** The auto-built batch plan: batches → colorway pairs (+ gradient tray), editable before drafting. */
-function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, removeColorway, addColorway, addPick, setAddPick, recipes, onCreate }) {
+function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, removeColorway, addColorway, addPick, setAddPick, recipes, onCreate, labCandidates, labIds, addLabTest, removeLabTest, planAnyway }) {
+    const [labPick, setLabPick] = useState('');
     const sumYarns = (pans: any[]) => {
         const m = new Map<string, number>();
         pans.forEach((p) => (p.yarns || []).forEach((y) => m.set(`${y.base} ${y.hankSize}g`, (m.get(`${y.base} ${y.hankSize}g`) || 0) + y.quantity)));
@@ -744,12 +783,19 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                 Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, plus a gradient tray while dyes still need one. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
             </p>
             {plan.batches.length === 0 ? (
-                <p className="text-sm text-gray-600">Nothing to plan right now.{edited && <> <button onClick={resetPlan} className="text-teal-700 hover:underline">Reset plan</button></>}</p>
+                <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-4">
+                    <p>Nothing is running low right now. 🎉 A good time to test Color Lab sketches.</p>
+                    <button onClick={planAnyway} className="mt-3 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">
+                        🧪 Plan a batch anyway
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">Starts with up to 4 untested Color Lab sketches, fills the rest with the colorways that have the fewest weeks of stock, plus the gradient tray.</p>
+                    {edited && <button onClick={resetPlan} className="mt-2 text-teal-700 hover:underline">Reset plan</button>}
+                </div>
             ) : (
                 <div className="space-y-4">
                     {plan.batches.map((batch, bi) => {
                         const groups: any[][] = [];
-                        batch.filter((p) => p.type === 'pan').forEach((p) => {
+                        batch.filter((p) => p.type === 'pan' || p.type === 'colorLab').forEach((p) => {
                             const g = groups[groups.length - 1];
                             if (g && g[0].colorway === p.colorway) g.push(p); else groups.push([p]);
                         });
@@ -766,6 +812,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                                         const extra = extraCount(g);
                                         const fromBestSellers = plan.extras.includes(g[0].colorway);
                                         const manual = plan.manual.includes(g[0].colorway);
+                                        const lab = g[0].type === 'colorLab';
                                         return (
                                             <li key={g[0].colorway} className="px-4 py-2 text-sm flex gap-3 items-start">
                                                 <div className="flex-1 min-w-0">
@@ -773,11 +820,12 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                                                         {g[0].colorway} <span className="text-gray-500 font-normal">· {g.length} pans</span>
                                                         {fromBestSellers && <span className="ml-2 text-xs bg-teal-50 text-teal-700 rounded px-1.5 py-0.5">best seller, fills the batch</span>}
                                                         {manual && <span className="ml-2 text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">added</span>}
+                                                        {lab && <span className="ml-2 text-xs bg-amber-50 text-amber-800 rounded px-1.5 py-0.5">🎨 Color Lab test</span>}
                                                     </div>
                                                     <div className="text-gray-600 break-words">{sumYarns(g)}</div>
-                                                    {extra > 0 && !fromBestSellers && !manual && <div className="text-xs text-gray-500">incl. {extra} extra skein{extra === 1 ? '' : 's'} to fill the pans</div>}
+                                                    {extra > 0 && !fromBestSellers && !manual && !lab && <div className="text-xs text-gray-500">incl. {extra} extra skein{extra === 1 ? '' : 's'} to fill the pans</div>}
                                                 </div>
-                                                <button onClick={() => removeColorway(g[0].colorway)} className="text-gray-400 hover:text-red-600 px-1" aria-label={`Remove ${g[0].colorway} from the plan`} title="Remove from plan">✕</button>
+                                                <button onClick={() => lab ? removeLabTest(String(g[0].colorSketchId)) : removeColorway(g[0].colorway)} className="text-gray-400 hover:text-red-600 px-1" aria-label={`Remove ${g[0].colorway} from the plan`} title="Remove from plan">✕</button>
                                             </li>
                                         );
                                     })}
@@ -799,6 +847,13 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                     {options.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
                 <button disabled={!addPick} onClick={() => { addColorway(addPick); setAddPick(''); }} className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-40">+ Add</button>
+                <select value={labPick} onChange={(e) => setLabPick(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm max-w-[16rem]">
+                    <option value="">Add a Color Lab test…</option>
+                    {labCandidates.filter((c) => !labIds.includes(String(c.sketch.id))).map((c) => (
+                        <option key={c.sketch.id} value={String(c.sketch.id)}>{c.name}{c.tested ? ' (tested before)' : ''}</option>
+                    ))}
+                </select>
+                <button disabled={!labPick} onClick={() => { addLabTest(labPick); setLabPick(''); }} className="text-sm bg-white text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-50 font-medium disabled:opacity-40">+ Test</button>
                 {edited && <button onClick={resetPlan} className="text-sm text-gray-500 hover:underline">Reset plan</button>}
                 <button disabled={!plan.batches.length} onClick={onCreate}
                     className="ml-auto bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-40">
