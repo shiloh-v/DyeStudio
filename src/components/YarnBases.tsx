@@ -14,6 +14,7 @@ const emptyForm = () => ({
     myName: '',
     supplier: '',
     supplierName: '',
+    aliases: '', // comma-separated in the form; saved as string[]
     weight: '',
     fiberContent: '',
     needleSize: '',
@@ -62,7 +63,11 @@ export function YarnBases({ settings, saveSettings }) {
                 packPrice: String(s.packPrice).trim() === '' ? '' : parseFloat(String(s.packPrice)),
                 length: String(s.length).trim() === '' ? '' : parseFloat(String(s.length)),
             }));
-        const record = { ...formData, myName: formData.myName.trim(), sizes: cleanSizes };
+        const aliases = String(formData.aliases || '')
+            .split(',')
+            .map((a) => a.trim())
+            .filter(Boolean);
+        const record = { ...formData, myName: formData.myName.trim(), aliases, sizes: cleanSizes };
         if (editingId) {
             saveBases(bases.map((b) => (b.id === editingId ? { ...record, id: editingId } : b)));
         } else {
@@ -76,6 +81,7 @@ export function YarnBases({ settings, saveSettings }) {
         setFormData({
             ...emptyForm(),
             ...b,
+            aliases: (b.aliases || []).join(', '),
             sizes: b.sizes && b.sizes.length ? b.sizes : [{ amount: '', sku: '', packSize: '', packPrice: '', length: '' }],
         });
         setEditingId(b.id);
@@ -148,6 +154,12 @@ export function YarnBases({ settings, saveSettings }) {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Supplier's Base Name</label>
                                     <input type="text" value={formData.supplierName} onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })} className={inputCls} placeholder="e.g., W2D4 Merino DK SW" />
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Also Called</label>
+                                <input type="text" value={formData.aliases} onChange={(e) => setFormData({ ...formData, aliases: e.target.value })} className={inputCls} placeholder="e.g., Classic DK, Sock (comma-separated)" />
+                                <p className="text-xs text-gray-500 mt-1">Old or alternate names, e.g. how this base is listed in Shopify. Sales under these names count as this base.</p>
                             </div>
 
                             <div>
@@ -272,6 +284,9 @@ export function YarnBases({ settings, saveSettings }) {
                                     <p className="text-sm text-gray-500 mt-0.5">
                                         {b.supplier}{b.supplier && b.supplierName ? ' · ' : ''}{b.supplierName}
                                     </p>
+                                )}
+                                {b.aliases?.length > 0 && (
+                                    <p className="text-xs text-gray-500 mt-0.5">Also called: {b.aliases.join(', ')}</p>
                                 )}
                             </div>
                             <div className="flex gap-2">

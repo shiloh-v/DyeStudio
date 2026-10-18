@@ -24,8 +24,11 @@ export function canonicalYarnRef(ref: any, catalog?: any[]): string {
     const r = norm(ref);
     if (!r || !catalog || !catalog.length) return String(ref ?? '');
     for (const entry of catalog) {
-        const sup = norm(entry?.supplierName);
-        if (sup && (r === sup || r.startsWith(sup + ' '))) return String(entry.myName ?? ref);
+        // Supplier name, plus any "also called" aliases set on the base.
+        for (const name of [entry?.supplierName, ...(entry?.aliases || [])]) {
+            const n = norm(name);
+            if (n && (r === n || r.startsWith(n + ' '))) return String(entry.myName ?? ref);
+        }
     }
     return String(ref ?? '');
 }

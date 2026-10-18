@@ -211,6 +211,7 @@ export interface YarnBase {
   myName: string;          // e.g. "Luna DK"
   supplier?: string;       // e.g. "Wool2Dye4"
   supplierName?: string;   // supplier's base name, e.g. "W2D4 Merino DK SW"
+  aliases?: string[];      // other names it goes by, e.g. old Shopify listings ("Classic DK")
   weight?: string;         // yarn weight, e.g. "DK"
   fiberContent?: string;
   needleSize?: string;

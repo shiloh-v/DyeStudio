@@ -108,7 +108,7 @@ function autoBase(text: string, catalog: YarnBase[]): YarnBase | undefined {
     let best: YarnBase | undefined;
     let bestLen = 0;
     for (const b of catalog) {
-        for (const n of [b.myName, b.supplierName]) {
+        for (const n of [b.myName, b.supplierName, ...(b.aliases || [])]) {
             const nn = normText(n);
             if (nn.length > bestLen && containsPhrase(t, nn)) { best = b; bestLen = nn.length; }
         }
