@@ -788,7 +788,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                     <button onClick={planAnyway} className="mt-3 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">
                         🧪 Plan a batch anyway
                     </button>
-                    <p className="text-xs text-gray-500 mt-2">Starts with 2 untested Color Lab sketches (each a Nova Fingering pan + a Luna DK pan), fills the rest with the colorways that have the fewest weeks of stock, plus the gradient tray.</p>
+                    <p className="text-xs text-gray-500 mt-2">Starts with 2 untested Color Lab sketches (each 2 pans mixing Nova Fingering and Luna DK), fills the rest with the colorways that have the fewest weeks of stock, plus the gradient tray.</p>
                     {edited && <button onClick={resetPlan} className="mt-2 text-teal-700 hover:underline">Reset plan</button>}
                 </div>
             ) : (
