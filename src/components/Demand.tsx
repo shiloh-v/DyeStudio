@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DateUtils } from '../lib/dates';
+import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/dialog';
 import {
@@ -206,14 +207,18 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                 id: Date.now() + i,
                 sessionId: `DS-${String(next++).padStart(3, '0')}`,
                 name: `${year} Session ${++sessionNo}`,
-                date: today,
+                date: '', // no date until you set one (so a draft is never mistaken for scheduled)
+                needsReview: true, // until you confirm it in Dye Sessions
                 pans: load,
                 notes: `${load.some((p) => p.type === 'colorLab') ? 'Test & restock' : 'Restock'}${parts > 1 ? ` (${i + 1} of ${parts})` : ''} drafted ${label}. ` + notes + (tray ? ` Gradient tray: ${tray.gradientDye}.` : ''),
             };
         });
+        // The "needs review" flag needs its DB column (sql/dye-sessions-needs-review.sql).
+        const { error: reviewColErr } = await supabase.from('dye_sessions').select('needsReview').limit(1);
+        if (reviewColErr) toast('Heads up: run sql/dye-sessions-needs-review.sql in Supabase so drafts keep their "Needs review" flag.', 'info', 9000);
         await saveDyeSessions([...(dyeSessions || []), ...created]);
         resetPlan();
-        toast(`${parts} draft batch${parts === 1 ? '' : 'es'} created. Review and edit ${parts === 1 ? 'it' : 'them'} in Dye Sessions.`, 'success', 7000);
+        toast(`${parts} draft batch${parts === 1 ? '' : 'es'} created with no date yet. Review and date ${parts === 1 ? 'it' : 'them'} in Dye Sessions.`, 'success', 7000);
         setActiveTab('sessions');
     };
 

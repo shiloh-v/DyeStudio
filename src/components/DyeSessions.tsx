@@ -1,5 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
-import { DateUtils } from '../lib/dates';
+import { DateUtils, byPlannedDate } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
@@ -213,7 +213,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     // later session that tips cumulative demand past stock does.
     const calculateCommittedNeeds = (target: { date?: any; id?: any }) => {
         const committed: { yarnNeeded: Record<string, number>; ballBandsNeeded: Record<string, number> } = { yarnNeeded: {}, ballBandsNeeded: {} };
-        const ts = (d) => { const t = new Date(d || 0).getTime(); return Number.isFinite(t) ? t : 0; };
+        // Undated drafts reserve inventory LAST (after every dated session).
+        const ts = (d) => { if (!d) return Number.MAX_SAFE_INTEGER; const t = new Date(d).getTime(); return Number.isFinite(t) ? t : Number.MAX_SAFE_INTEGER; };
         const targetTime = ts(target?.date);
         const targetId = Number(target?.id ?? Number.MAX_SAFE_INTEGER);
         const isBefore = (s) => {
@@ -258,10 +259,6 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     const commitSession = () => {
         if (!formData.name?.trim()) {
             toast('Please enter a session name', 'error');
-            return false;
-        }
-        if (!formData.date) {
-            toast('Please choose a planned date', 'error');
             return false;
         }
         if (editingId) {
@@ -658,14 +655,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Planned Date *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Planned Date</label>
                                 <input
                                     type="date"
-                                    required
-                                    value={formData.date}
+                                    value={formData.date || ''}
                                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                 />
+                                <p className="text-xs text-gray-500 mt-1">Leave blank until it's scheduled.</p>
                             </div>
                         </div>
 
@@ -1765,7 +1762,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             <div className="space-y-4">
                 {dyeSessions
                     .filter(session => showArchived ? session.archived : !session.archived) // Filter by archive status
-                    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()) // Sort by date, earliest first
+                    .sort(byPlannedDate) // by date, earliest first; undated drafts last
                     .map(session => (
                     <div key={session.id} className={`bg-white rounded-lg card-shadow p-6 ${session.archived ? 'opacity-75 border-2 border-gray-300' : ''}`}>
                         <div className="flex justify-between items-start mb-4">
@@ -1784,12 +1781,19 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         {session.name}
                                         {session.archived && <span className="ml-2 text-sm text-gray-500">(Archived)</span>}
                                     </h3>
+                                    {session.needsReview && !session.archived && (
+                                        <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5 font-medium" title="Drafted by the Demand batch plan — check the pans and date, then confirm">
+                                            🔍 Needs review
+                                        </span>
+                                    )}
                                 </div>
                                 {session.sessionId && (
                                     <p className="text-xs text-gray-500 ml-8">ID: {session.sessionId}</p>
                                 )}
                                 <p className="text-sm text-gray-500 ml-8">
-                                    {session.date} • {session.pans.filter(p => p.type !== 'gradientTray' && p.type !== 'dyeSquareTray').length} pan(s) • {session.pans.filter(p => p.type === 'gradientTray' || p.type === 'dyeSquareTray').length} tray(s)
+                                    {session.date
+                                        ? session.date
+                                        : <span className="bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 text-xs font-medium">📅 No date set</span>} • {session.pans.filter(p => p.type !== 'gradientTray' && p.type !== 'dyeSquareTray').length} pan(s) • {session.pans.filter(p => p.type === 'gradientTray' || p.type === 'dyeSquareTray').length} tray(s)
                                 </p>
                                 <p className="text-xs text-teal-600 mt-1 ml-8">
                                     Yarn bases needed: {(() => {
@@ -2104,6 +2108,15 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                 >
                                     {session.archived ? '📂' : '📦'}
                                 </button>
+                                {session.needsReview && !session.archived && (
+                                    <button
+                                        onClick={() => saveDyeSessions(dyeSessions.map(s => s.id === session.id ? { ...s, needsReview: false } : s))}
+                                        className="text-green-700 hover:bg-green-50 px-3 py-1 rounded text-sm font-medium border border-green-200"
+                                        title="I've checked this drafted session — mark it confirmed"
+                                    >
+                                        ✓ Confirm
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => editSession(session)}
                                     className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded"

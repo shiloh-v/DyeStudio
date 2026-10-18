@@ -8,7 +8,7 @@ import { isCountable, isOwnBrand, lineRevenue, type SaleLine } from './shopify';
 import {
     makeContext, allUnits, windowUnits, byCombo, byColorway, computeSupply, dyeNext, costLookup,
     plannedSkeins, yarnToOrder, daysAgo, planRestock, dyeCadence, projectedBatchYarn, salesMix,
-    labTestCandidates, gradientTrayYarn, comboKey, type Unit,
+    labTestCandidates, gradientTrayYarn, comboKey, isSpecialtyBase, type Unit,
 } from './demand';
 
 export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
@@ -136,7 +136,8 @@ export function demandSummary(input: DemandInput) {
         const k = `${a.base}||${a.hankSize}`;
         planYarn.set(k, (planYarn.get(k) || 0) + a.qty);
     }
-    const projected = projectedBatchYarn(projectedBatches, Math.min(projectedBatches, traysLeft), salesMix('', inWindow, units), gradientTrayYarn(input.dyeSessions || [], ctx));
+    const defaultMix = salesMix('', inWindow, units).filter((m) => !isSpecialtyBase(m.base, ctx.catalog));
+    const projected = projectedBatchYarn(projectedBatches, Math.min(projectedBatches, traysLeft), defaultMix, gradientTrayYarn(input.dyeSessions || [], ctx));
     const yarnOrder = yarnToOrder(
         [...planYarn.entries()].map(([k, q]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), suggest: q }; }),
         planned.byBaseSize,

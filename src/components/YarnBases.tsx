@@ -4,6 +4,7 @@ import { toast } from '../lib/toast';
 import { useFormGuard } from '../lib/useFormGuard';
 import { sizeName } from '../lib/sizes';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
+import { isSpecialtyBase } from '../lib/demand';
 
 const YARN_WEIGHTS = [
     'Lace', 'Light Fingering', 'Fingering', 'Sport', 'DK',
@@ -15,6 +16,7 @@ const emptyForm = () => ({
     supplier: '',
     supplierName: '',
     aliases: '', // comma-separated in the form; saved as string[]
+    specialty: undefined as boolean | undefined, // undefined = default by name (Solis/Stardust/Nova DK)
     weight: '',
     fiberContent: '',
     needleSize: '',
@@ -162,6 +164,19 @@ export function YarnBases({ settings, saveSettings }) {
                                 <p className="text-xs text-gray-500 mt-1">Old or alternate names, e.g. how this base is listed in Shopify. Sales under these names count as this base.</p>
                             </div>
 
+                            <label className="flex items-start gap-2 text-sm text-gray-700">
+                                <input
+                                    type="checkbox"
+                                    className="mt-1"
+                                    checked={typeof formData.specialty === 'boolean' ? formData.specialty : isSpecialtyBase(formData.myName, [])}
+                                    onChange={(e) => setFormData({ ...formData, specialty: e.target.checked })}
+                                />
+                                <span>
+                                    <span className="font-medium">Specialty base</span>
+                                    <span className="block text-xs text-gray-500">Never used automatically in the Demand batch plan or yarn order (pan fill, sales mix, projections). You can still add it to sessions by hand.</span>
+                                </span>
+                            </label>
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Fiber Content</label>
                                 <input type="text" value={formData.fiberContent} onChange={(e) => setFormData({ ...formData, fiberContent: e.target.value })} className={inputCls} placeholder="e.g., 100% Superwash Merino Wool" />
@@ -287,6 +302,9 @@ export function YarnBases({ settings, saveSettings }) {
                                 )}
                                 {b.aliases?.length > 0 && (
                                     <p className="text-xs text-gray-500 mt-0.5">Also called: {b.aliases.join(', ')}</p>
+                                )}
+                                {isSpecialtyBase(b.myName, bases) && (
+                                    <span className="inline-block mt-1 text-xs bg-amber-50 text-amber-800 rounded px-1.5 py-0.5">✨ Specialty</span>
                                 )}
                             </div>
                             <div className="flex gap-2">

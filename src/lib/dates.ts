@@ -36,3 +36,13 @@ export const DateUtils = {
         });
     }
 };
+
+/**
+ * Sort sessions by planned date, earliest first; sessions with NO date yet
+ * (drafts) go last.
+ */
+export const byPlannedDate = (a: { date?: string }, b: { date?: string }) => {
+    const ta = a?.date ? Date.parse(a.date + 'T12:00:00') : Infinity;
+    const tb = b?.date ? Date.parse(b.date + 'T12:00:00') : Infinity;
+    return ta === tb ? 0 : ta < tb ? -1 : 1;
+};

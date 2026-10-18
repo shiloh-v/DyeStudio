@@ -98,6 +98,7 @@ export interface DyeSession {
   pans?: Pan[];
   notes?: string;
   archived?: boolean;
+  needsReview?: boolean; // drafted by the Demand batch plan, not yet confirmed
   [key: string]: any;
 }
 
@@ -212,6 +213,7 @@ export interface YarnBase {
   supplier?: string;       // e.g. "Wool2Dye4"
   supplierName?: string;   // supplier's base name, e.g. "W2D4 Merino DK SW"
   aliases?: string[];      // other names it goes by, e.g. old Shopify listings ("Classic DK")
+  specialty?: boolean;     // specialty base: never planned automatically (default for Solis/Stardust/Nova DK)
   weight?: string;         // yarn weight, e.g. "DK"
   fiberContent?: string;
   needleSize?: string;

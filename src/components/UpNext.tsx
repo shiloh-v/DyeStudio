@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DateUtils } from '../lib/dates';
+import { DateUtils, byPlannedDate } from '../lib/dates';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
@@ -50,7 +50,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     // and any finished session that's missing its Pipeline batches.
     const upcomingSessions = dyeSessions
         .filter(s => (!s.archived || s.id.toString() === selectedSessionId || isMissingBatches(s)) && s.pans.length > 0)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort(byPlannedDate);
 
     // Restore the saved session if it's still active; otherwise auto-select the
     // first one (or clear if none). Keeps the Queue on the same session when you
@@ -595,7 +595,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: `${pan.gradientDye} Gradient`,
                     skeins: 10,
                     status: 'dyeing',
-                    startDate: session.date,
+                    startDate: session.date || DateUtils.getTodayEST(),
                     notes: `Gradient tray from session: ${session.name}`,
                     yarnDetails: [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 10 }],
                     costBreakdown: costs,
@@ -615,7 +615,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: `${pan.squareColorA} × ${pan.squareColorB} Dye Square`,
                     skeins: 25,
                     status: 'dyeing',
-                    startDate: session.date,
+                    startDate: session.date || DateUtils.getTodayEST(),
                     notes: `Dye square tray from session: ${session.name}`,
                     yarnDetails: [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 25 }],
                     costBreakdown: costs,
@@ -637,7 +637,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: adHocName,
                     skeins: adHocYarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0),
                     status: 'dyeing',
-                    startDate: session.date,
+                    startDate: session.date || DateUtils.getTodayEST(),
                     notes: `Ad hoc pan from session: ${session.name}`,
                     experimentNotes: pan.experimentNotes || '',
                     batchNotes: '',
@@ -660,7 +660,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     customColorway: pan.colorway,
                     skeins: pan.yarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0),
                     status: 'dyeing',
-                    startDate: session.date,
+                    startDate: session.date || DateUtils.getTodayEST(),
                     notes: `From session: ${session.name}`,
                     experimentNotes: pan.experimentNotes || '', // Preserve experiment notes from Up Next
                     batchNotes: '', // For notes added during pipeline stages
@@ -815,7 +815,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
         // Archive session (don't delete it)
         const updatedSessions = dyeSessions.map(s =>
-            s.id === selectedSession.id ? { ...s, archived: true } : s
+            // Undated drafts get the day they were finished as their date.
+            s.id === selectedSession.id ? { ...s, archived: true, date: s.date || DateUtils.getTodayEST() } : s
         );
         saveDyeSessions(updatedSessions);
 
@@ -858,7 +859,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                 >
                                     {upcomingSessions.map(session => (
                                         <option key={session.id} value={session.id}>
-                                            {session.archived ? '✓ ' : ''}{session.name} - {DateUtils.formatDate(session.date)} ({session.pans.length} pans){session.archived ? ' — finished' : ''}
+                                            {session.archived ? '✓ ' : ''}{session.name} - {session.date ? DateUtils.formatDate(session.date) : 'no date yet'} ({session.pans.length} pans){session.needsReview && !session.archived ? ' — needs review' : ''}{session.archived ? ' — finished' : ''}
                                         </option>
                                     ))}
                                 </select>

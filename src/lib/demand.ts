@@ -639,9 +639,30 @@ export function salesMix(colorway: string, inWindow: Unit[], all: Unit[]): { bas
 export const PAN_GRAMS = 300;
 // Micro skeins (10g) are only for gradient trays — never sold, never pan filler.
 export const MICRO_GRAMS = 10;
-// Minis (20g): at most 12 per colorway+base across a pair (any split, e.g. 10 + 2).
 export const MINI_GRAMS = 20;
-export const MAX_MINIS_PER_COLOR_BASE = 12;
+/**
+ * Per color/base/size in a batch (across the colorway's pans, any split):
+ * if a size is dyed at all, at least `min` and at most `max` skeins.
+ *   minis 5–12 · 50s 6–10 · fulls 4–8
+ */
+export const SIZE_BOUNDS: Record<number, { min: number; max: number }> = {
+    20: { min: 5, max: 12 },
+    50: { min: 6, max: 10 },
+    100: { min: 4, max: 8 },
+};
+export const sizeBounds = (h: number) => SIZE_BOUNDS[h] || { min: 1, max: 99 };
+
+/**
+ * Specialty bases (Solis, Stardust, Nova DK) aren't planned automatically — not
+ * as pan fill, in sales mixes or projected yarn. A base's `specialty` flag in
+ * Yarn Bases wins; otherwise these names default to specialty.
+ */
+export const DEFAULT_SPECIALTY_BASES = ['Solis Fingering', 'Stardust Fingering', 'Nova DK'];
+export function isSpecialtyBase(base: string, catalog: YarnBase[]): boolean {
+    const entry = catalog.find((b) => normText(b.myName) === normText(base));
+    if (entry && typeof (entry as any).specialty === 'boolean') return (entry as any).specialty;
+    return DEFAULT_SPECIALTY_BASES.some((n) => normText(n) === normText(base));
+}
 export const RACKS_PER_BATCH = 9;
 export const GRADIENT_DEPTHS = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 1.5, 2.0, 2.5, 3.0];
 
@@ -728,7 +749,8 @@ export interface RestockOptions {
     mix?: (colorway: string) => { base: string; hankSize: number; share: number }[]; // colorway's sales mix
     globalMix?: { base: string; hankSize: number; share: number }[];                  // shop-wide mix (tie-breaks)
     sizesFor?: (base: string) => number[];                                             // catalog sizes of a base
-    stock?: Map<string, number>;                         // spare undyed skeins (only for odd gaps no sold size fits)
+    stock?: Map<string, number>;                         // (unused; kept for callers)
+    isSpecialty?: (base: string) => boolean;             // bases never used automatically
 }
 
 /**
@@ -743,8 +765,8 @@ export function buildRestockPans(
     recipes: Recipe[],
     opts: RestockOptions = {}
 ) {
-    const capacity = opts.capacity || 300;
-    const stock = new Map(opts.stock || []);
+    const capacity = opts.capacity || PAN_GRAMS;
+    const special = opts.isSpecialty || (() => false);
     const pans: any[] = [];
     let topUps = 0;
     const byColor = new Map<string, typeof picks>();
@@ -755,110 +777,100 @@ export function buildRestockPans(
     let seq = 0;
     byColor.forEach((items, colorway) => {
         const recipe = recipes.find((r) => r.name === colorway) || recipes.find((r) => Number(r.id) === Number(items[0].recipeId));
-        type Y = { base: string; hankSize: number; quantity: number };
-        const bins: { yarns: Y[]; grams: number; extra: Y[] }[] = [];
-        const put = (list: Y[], base: string, hankSize: number) => {
-            const y = list.find((x) => x.base === base && x.hankSize === hankSize);
-            if (y) y.quantity++; else list.push({ base, hankSize, quantity: 1 });
-        };
-        // Every colorway is dyed as a PAIR of pans (two pairs if it needs more
-        // than 2 × capacity). Spread skeins largest-first into the lightest pan
-        // so the pair is balanced.
-        const skeins = items.flatMap((it) => Array.from({ length: it.qty }, () => ({ base: it.base, hankSize: it.hankSize })))
-            .sort((a, b) => b.hankSize - a.hankSize);
-        const grams = skeins.reduce((t, k) => t + k.hankSize, 0);
-        const nPans = 2 * Math.max(1, Math.ceil(grams / (2 * capacity)));
-        for (let i = 0; i < nPans; i++) bins.push({ yarns: [], grams: 0, extra: [] });
-        for (const sk of skeins) {
-            const fits = bins.filter((b) => b.grams + sk.hankSize <= capacity);
-            let bin = (fits.length ? fits : []).sort((a, b) => a.grams - b.grams)[0];
-            if (!bin) { bin = { yarns: [], grams: 0, extra: [] }; bins.push(bin); }
-            put(bin.yarns, sk.base, sk.hankSize);
-            bin.grams += sk.hankSize;
+        // Skeins sales call for, per base/size — raised to the size's minimum
+        // and capped at its maximum (SIZE_BOUNDS).
+        const need = new Map<string, { base: string; hankSize: number; need: number }>();
+        for (const it of items) {
+            if (!it.base || !it.hankSize || it.qty <= 0 || special(it.base)) continue;
+            const k = `${it.base}||${it.hankSize}`;
+            const v = need.get(k) || { base: it.base, hankSize: it.hankSize, need: 0 };
+            v.need += it.qty;
+            need.set(k, v);
         }
+        // One PAIR per color per batch: clamp each need to the pair, and if the
+        // raised needs don't fit, keep the most urgent (picks arrive sorted by
+        // urgency) and leave the rest for a later batch (still in Dye next).
+        const pairGrams = 2 * capacity;
+        need.forEach((v) => {
+            const b = sizeBounds(v.hankSize);
+            v.need = Math.min(b.max, Math.max(b.min, v.need), Math.floor(pairGrams / v.hankSize));
+        });
+        const deferred: string[] = [];
+        let used = 0;
+        for (const [k, v] of [...need.entries()]) {
+            if (used + v.need * v.hankSize > pairGrams) { need.delete(k); deferred.push(`${v.base} ${v.hankSize}g`); continue; }
+            used += v.need * v.hankSize;
+        }
+        const needGrams = used;
+
+        let counts: Map<string, number> | null = null;
+        let split: { key: string; base: string; hankSize: number; n: number }[][] | null = null;
         if (opts.fill) {
-            // Top up to match how this colorway sells: each added skein goes to
-            // the base/size furthest below its sales share (largest-remainder
-            // apportionment across the whole pair). Yarn not on hand shows up
-            // on Yarn to order once the draft is saved.
-            const mix = (opts.mix ? opts.mix(colorway) : []).filter((m) => m.hankSize > MICRO_GRAMS && m.share > 0);
-            const global = new Map((opts.globalMix || []).map((m) => [`${m.base}||${m.hankSize}`, m.share]));
-            // Candidates: the sizes this colorway sells, plus the other
-            // (non-micro) catalog sizes of those bases, so a color that only
-            // sells as minis can still reach 300g without a pan full of minis.
-            const cand = new Map<string, { base: string; hankSize: number; share: number }>();
-            mix.forEach((m) => cand.set(`${m.base}||${m.hankSize}`, m));
-            for (const b of new Set(mix.map((m) => m.base))) {
-                for (const h of opts.sizesFor ? opts.sizesFor(b) : []) {
-                    if (h > MICRO_GRAMS && !cand.has(`${b}||${h}`)) cand.set(`${b}||${h}`, { base: b, hankSize: h, share: 0 });
-                }
+            // Candidates: what this color sells (default bases only), plus the
+            // other catalog sizes of those bases. A color that only sells on a
+            // specialty base is planned in the shop's overall default-base mix.
+            const clean = (m: { base: string; hankSize: number; share: number }[]) =>
+                m.filter((x) => x.hankSize > MICRO_GRAMS && x.share > 0 && !special(x.base));
+            let mix = clean(opts.mix ? opts.mix(colorway) : []);
+            if (!mix.length) mix = clean(opts.globalMix || []);
+            mix = mix.slice(0, 4);
+            const cand = new Map<string, { key: string; base: string; hankSize: number; share: number; need: number; global: number }>();
+            const globalShare = new Map((opts.globalMix || []).map((m) => [`${m.base}||${m.hankSize}`, m.share]));
+            const add = (base: string, hankSize: number, share: number) => {
+                const key = `${base}||${hankSize}`;
+                if (!cand.has(key)) cand.set(key, { key, base, hankSize, share, need: need.get(key)?.need || 0, global: globalShare.get(key) || 0 });
+            };
+            need.forEach((v) => add(v.base, v.hankSize, 0));
+            mix.forEach((m) => { const c = cand.get(`${m.base}||${m.hankSize}`); if (c) c.share = m.share; else add(m.base, m.hankSize, m.share); });
+            for (const b of new Set([...cand.values()].map((c) => c.base))) {
+                for (const h of opts.sizesFor ? opts.sizesFor(b) : []) if (h > MICRO_GRAMS) add(b, h, 0);
             }
             const options = [...cand.values()];
-            const isMini = (h: number) => h === MINI_GRAMS;
-            const counts = new Map<string, number>();
-            bins.forEach((b) => b.yarns.forEach((y) => counts.set(`${y.base}||${y.hankSize}`, (counts.get(`${y.base}||${y.hankSize}`) || 0) + y.quantity)));
-            const total = () => [...counts.values()].reduce((t, n) => t + n, 0);
-            // Minis of a base already in this colorway's pans (any pan of the pair).
-            const minisUsed = (base: string) => counts.get(`${base}||${MINI_GRAMS}`) || 0;
-            const addTo = (bin: (typeof bins)[number], base: string, hankSize: number) => {
-                put(bin.yarns, base, hankSize);
-                put(bin.extra, base, hankSize);
-                bin.grams += hankSize;
-                const k = `${base}||${hankSize}`;
-                counts.set(k, (counts.get(k) || 0) + 1);
-                topUps++;
-            };
+            // Try with every kept need; if no combination fits, drop the least
+            // urgent need and try again.
+            let opts2 = options;
             for (;;) {
-                const bin = bins.filter((b) => b.grams < capacity).sort((a, b) => a.grams - b.grams)[0];
-                if (!bin) break;
-                const gap = capacity - bin.grams;
-                const n = total() + 1;
-                // Minis still allowed, per base: ≤ 12 per color/base across the
-                // whole pair — they can all sit in one pan (e.g. 10 + 0).
-                const allow = new Map<string, number>();
-                options.filter((o) => isMini(o.hankSize)).forEach((o) => allow.set(o.base, Math.max(0, MAX_MINIS_PER_COLOR_BASE - minisUsed(o.base))));
-                // Look ahead: can `g` grams be filled exactly with these sizes,
-                // using at most the allowed minis?
-                const memo = new Map<string, boolean>();
-                const reach = (g: number, al: Map<string, number>): boolean => {
-                    if (g === 0) return true;
-                    const key = `${g}|${[...al.values()].join(',')}`;
-                    if (memo.has(key)) return memo.get(key)!;
-                    let ok = false;
-                    for (const o of options) {
-                        if (o.hankSize > g) continue;
-                        if (isMini(o.hankSize)) {
-                            const left = al.get(o.base) || 0;
-                            if (left <= 0) continue;
-                            const al2 = new Map(al); al2.set(o.base, left - 1);
-                            if (reach(g - o.hankSize, al2)) { ok = true; break; }
-                        } else if (reach(g - o.hankSize, al)) { ok = true; break; }
-                    }
-                    memo.set(key, ok);
-                    return ok;
-                };
-                const next = options
-                    .filter((o) => {
-                        if (o.hankSize > gap) return false;
-                        if (!isMini(o.hankSize)) return reach(gap - o.hankSize, allow);
-                        const left = allow.get(o.base) || 0;
-                        if (left <= 0) return false;
-                        const al2 = new Map(allow); al2.set(o.base, left - 1);
-                        return reach(gap - o.hankSize, al2);
-                    })
-                    .map((o) => ({ ...o, deficit: o.share * n - (counts.get(`${o.base}||${o.hankSize}`) || 0) }))
-                    // Sizes this color sells first (by deficit); other catalog
-                    // sizes only when needed, best-selling shop-wide first.
-                    .sort((a, b) => Number(b.share > 0) - Number(a.share > 0)
-                        || b.deficit - a.deficit
-                        || (global.get(`${b.base}||${b.hankSize}`) || 0) - (global.get(`${a.base}||${a.hankSize}`) || 0)
-                        || b.hankSize - a.hankSize)[0];
-                if (!next) { bin.grams = capacity; break; } // can't fill exactly within the rules; leave it
-                addTo(bin, next.base, next.hankSize);
+                const solved = solvePairCounts(opts2, 2, capacity);
+                if (solved) { counts = solved.counts; split = solved.split; break; }
+                const needed = opts2.filter((o) => o.need > 0);
+                if (!needed.length) break;
+                const drop = needed[needed.length - 1];
+                deferred.push(`${drop.base} ${drop.hankSize}g`);
+                need.delete(drop.key);
+                opts2 = opts2.map((o) => (o.key === drop.key ? { ...o, need: 0 } : o));
             }
-            bins.forEach((b) => { b.grams = b.yarns.reduce((t, y) => t + y.hankSize * y.quantity, 0); });
         }
-        for (const bin of bins) {
+        if (!split) {
+            // No fill (or no combination fits the bounds): just the needed
+            // skeins, balanced across a pair.
+            const skeins = [...need.values()].flatMap((v) => Array.from({ length: v.need }, () => v)).sort((a, b) => b.hankSize - a.hankSize);
+            const nPans = 2;
+            const bins = Array.from({ length: nPans }, () => ({ grams: 0, list: new Map<string, { key: string; base: string; hankSize: number; n: number }>() }));
+            for (const sk of skeins) {
+                const bin = bins.filter((b) => b.grams + sk.hankSize <= capacity).sort((a, b) => a.grams - b.grams)[0] || bins.sort((a, b) => a.grams - b.grams)[0];
+                const k = `${sk.base}||${sk.hankSize}`;
+                const e = bin.list.get(k) || { key: k, base: sk.base, hankSize: sk.hankSize, n: 0 };
+                e.n++; bin.list.set(k, e); bin.grams += sk.hankSize;
+            }
+            split = bins.map((b) => [...b.list.values()]);
+            counts = new Map([...need.values()].map((v) => [`${v.base}||${v.hankSize}`, v.need]));
+        }
+        // Extra skeins beyond what sales called for (pan notes).
+        const extraLeft = new Map<string, number>();
+        counts!.forEach((c, k) => {
+            const raw = items.filter((i) => `${i.base}||${i.hankSize}` === k).reduce((t, i) => t + i.qty, 0);
+            const e = Math.max(0, c - raw);
+            if (e > 0) extraLeft.set(k, e);
+            topUps += e;
+        });
+        for (const pan of split) {
+            const yarns = pan.filter((y) => y.n > 0).map((y) => ({ base: y.base, hankSize: y.hankSize, quantity: y.n }));
+            const extra: string[] = [];
+            for (const y of yarns) {
+                const k = `${y.base}||${y.hankSize}`;
+                const e = Math.min(extraLeft.get(k) || 0, y.quantity);
+                if (e > 0) { extra.push(`+${e}× ${y.base} ${y.hankSize}g`); extraLeft.set(k, (extraLeft.get(k) || 0) - e); }
+            }
             pans.push({
                 id: Date.now() + seq++ / 1000,
                 type: 'pan',
@@ -866,15 +878,96 @@ export function buildRestockPans(
                 recipeId: recipe?.id || '',
                 recipe: recipe || null,
                 capacity,
-                yarns: bin.yarns,
-                totalWeight: bin.grams,
-                notes: bin.extra.length
-                    ? `Topped up to fill the pan (extra stock): ${bin.extra.map((y) => `+${y.quantity}× ${y.base} ${y.hankSize}g`).join(', ')}`
-                    : '',
+                yarns,
+                totalWeight: yarns.reduce((t, y) => t + y.hankSize * y.quantity, 0),
+                notes: [
+                    extra.length ? `Topped up to fill the pan (extra stock): ${extra.join(', ')}` : '',
+                    deferred.length ? `Not this batch (one pair per color): ${deferred.join(', ')}` : '',
+                ].filter(Boolean).join(' · '),
             });
         }
     });
     return { pans, topUps };
+}
+
+/**
+ * Choose skein counts for one colorway's pans: every base/size either 0 or
+ * within SIZE_BOUNDS (needs already raised to the minimum are kept), totalling
+ * exactly nPans × capacity, splittable into nPans exact pans, and as close as
+ * possible to the color's sales mix (by grams; sizes it doesn't sell cost
+ * extra, and fewer distinct base/sizes is slightly preferred).
+ */
+export function solvePairCounts(
+    options: { key: string; base: string; hankSize: number; share: number; need: number; global?: number }[],
+    nPans: number,
+    capacity: number
+): { counts: Map<string, number>; split: { key: string; base: string; hankSize: number; n: number }[][] } | null {
+    const total = nPans * capacity;
+    const opts = [...options].sort((a, b) => b.need - a.need || b.share - a.share || b.hankSize - a.hankSize);
+    const values = opts.map((o) => {
+        const { min, max } = sizeBounds(o.hankSize);
+        const out: number[] = [];
+        if (o.need > 0) { for (let c = Math.min(max, Math.max(min, o.need)); c <= max; c++) out.push(c); }
+        else { out.push(0); for (let c = min; c <= max; c++) out.push(c); }
+        return out;
+    });
+    const suffixMax: number[] = [];
+    for (let i = opts.length - 1; i >= 0; i--) suffixMax[i] = (suffixMax[i + 1] || 0) + Math.max(...values[i]) * opts[i].hankSize;
+    const wsum = opts.reduce((t, o) => t + o.share * o.hankSize, 0);
+    const target = opts.map((o) => (wsum > 0 ? (total * o.share * o.hankSize) / wsum : 0));
+    let best: { score: number; counts: number[]; split: any } | null = null;
+    const c: number[] = new Array(opts.length).fill(0);
+    const dfs = (i: number, sum: number) => {
+        if (sum > total) return;
+        if (i === opts.length) {
+            if (sum !== total) return;
+            let score = 0;
+            opts.forEach((o, k) => {
+                score += Math.abs(c[k] * o.hankSize - target[k]);
+                // Sizes this color doesn't sell cost extra — double if nobody
+                // buys that base/size at all (e.g. Nova Fingering 50g).
+                if (o.share === 0 && o.need === 0) score += (o.global ? 0.5 : 1) * c[k] * o.hankSize;
+                if (c[k] > 0) score += 5;
+            });
+            if (best && score >= best.score) return;
+            const split = splitIntoPans(opts.map((o, k) => ({ key: o.key, base: o.base, hankSize: o.hankSize, n: c[k] })), nPans, capacity);
+            if (split) best = { score, counts: [...c], split };
+            return;
+        }
+        if (sum + suffixMax[i] < total) return;
+        for (const v of values[i]) { c[i] = v; dfs(i + 1, sum + v * opts[i].hankSize); }
+        c[i] = 0;
+    };
+    dfs(0, 0);
+    if (!best) return null;
+    const b = best as { score: number; counts: number[]; split: any };
+    return { counts: new Map(opts.map((o, k) => [o.key, b.counts[k]])), split: b.split };
+}
+
+/** Split skeins into `nPans` pans of exactly `capacity` grams (whole combos per pan first). */
+function splitIntoPans(
+    items: { key: string; base: string; hankSize: number; n: number }[],
+    nPans: number,
+    capacity: number
+): { key: string; base: string; hankSize: number; n: number }[][] | null {
+    const live = items.filter((x) => x.n > 0);
+    if (nPans === 1) return live.reduce((t, x) => t + x.n * x.hankSize, 0) === capacity ? [live] : null;
+    const x: number[] = new Array(live.length).fill(0);
+    let found: number[] | null = null;
+    const dfs = (i: number, sum: number) => {
+        if (found || sum > capacity) return;
+        if (i === live.length) { if (sum === capacity) found = [...x]; return; }
+        const n = live[i].n;
+        const order = [n, 0, ...Array.from({ length: Math.max(0, n - 1) }, (_, j) => n - 1 - j).filter((v) => v > 0)];
+        for (const v of order) { x[i] = v; dfs(i + 1, sum + v * live[i].hankSize); if (found) return; }
+        x[i] = 0;
+    };
+    dfs(0, 0);
+    if (!found) return null;
+    const f = found as number[];
+    const first = live.map((it, i) => ({ ...it, n: f[i] })).filter((it) => it.n > 0);
+    const rest = splitIntoPans(live.map((it, i) => ({ ...it, n: it.n - f[i] })), nPans - 1, capacity);
+    return rest ? [first, ...rest] : null;
 }
 
 
@@ -911,7 +1004,8 @@ export function planRestock(input: RestockPlanInput) {
     // them — suggest adding the skeins to that session instead.
     const upcoming = (input.sessions || [])
         .filter((s) => !s?.archived && (s.pans || []).length)
-        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+        // Dated sessions first (earliest), undated drafts last.
+        .sort((a, b) => (a.date ? 0 : 1) - (b.date ? 0 : 1) || String(a.date || '').localeCompare(String(b.date || '')));
     const sessionFor = (c: string) => upcoming.find((s) => (s.pans || []).some((p: any) => {
         const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
         return (r?.name || p.colorway) === c;
@@ -922,10 +1016,15 @@ export function planRestock(input: RestockPlanInput) {
         .filter((s) => {
             const sess = sessionFor(s.colorway!);
             if (!sess) return true;
+            if (isSpecialtyBase(s.base!, ctx.catalog)) return false; // never auto-plan specialty yarn
             adjust.push({ colorway: s.colorway!, sessionName: sess.name, date: sess.date, base: s.base!, hankSize: s.hankSize!, qty: s.suggest, soldOut: s.soldOut });
             return false;
         })
-        .map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest }));
+        // Demand on a specialty base still says "dye this color", but on the
+        // default bases (qty 0 = planned purely by mix).
+        .map((s) => isSpecialtyBase(s.base!, ctx.catalog)
+            ? { colorway: s.colorway!, recipeId: s.recipeId, base: '', hankSize: 0, qty: 0 }
+            : { colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest });
     const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
     const asEmpty = (c: string) => ({ colorway: c, recipeId: recipes.find((r) => r.name === c)?.id, base: '', hankSize: 0, qty: 0 });
     // Color Lab tests: a pair per sketch — one Nova Fingering pan, one Luna DK
@@ -954,6 +1053,7 @@ export function planRestock(input: RestockPlanInput) {
             mix: (cw) => salesMix(cw, input.inWindow, input.units),
             globalMix: salesMix('', input.inWindow, input.units),
             sizesFor: (b) => (ctx.catalog.find((x) => x.myName === b)?.sizes || []).map((z) => Number(z.amount)).filter((n) => n > 0),
+            isSpecialty: (b) => isSpecialtyBase(b, ctx.catalog),
             stock: free,
         });
         const pans = [...built.pans, ...labPans];
