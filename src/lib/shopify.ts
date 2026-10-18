@@ -72,6 +72,7 @@ export interface SaleLine {
     unitPrice: number;
     discount: number;       // total discount on this line
     financialStatus: string;
+    vendor?: string;        // Shopify line-item vendor (brand), e.g. "Celestial Dyeworks"
     cancelled: boolean;
     importedAt?: string;
     [key: string]: any;
@@ -137,6 +138,7 @@ export function parseOrdersCsv(text: string): Omit<SaleLine, 'id'>[] {
             unitPrice: num(r['lineitem price']),
             discount: num(r['lineitem discount']),
             financialStatus: info.status,
+            vendor: r['vendor'] || '',
             cancelled: info.cancelled,
         });
     }
@@ -185,7 +187,7 @@ export const lineRevenue = (l: SaleLine) =>
  * storage layer strips every field on save, so check before importing.
  */
 export async function salesSchemaReady(): Promise<boolean> {
-    const { error } = await supabase.from('sales').select('lineKey,orderDate,unitPrice').limit(1);
+    const { error } = await supabase.from('sales').select('lineKey,orderDate,unitPrice,vendor').limit(1);
     return !error;
 }
 
@@ -193,7 +195,7 @@ export async function salesSchemaReady(): Promise<boolean> {
 
 export interface InventorySnapshot {
     importedAt: string;
-    rows: { name: string; sku: string; available: number }[];
+    rows: { name: string; sku: string; available: number; vendor?: string }[];
 }
 
 /**
@@ -216,10 +218,12 @@ export function parseInventoryCsv(text: string): InventorySnapshot {
     }
 
     const titleByHandle: Record<string, string> = {};
-    const totals = new Map<string, { name: string; sku: string; available: number }>();
+    const vendorByHandle: Record<string, string> = {};
+    const totals = new Map<string, { name: string; sku: string; available: number; vendor?: string }>();
     for (const r of records) {
         const handle = r['handle'] || '';
         if (r['title']) titleByHandle[handle] = r['title'];
+        if (r['vendor']) vendorByHandle[handle] = r['vendor'];
         const title = r['title'] || titleByHandle[handle];
         if (!title) continue;
         const opts = ['option1 value', 'option2 value', 'option3 value']
@@ -233,7 +237,7 @@ export function parseInventoryCsv(text: string): InventorySnapshot {
         const prev = totals.get(key);
         const qty = Math.max(0, Math.round(num(r[qtyCol])));
         if (prev) prev.available += qty;
-        else totals.set(key, { name, sku, available: qty });
+        else totals.set(key, { name, sku, available: qty, vendor: r['vendor'] || vendorByHandle[handle] || '' });
     }
     if (!totals.size) throw new ImportError('No variants with stock counts found in that file.');
     return { importedAt: new Date().toISOString(), rows: [...totals.values()] };

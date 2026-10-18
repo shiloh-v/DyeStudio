@@ -9,7 +9,7 @@ import {
 import {
     makeContext, resolveName, isResolved, normText, allUnits, windowUnits, byColorway, byBase,
     byCombo, lastMonths, monthlyUnits, computeSupply, dyeNext, costLookup, buildRestockPans,
-    comboLabel, daysAgo, type ShopifyMapping, type Suggestion,
+    comboLabel, daysAgo, isOwnVendor, DEFAULT_VENDOR, type ShopifyMapping, type Suggestion,
 } from '../lib/demand';
 
 const WINDOWS: { label: string; days: number | null }[] = [
@@ -47,8 +47,17 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     useEffect(() => { pref.set('demand_window', windowIdx); }, [windowIdx]);
     useEffect(() => { pref.set('demand_target_weeks', targetWeeks); }, [targetWeeks]);
 
-    const lines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
+    const allLines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
     const ctx = useMemo(() => makeContext(recipes, kits, settings), [recipes, kits, settings]);
+    // Vendors seen in the import, most units first — for the "count vendor" picker.
+    const vendors = useMemo(() => {
+        const m = new Map<string, number>();
+        allLines.forEach((l) => l.vendor && m.set(l.vendor, (m.get(l.vendor) || 0) + (Number(l.quantity) || 0)));
+        return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    }, [allLines]);
+    // Everything below only looks at your own brand's lines.
+    const lines: SaleLine[] = useMemo(() => allLines.filter((l) => isOwnVendor(l.vendor, ctx.vendor)), [allLines, ctx.vendor]);
+    const setVendor = (v: string) => saveSettings({ ...settings, shopifyVendor: v });
     const snapshot = settings?.shopifyInventory || null;
     const win = WINDOWS[windowIdx] || WINDOWS[1];
 
@@ -130,7 +139,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
         setBusy(true);
         try {
             const parsed = parseOrdersCsv(await readFile(file));
-            const { sales: merged, added, updated } = mergeSales(lines, parsed);
+            const { sales: merged, added, updated } = mergeSales(allLines, parsed);
             const ok = await saveSales(merged);
             if (ok === false) throw new Error('Saving to the database failed — nothing was imported.');
             const orderCount = new Set(parsed.map((p) => p.orderName)).size;
@@ -158,7 +167,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     };
 
     const clearSales = async () => {
-        if (!(await confirmDialog({ title: 'Remove imported Shopify sales?', message: `This deletes all ${lines.length} imported order lines from the app (your Shopify store is not touched). You can re-import any time.`, confirmText: 'Remove', danger: true }))) return;
+        if (!(await confirmDialog({ title: 'Remove imported Shopify sales?', message: `This deletes all ${allLines.length} imported order lines from the app (your Shopify store is not touched). You can re-import any time.`, confirmText: 'Remove', danger: true }))) return;
         await saveSales((sales || []).filter((s) => !s.lineKey));
         toast('Imported sales removed.', 'success');
     };
@@ -206,7 +215,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
 
     // ---------- Render ----------
 
-    const hasData = lines.length > 0;
+    const hasData = allLines.length > 0;
 
     return (
         <div className="space-y-6">
@@ -218,6 +227,17 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                             ? <>{lines.length.toLocaleString()} order lines · {DateUtils.formatDate(firstDate)} – {DateUtils.formatDate(lines.reduce((m, l) => (l.orderDate > m ? l.orderDate : m), ''))}</>
                             : 'Import your Shopify orders to see what sells and what to dye next.'}
                     </p>
+                    {vendors.length > 0 && (
+                        <label className="text-sm text-gray-600 mt-2 flex flex-wrap items-center gap-2">
+                            Count products from
+                            <select value={ctx.vendor} onChange={(e) => setVendor(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                                {!vendors.includes(ctx.vendor) && ctx.vendor && <option value={ctx.vendor}>{ctx.vendor}</option>}
+                                {vendors.map((v) => <option key={v} value={v}>{v}</option>)}
+                                <option value="">All vendors</option>
+                            </select>
+                            {lines.length < allLines.length && <span className="text-xs text-gray-500">({(allLines.length - lines.length).toLocaleString()} lines from other vendors left out)</span>}
+                        </label>
+                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <input ref={ordersInput} type="file" accept=".csv,text/csv" className="hidden" onChange={importOrders} />

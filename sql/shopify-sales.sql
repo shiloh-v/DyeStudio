@@ -2,7 +2,7 @@
 -- ------------------------------------------------------------------
 -- Each row is ONE Shopify order line item, imported from the Orders CSV export
 -- (Demand tab → Import). Only what demand analytics needs is stored — order
--- number, date, product/variant, SKU, quantity, price, discount, status. NO
+-- number, date, product/variant, vendor, SKU, quantity, price, discount, status. NO
 -- customer names, emails or addresses are ever saved.
 --
 -- The table already has per-user RLS, backup and test-seeding wired up
@@ -25,7 +25,8 @@ ALTER TABLE public.sales
   ADD COLUMN IF NOT EXISTS "discount"        numeric,
   ADD COLUMN IF NOT EXISTS "financialStatus" text,
   ADD COLUMN IF NOT EXISTS "cancelled"       boolean,
-  ADD COLUMN IF NOT EXISTS "importedAt"      timestamptz;
+  ADD COLUMN IF NOT EXISTS "importedAt"      timestamptz,
+  ADD COLUMN IF NOT EXISTS "vendor"          text;
 
 -- The table predates this feature and may carry legacy NOT NULL columns the
 -- import doesn't fill. It holds no data (verified 0 rows), so relax them.
