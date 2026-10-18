@@ -11,7 +11,7 @@
 // Mappings are applied at read time, so fixing one re-labels all history.
 
 import type { Batch, Kit, Recipe, Settings, YarnBase } from '../types';
-import { canonicalYarnRef } from './yarnMatch';
+import { canonicalYarnRef, matchesYarnBase } from './yarnMatch';
 import { isStocked } from './batches';
 import { isCountable, isOwnBrand, lineRevenue, type SaleLine, type InventorySnapshot } from './shopify';
 
@@ -350,10 +350,14 @@ export function computeSupply(
     batches: Batch[],
     units: Unit[],
     ctx: DemandContext,
-    snapshot?: InventorySnapshot | null
+    snapshot?: InventorySnapshot | null,
+    planned?: Map<string, number>
 ): Supply {
     const coming = new Map<string, number>();
     batchSkeins(batches, ctx, (b) => !isStocked(b)).forEach((v, k) => coming.set(k, v.qty));
+    // Skeins already planned in upcoming dye sessions are on their way too, so
+    // a restock you've drafted stops being suggested again.
+    planned?.forEach((q, k) => coming.set(k, (coming.get(k) || 0) + q));
 
     const onHand = new Map<string, number>();
     if (snapshot?.rows?.length) {
@@ -376,6 +380,104 @@ export function computeSupply(
     }
     stocked.forEach((v, k) => onHand.set(k, Math.max(0, v.qty - (soldSince.get(k) || 0))));
     return { onHand, coming, source: 'estimate' };
+}
+
+// ---------- Planned (not yet dyed) sessions ----------
+
+/**
+ * Skeins in upcoming (non-archived) dye sessions. `byCombo` = colorway pans
+ * (counted as supply on the way); `byBaseSize` = ALL undyed yarn those
+ * sessions will use, incl. gradient (10) and dye-square (25) trays — mirrors
+ * DyeSessions' calculatePanNeeds.
+ */
+export function plannedSkeins(sessions: any[], ctx: DemandContext) {
+    const byCombo = new Map<string, number>();
+    const byBaseSize = new Map<string, number>();
+    const addBase = (base: any, hank: any, q: number) => {
+        const b = canonicalYarnRef(base, ctx.catalog);
+        const h = Number(hank) || sizeFromText(String(base || ''), ctx.sizeMappings) || 0;
+        if (!b || !q) return;
+        const k = `${b}||${h}`;
+        byBaseSize.set(k, (byBaseSize.get(k) || 0) + q);
+        return { b, h };
+    };
+    for (const s of sessions || []) {
+        if (s?.archived) continue;
+        for (const pan of s.pans || []) {
+            if (pan.type === 'gradientTray') { addBase(pan.gradientYarnBase, pan.gradientHankSize, 10); continue; }
+            if (pan.type === 'dyeSquareTray') { addBase(pan.gradientYarnBase, pan.gradientHankSize, 25); continue; }
+            const recipe = pan.recipeId ? ctx.recipes.find((r) => String(r.id) === String(pan.recipeId)) : undefined;
+            const colorway = recipe?.name || (pan.type === 'pan' ? pan.colorway : '');
+            for (const y of pan.yarns || []) {
+                const q = parseInt(String(y.quantity)) || 0;
+                const r = addBase(y.base, y.hankSize, q);
+                if (r && colorway) {
+                    const k = comboKey(colorway, r.b, r.h);
+                    byCombo.set(k, (byCombo.get(k) || 0) + q);
+                }
+            }
+        }
+    }
+    return { byCombo, byBaseSize };
+}
+
+// ---------- Yarn to order ----------
+
+export interface YarnOrderRow {
+    base: string;
+    hankSize: number;
+    forDyeNext: number;   // skeins the dye-next suggestions need
+    forPlanned: number;   // skeins already-planned sessions need
+    keep: number;         // low-stock minimum to keep on the shelf
+    have: number;         // undyed skeins in Inventory
+    short: number;        // skeins to buy
+    supplier?: string;
+    sku?: string;
+    packSize: number;
+    packPrice?: number;
+    packs: number;
+    cost: number;
+}
+
+/**
+ * What undyed yarn to buy: (dye-next + planned sessions + keep-minimum) −
+ * undyed skeins on hand, per base + size, rounded up to the supplier's pack.
+ */
+export function yarnToOrder(
+    suggestions: { base?: string; hankSize?: number; suggest: number }[],
+    plannedByBaseSize: Map<string, number>,
+    inventory: any[],
+    ctx: DemandContext
+): YarnOrderRow[] {
+    const need = new Map<string, { dye: number; planned: number }>();
+    const bump = (k: string, f: 'dye' | 'planned', q: number) => {
+        const v = need.get(k) || { dye: 0, planned: 0 };
+        v[f] += q; need.set(k, v);
+    };
+    for (const s of suggestions) if (s.base && s.hankSize) bump(`${s.base}||${s.hankSize}`, 'dye', s.suggest);
+    plannedByBaseSize.forEach((q, k) => bump(k, 'planned', q));
+
+    const rows: YarnOrderRow[] = [];
+    need.forEach((v, k) => {
+        const [base, h] = k.split('||');
+        const hankSize = Number(h) || 0;
+        const items = (inventory || []).filter((i) =>
+            i.category === 'yarn base' && matchesYarnBase(i, base, ctx.catalog) && Number(i.hankSize) === hankSize);
+        const have = items.reduce((t, i) => t + (parseFloat(String(i.quantity)) || 0), 0);
+        const keep = Math.max(0, ...items.map((i) => parseFloat(String(i.lowStockThreshold)) || 0));
+        const entry = ctx.catalog.find((b) => b.myName === base);
+        const size = (entry?.sizes || []).find((z) => Number(z.amount) === hankSize);
+        const packSize = Math.max(1, Number(size?.packSize) || 1);
+        const packPrice = size?.packPrice !== '' && size?.packPrice != null ? Number(size.packPrice) : undefined;
+        const short = Math.max(0, Math.ceil(v.dye + v.planned + keep - have));
+        const packs = Math.ceil(short / packSize);
+        rows.push({
+            base, hankSize, forDyeNext: v.dye, forPlanned: v.planned, keep, have, short,
+            supplier: entry?.supplier, sku: size?.sku, packSize, packPrice, packs,
+            cost: packPrice != null ? packs * packPrice : 0,
+        });
+    });
+    return rows.sort((a, b) => b.short - a.short || a.base.localeCompare(b.base) || b.hankSize - a.hankSize);
 }
 
 // ---------- Dye-next ----------

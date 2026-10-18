@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 import { sizeName } from '../lib/sizes';
@@ -7,6 +7,7 @@ import { dyeCostPerGram, dyeDisplayName } from '../lib/dyeCalc';
 import { yarnBaseRef } from '../lib/yarnMatch';
 import { isLowStock as isItemLowStock, lowStockLabel, DYE_LOW_STOCK_GRAMS } from '../lib/lowStock';
 import type { InventoryItem } from '../types';
+import { demandSummary } from '../lib/demandSummary';
 
 // Grams per unit, for converting on-hand amounts between units.
 const UNIT_TO_GRAM: Record<string, number> = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
@@ -63,7 +64,12 @@ function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
     );
 }
 
-export function Inventory({ inventory, saveInventory, settings }) {
+export function Inventory({ inventory, saveInventory, settings, sales = [], batches = [], recipes = [], kits = [], dyeSessions = [], setActiveTab = (_t: string) => {} }) {
+    // Undyed yarn to buy, from Shopify demand + planned sessions (see Demand tab).
+    const yarnOrder = useMemo(() => {
+        const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions });
+        return D.lines.length ? { rows: D.toBuy, cost: D.yarnOrderCost } : null;
+    }, [sales, batches, recipes, kits, settings, inventory, dyeSessions]);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     // "Fill from Yarn Base catalog" picker (UI only — fills existing fields).
@@ -362,6 +368,17 @@ export function Inventory({ inventory, saveInventory, settings }) {
                     {showForm ? '✕ Cancel' : '+ Add Item'}
                 </button>
             </div>
+
+            {/* Yarn to order (Shopify demand) */}
+            {yarnOrder && yarnOrder.rows.length > 0 && !showForm && (
+                <button onClick={() => setActiveTab('demand')} className="w-full text-left bg-teal-50 border-l-4 border-teal-500 p-4 rounded hover:bg-teal-100">
+                    <p className="font-semibold text-teal-800">🧶 Yarn to order, based on Shopify demand{yarnOrder.cost > 0 ? ` (≈ $${Math.round(yarnOrder.cost)})` : ''}</p>
+                    <p className="text-sm text-teal-800 mt-1">
+                        {yarnOrder.rows.map((r) => `${r.base} ${r.hankSize}g × ${r.packs} pack${r.packs === 1 ? '' : 's'}`).join(' · ')}
+                    </p>
+                    <p className="text-xs text-teal-700 mt-1 underline">See the breakdown on the Demand tab →</p>
+                </button>
+            )}
 
             {/* Low Stock Alert */}
             {lowStockItems.length > 0 && !showForm && (

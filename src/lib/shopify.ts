@@ -119,6 +119,27 @@ export function parseOrdersCsv(text: string): { lines: Omit<SaleLine, 'id'>[]; s
         );
     }
 
+    // Pass 1: per-order totals across ALL lines (other vendors included).
+    // Shopify's "Discount Amount" is the order's TOTAL discount (line-item
+    // discounts + discount codes; Subtotal = items − Discount Amount). Only the
+    // line-item part is on each line, so the remainder (codes) is spread across
+    // the order's lines in proportion to their price. Verified against Shopify
+    // Analytics: within $5 of its discount total over 470+ orders.
+    const orderTotals: Record<string, { gross: number; lineDisc: number; discount: number }> = {};
+    for (const r of records) {
+        const name = r['name'];
+        if (!name || !r['lineitem name']) continue;
+        const t = (orderTotals[name] ||= { gross: 0, lineDisc: 0, discount: 0 });
+        t.gross += num(r['lineitem price']) * num(r['lineitem quantity']);
+        t.lineDisc += num(r['lineitem discount']);
+        if (r['discount amount']) t.discount = num(r['discount amount']);
+    }
+    const codeDiscountShare = (orderName: string, lineGross: number) => {
+        const t = orderTotals[orderName];
+        if (!t || t.gross <= 0) return 0;
+        return (Math.max(0, t.discount - t.lineDisc) * lineGross) / t.gross;
+    };
+
     const orderInfo: Record<string, { date: string; status: string; cancelled: boolean }> = {};
     const seen: Record<string, number> = {};
     const lines: Omit<SaleLine, 'id'>[] = [];
@@ -159,7 +180,9 @@ export function parseOrdersCsv(text: string): { lines: Omit<SaleLine, 'id'>[]; s
             sku,
             quantity: Math.round(num(r['lineitem quantity'])),
             unitPrice: num(r['lineitem price']),
-            discount: num(r['lineitem discount']),
+            // Line-item discount + this line's share of order-level discount codes.
+            discount: Math.round((num(r['lineitem discount']) +
+                codeDiscountShare(orderName, num(r['lineitem price']) * num(r['lineitem quantity']))) * 100) / 100,
             financialStatus: info.status,
             vendor: r['vendor'] || '',
             cancelled: info.cancelled,

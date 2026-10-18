@@ -1,8 +1,13 @@
 import { StatCard } from './StatCard';
 import { isStocked } from '../lib/batches';
 import { isLowStock, lowStockLabel } from '../lib/lowStock';
+import { useMemo } from 'react';
+import { demandSummary, periodStats } from '../lib/demandSummary';
+import { byColorway, comboLabel, windowUnits } from '../lib/demand';
 
-export function Dashboard({ recipes, inventory, batches, sales }) {
+const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
+
+export function Dashboard({ recipes, inventory, batches, sales, kits, settings, dyeSessions, setActiveTab }) {
     const activeBatches = batches.filter(b => !isStocked(b)).length;
     const lowStock = inventory.filter(isLowStock).length;
 
@@ -12,11 +17,6 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
     const totalProfit = stocked.reduce((sum, b) => sum + (b.profit || 0), 0);
     const avgProfitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100) : 0;
     
-    const thisMonthSales = sales.filter(s => {
-        const saleDate = new Date(s.date);
-        const now = new Date();
-        return saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
-    }).length;
 
     const statusCounts = batches.reduce((acc, batch) => {
         acc[batch.status] = (acc[batch.status] || 0) + 1;
@@ -67,6 +67,8 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                 />
             </div>
 
+            <ShopifyPanel {...{ recipes, inventory, batches, sales, kits, settings, dyeSessions, setActiveTab }} />
+
             {/* Pipeline Status */}
             <div className="bg-white rounded-lg card-shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">Production Pipeline</h3>
@@ -90,30 +92,8 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                 </div>
             </div>
 
-            {/* Recent Activity */}
-            <div className="grid md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-lg card-shadow p-6">
-                    <h3 className="text-lg font-semibold mb-4">Recent Sales</h3>
-                    {sales.length > 0 ? (
-                        <div className="space-y-2">
-                            {sales.slice(-5).reverse().map((sale, idx) => (
-                                <div key={idx} className="flex justify-between items-center py-2 border-b">
-                                    <div>
-                                        <div className="font-medium">{sale.colorway}</div>
-                                        <div className="text-sm text-gray-500">{sale.customer}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="font-semibold text-green-600">${sale.amount}</div>
-                                        <div className="text-xs text-gray-400">{new Date(sale.date).toLocaleDateString()}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-gray-400 text-center py-8">No sales yet</p>
-                    )}
-                </div>
-
+            {/* Low stock */}
+            <div className="grid gap-6">
                 <div className="bg-white rounded-lg card-shadow p-6">
                     <h3 className="text-lg font-semibold mb-4">Low Stock Alert</h3>
                     {lowStock > 0 ? (
@@ -134,6 +114,99 @@ export function Dashboard({ recipes, inventory, batches, sales }) {
                     ) : (
                         <p className="text-gray-400 text-center py-8">All items well stocked ✓</p>
                     )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** Last 30 days of real Shopify sales + what to dye and order (from the Demand tab's model). */
+function ShopifyPanel({ recipes, inventory, batches, sales, kits, settings, dyeSessions, setActiveTab }) {
+    const D = useMemo(
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions]
+    );
+    const go = () => setActiveTab('demand');
+
+    if (!D.lines.length) {
+        return (
+            <button onClick={go} className="w-full text-left bg-white rounded-lg card-shadow p-6 hover:bg-gray-50">
+                <div className="text-lg font-semibold">🛍️ Shopify sales</div>
+                <p className="text-sm text-gray-600 mt-1">Import your Shopify orders on the 📈 Demand tab to see real revenue, what to dye next and what yarn to order. →</p>
+            </button>
+        );
+    }
+
+    const now = periodStats(D.lines, D.units, D.today, 30);
+    const prev = periodStats(D.lines, D.units, D.today, 30, 30);
+    const delta = (a: number, b: number) => (b > 0 ? Math.round(((a - b) / b) * 100) : null);
+    const top = byColorway(windowUnits(D.units, D.today, 30)).slice(0, 5);
+    const urgent = D.suggestions.filter((s) => s.weeksLeft < 4).slice(0, 5);
+    const Delta = ({ v }) => v == null ? null : (
+        <span className={`text-xs font-medium ${v >= 0 ? 'text-green-600' : 'text-red-600'}`}>{v >= 0 ? '▲' : '▼'} {Math.abs(v)}% vs prior 30 days</span>
+    );
+
+    return (
+        <div className="bg-white rounded-lg card-shadow p-6 space-y-5">
+            <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">🛍️ Shopify · last 30 days</h3>
+                <button onClick={go} className="text-sm text-teal-700 hover:underline">Open Demand →</button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <div className="text-sm text-gray-600">Revenue</div>
+                    <div className="text-2xl font-bold text-green-600 tabular-nums">{money0(now.revenue)}</div>
+                    <Delta v={delta(now.revenue, prev.revenue)} />
+                </div>
+                <div>
+                    <div className="text-sm text-gray-600">Skeins sold</div>
+                    <div className="text-2xl font-bold text-gray-900 tabular-nums">{now.skeins}</div>
+                    <Delta v={delta(now.skeins, prev.skeins)} />
+                </div>
+                <div>
+                    <div className="text-sm text-gray-600">Orders</div>
+                    <div className="text-2xl font-bold text-gray-900 tabular-nums">{now.orders}</div>
+                    <Delta v={delta(now.orders, prev.orders)} />
+                </div>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6 text-sm">
+                <div>
+                    <div className="font-semibold text-gray-800 mb-2">🏆 Top sellers</div>
+                    {top.length ? (
+                        <ol className="space-y-1">
+                            {top.map((t, i) => <li key={t.key} className="flex justify-between gap-2"><span className="truncate">{i + 1}. {t.label}</span><span className="tabular-nums text-gray-600">{t.units}</span></li>)}
+                        </ol>
+                    ) : <p className="text-gray-500">No sales in the last 30 days.</p>}
+                </div>
+                <div>
+                    <div className="font-semibold text-gray-800 mb-2">🧪 Running low</div>
+                    {urgent.length ? (
+                        <ul className="space-y-1">
+                            {urgent.map((s) => (
+                                <li key={s.key} className="flex justify-between gap-2">
+                                    <span className="truncate">{s.colorway} <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span></span>
+                                    <span className={`tabular-nums whitespace-nowrap ${s.weeksLeft < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{s.weeksLeft.toFixed(1)} wk</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : <p className="text-gray-500">Nothing under 4 weeks of stock.</p>}
+                    {D.suggestions.length > urgent.length && <button onClick={go} className="text-teal-700 hover:underline mt-1">{D.suggestions.length} to dye in total →</button>}
+                </div>
+                <div>
+                    <div className="font-semibold text-gray-800 mb-2">🧶 Yarn to order</div>
+                    {D.toBuy.length ? (
+                        <>
+                            <ul className="space-y-1">
+                                {D.toBuy.slice(0, 5).map((r) => (
+                                    <li key={r.base + r.hankSize} className="flex justify-between gap-2">
+                                        <span className="truncate">{r.base} {r.hankSize}g</span>
+                                        <span className="tabular-nums text-gray-600 whitespace-nowrap">{r.packs} pack{r.packs === 1 ? '' : 's'}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            {D.yarnOrderCost > 0 && <div className="mt-1 text-gray-700">≈ {money0(D.yarnOrderCost)}</div>}
+                        </>
+                    ) : <p className="text-gray-500">Enough undyed yarn on hand.</p>}
                 </div>
             </div>
         </div>
