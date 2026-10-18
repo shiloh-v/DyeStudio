@@ -256,6 +256,5 @@ export interface Settings {
   // Shopify demand: manual line-name → colorway/kit/base/size overrides, and the
   // last uploaded Shopify stock-level snapshot. See src/lib/demand.ts.
   shopifyMap?: Record<string, { kind?: 'colorway' | 'kit' | 'ignore'; recipeId?: number; kitId?: number; base?: string; hankSize?: number }>;
-  shopifyVendor?: string; // only count Shopify lines from this vendor ('' = all); default "Celestial Dyeworks"
   shopifyInventory?: { importedAt: string; rows: { name: string; sku: string; available: number }[] } | null;
 }

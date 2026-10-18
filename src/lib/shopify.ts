@@ -57,6 +57,23 @@ const num = (v: any): number => {
     return Number.isFinite(n) ? n : 0;
 };
 
+// ---------- Own brand only ----------
+
+/**
+ * Only Celestial Dyeworks products are ever imported. The store's order history
+ * also holds other brands sold through the shop (resold yarn, notions, classes,
+ * patterns) — some share names with our colorways ("Ruby and Roses – Rose DK –
+ * Snowdrift"), so they're dropped at the door. Uses the line's Vendor; when an
+ * export has no vendor, falls back to the product title's "Celestial Dyeworks"
+ * prefix.
+ */
+export const OWN_VENDOR = 'Celestial Dyeworks';
+const brandKey = (s: any) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+export function isOwnBrand(vendor: string | undefined, title: string | undefined): boolean {
+    if (vendor) return brandKey(vendor) === brandKey(OWN_VENDOR);
+    return brandKey(title).startsWith(brandKey(OWN_VENDOR));
+}
+
 // ---------- Orders ----------
 
 export interface SaleLine {
@@ -87,8 +104,11 @@ export function splitLineName(name: string): { product: string; variant: string 
 
 export class ImportError extends Error {}
 
-/** Parse a Shopify Orders CSV into sale lines (ids/importedAt filled by mergeSales). */
-export function parseOrdersCsv(text: string): Omit<SaleLine, 'id'>[] {
+/**
+ * Parse a Shopify Orders CSV into OUR sale lines (ids/importedAt filled by
+ * mergeSales). Other vendors' lines are counted in `skipped`, never returned.
+ */
+export function parseOrdersCsv(text: string): { lines: Omit<SaleLine, 'id'>[]; skipped: number } {
     const { headers, records } = toRecords(parseCsv(text));
     const need = ['name', 'lineitem name', 'lineitem quantity', 'lineitem price'];
     const missing = need.filter((h) => !headers.includes(h));
@@ -102,6 +122,7 @@ export function parseOrdersCsv(text: string): Omit<SaleLine, 'id'>[] {
     const orderInfo: Record<string, { date: string; status: string; cancelled: boolean }> = {};
     const seen: Record<string, number> = {};
     const lines: Omit<SaleLine, 'id'>[] = [];
+    let skipped = 0;
 
     for (const r of records) {
         const orderName = r['name'];
@@ -121,10 +142,12 @@ export function parseOrdersCsv(text: string): Omit<SaleLine, 'id'>[] {
         const info = orderInfo[orderName];
         if (!/^\d{4}-\d{2}-\d{2}$/.test(info.date)) continue;
 
+        const { product, variant } = splitLineName(lineName);
+        if (!isOwnBrand(r['vendor'], product)) { skipped++; continue; }
+
         const sku = r['lineitem sku'] || '';
         const base = `${orderName}|${lineName}|${sku}`;
         seen[base] = (seen[base] || 0) + 1;
-        const { product, variant } = splitLineName(lineName);
 
         lines.push({
             lineKey: `${base}|${seen[base]}`,
@@ -142,8 +165,12 @@ export function parseOrdersCsv(text: string): Omit<SaleLine, 'id'>[] {
             cancelled: info.cancelled,
         });
     }
-    if (!lines.length) throw new ImportError('No order lines found in that file.');
-    return lines;
+    if (!lines.length) {
+        throw new ImportError(skipped
+            ? `No ${OWN_VENDOR} products found in that file (${skipped} lines from other vendors).`
+            : 'No order lines found in that file.');
+    }
+    return { lines, skipped };
 }
 
 /**
@@ -233,12 +260,13 @@ export function parseInventoryCsv(text: string): InventorySnapshot {
         if (r[qtyCol] === '' || r[qtyCol] == null) continue;
         const name = opts.length ? `${title} - ${opts.join(' / ')}` : title;
         const sku = r['sku'] || r['variant sku'] || '';
+        if (!isOwnBrand(r['vendor'] || vendorByHandle[handle], title)) continue;
         const key = `${name}|${sku}`;
         const prev = totals.get(key);
         const qty = Math.max(0, Math.round(num(r[qtyCol])));
         if (prev) prev.available += qty;
         else totals.set(key, { name, sku, available: qty, vendor: r['vendor'] || vendorByHandle[handle] || '' });
     }
-    if (!totals.size) throw new ImportError('No variants with stock counts found in that file.');
+    if (!totals.size) throw new ImportError(`No ${OWN_VENDOR} variants with stock counts found in that file.`);
     return { importedAt: new Date().toISOString(), rows: [...totals.values()] };
 }

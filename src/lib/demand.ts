@@ -13,7 +13,7 @@
 import type { Batch, Kit, Recipe, Settings, YarnBase } from '../types';
 import { canonicalYarnRef } from './yarnMatch';
 import { isStocked } from './batches';
-import { isCountable, lineRevenue, type SaleLine, type InventorySnapshot } from './shopify';
+import { isCountable, isOwnBrand, lineRevenue, type SaleLine, type InventorySnapshot } from './shopify';
 
 export interface ShopifyMapping {
     kind?: 'colorway' | 'kit' | 'ignore';
@@ -41,20 +41,6 @@ export interface DemandContext {
     catalog: YarnBase[];
     sizeMappings: { grams: number; name: string }[];
     map: Record<string, ShopifyMapping>;
-    vendor: string; // only count lines from this Shopify vendor ('' = all)
-}
-
-export const DEFAULT_VENDOR = 'Celestial Dyeworks';
-
-/**
- * Is this line (or stock row) from your own brand? Shopify orders also carry
- * other brands' products (a shop's resold yarn, notions, classes); without this
- * "Ruby and Roses – Rose DK – Snowdrift" would count as your Snowdrift. Lines
- * with no vendor recorded are kept.
- */
-export function isOwnVendor(vendor: string | undefined, wanted: string): boolean {
-    if (!wanted || !vendor) return true;
-    return normText(vendor) === normText(wanted);
 }
 
 export function makeContext(recipes: Recipe[], kits: Kit[], settings: Settings | any): DemandContext {
@@ -64,7 +50,6 @@ export function makeContext(recipes: Recipe[], kits: Kit[], settings: Settings |
         catalog: settings?.yarnBases || [],
         sizeMappings: settings?.sizeMappings || [],
         map: settings?.shopifyMap || {},
-        vendor: settings?.shopifyVendor ?? DEFAULT_VENDOR,
     };
 }
 
@@ -213,7 +198,8 @@ export const comboLabel = (base: string, hankSize: number) =>
 
 /** Expand one sale line into skein-level units (kits explode into their colors). */
 export function unitsForLine(line: SaleLine, ctx: DemandContext, resolveCache?: Map<string, Resolved>): Unit[] {
-    if (!isCountable(line) || !isOwnVendor(line.vendor, ctx.vendor)) return [];
+    // Import already drops other brands; this also guards rows saved before that.
+    if (!isCountable(line) || !isOwnBrand(line.vendor, line.productTitle || line.lineName)) return [];
     let r = resolveCache?.get(line.lineName);
     if (!r) {
         r = resolveName(line.lineName, ctx);
@@ -372,7 +358,7 @@ export function computeSupply(
     const onHand = new Map<string, number>();
     if (snapshot?.rows?.length) {
         for (const row of snapshot.rows) {
-            if (!isOwnVendor(row.vendor, ctx.vendor)) continue;
+            if (!isOwnBrand(row.vendor, row.name)) continue;
             const r = resolveName(row.name, ctx);
             if (r.kind !== 'colorway' || !r.colorway) continue; // kits are made from stock
             const k = comboKey(r.colorway, r.base || '', r.hankSize || 0);
