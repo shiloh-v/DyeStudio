@@ -358,13 +358,13 @@ export function YarnDyeManager() {
                         settings={settings}
                         dyeSessions={dyeSessions}
                         gradients={gradients}
+                        colorSketches={colorSketches}
                         setActiveTab={setActiveTab}
                     />
                 )}
                 {activeTab === 'calendar' && (
                     <Calendar 
                         dyeSessions={dyeSessions}
-                        gradients={gradients}
                         setActiveTab={setActiveTab}
                     />
                 )}
@@ -413,7 +413,7 @@ export function YarnDyeManager() {
                     <DyeCatalog settings={settings} saveSettings={saveSettings} />
                 )}
                 {activeTab === 'inventory' && (
-                    <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} sales={sales} batches={batches} recipes={recipes} kits={kits} dyeSessions={dyeSessions} gradients={gradients} setActiveTab={setActiveTab} />
+                    <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} sales={sales} batches={batches} recipes={recipes} kits={kits} dyeSessions={dyeSessions} gradients={gradients} colorSketches={colorSketches} setActiveTab={setActiveTab} />
                 )}
                 {activeTab === 'pipeline' && (
                     <Pipeline 
@@ -446,6 +446,7 @@ export function YarnDyeManager() {
                         dyeSessions={dyeSessions}
                         saveDyeSessions={saveDyeSessions}
                         gradients={gradients}
+                        colorSketches={colorSketches}
                         setActiveTab={setActiveTab}
                     />
                 )}

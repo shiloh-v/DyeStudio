@@ -428,6 +428,7 @@ export interface YarnOrderRow {
     hankSize: number;
     forDyeNext: number;   // skeins the restock plan needs (pans + gradient trays)
     forPlanned: number;   // skeins already-planned sessions need
+    forProjected: number; // skeins for projected batches (rest of the stock-up horizon)
     keep: number;         // low-stock minimum to keep on the shelf
     have: number;         // undyed skeins in Inventory
     short: number;        // skeins to buy
@@ -447,15 +448,17 @@ export function yarnToOrder(
     suggestions: { base?: string; hankSize?: number; suggest: number }[],
     plannedByBaseSize: Map<string, number>,
     inventory: any[],
-    ctx: DemandContext
+    ctx: DemandContext,
+    projectedByBaseSize: Map<string, number> = new Map()
 ): YarnOrderRow[] {
-    const need = new Map<string, { dye: number; planned: number }>();
-    const bump = (k: string, f: 'dye' | 'planned', q: number) => {
-        const v = need.get(k) || { dye: 0, planned: 0 };
+    const need = new Map<string, { dye: number; planned: number; projected: number }>();
+    const bump = (k: string, f: 'dye' | 'planned' | 'projected', q: number) => {
+        const v = need.get(k) || { dye: 0, planned: 0, projected: 0 };
         v[f] += q; need.set(k, v);
     };
     for (const s of suggestions) if (s.base && s.hankSize) bump(`${s.base}||${s.hankSize}`, 'dye', s.suggest);
     plannedByBaseSize.forEach((q, k) => bump(k, 'planned', q));
+    projectedByBaseSize.forEach((q, k) => bump(k, 'projected', q));
 
     const rows: YarnOrderRow[] = [];
     need.forEach((v, k) => {
@@ -469,10 +472,10 @@ export function yarnToOrder(
         const size = (entry?.sizes || []).find((z) => Number(z.amount) === hankSize);
         const packSize = Math.max(1, Number(size?.packSize) || 1);
         const packPrice = size?.packPrice !== '' && size?.packPrice != null ? Number(size.packPrice) : undefined;
-        const short = Math.max(0, Math.ceil(v.dye + v.planned + keep - have));
+        const short = Math.max(0, Math.ceil(v.dye + v.planned + v.projected + keep - have));
         const packs = Math.ceil(short / packSize);
         rows.push({
-            base, hankSize, forDyeNext: v.dye, forPlanned: v.planned, keep, have, short,
+            base, hankSize, forDyeNext: v.dye, forPlanned: v.planned, forProjected: v.projected, keep, have, short,
             supplier: entry?.supplier, sku: size?.sku, packSize, packPrice, packs,
             cost: packPrice != null ? packs * packPrice : 0,
         });
@@ -802,6 +805,8 @@ export interface RestockPlanInput {
     units: Unit[];
     supply?: Supply;                // on hand + coming (Pipeline incl. Ready for Labels, planned sessions)
     windowDays?: number;
+    labTests?: any[];               // Color Lab sketches to test (each as a pair of colorLab pans)
+    forceBatch?: boolean;           // plan a batch even if nothing is running low
 }
 
 /**
@@ -817,7 +822,13 @@ export function planRestock(input: RestockPlanInput) {
         .map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest }));
     const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
     const asEmpty = (c: string) => ({ colorway: c, recipeId: recipes.find((r) => r.name === c)?.id, base: '', hankSize: 0, qty: 0 });
-    const base = [...chosen, ...manual.map(asEmpty)];
+    // Color Lab tests ride along as pairs, filled in the shop's overall mix.
+    const labByName = new Map<string, any>();
+    for (const k of input.labTests || []) {
+        const name = String(k.customName || k.colorId || 'Color Lab test');
+        if (!chosen.some((c) => c.colorway === name) && !manual.includes(name)) labByName.set(name, k);
+    }
+    const base = [...chosen, ...manual.map(asEmpty), ...[...labByName.keys()].map((n) => ({ colorway: n, recipeId: undefined, base: '', hankSize: 0, qty: 0 }))];
 
     const gradientDyes = dyesNeedingGradient(input.inventory, input.gradients, input.sessions);
     const trayYarn = gradientTrayYarn(input.sessions, ctx);
@@ -835,13 +846,21 @@ export function planRestock(input: RestockPlanInput) {
             mix: (cw) => salesMix(cw, input.inWindow, input.units),
             stock: free,
         });
-        return { ...built, batches: planBatches(built.pans, gradientDyes, trayYarn) };
+        const pans = built.pans.map((p) => {
+            const sk = labByName.get(p.colorway);
+            if (!sk) return p;
+            return { ...p, type: 'colorLab', recipeId: '', recipe: null, colorSketchId: String(sk.id), colorSketch: sk, notes: 'Color Lab test' };
+        });
+        return { ...built, pans, batches: planBatches(pans, gradientDyes, trayYarn) };
     };
     let result = build(base);
     let extras: string[] = [];
-    if (input.fill && result.batches.length) {
+    if (input.fill && (result.batches.length || input.forceBatch)) {
         const last = result.batches[result.batches.length - 1];
-        const used = last.filter((p) => p.type === 'pan').length / 2 + last.filter((p) => p.type === 'gradientTray').length;
+        const isPan = (p: any) => p.type === 'pan' || p.type === 'colorLab';
+        const used = last
+            ? last.filter(isPan).length / 2 + last.filter((p) => p.type === 'gradientTray').length
+            : (gradientDyes.length ? 1 : 0); // an empty forced batch still gets its tray
         const freeRacks = RACKS_PER_BATCH - Math.ceil(used);
         if (freeRacks > 0) {
             // Skip colorways already in this plan or in an upcoming session.
@@ -877,5 +896,68 @@ export function planRestock(input: RestockPlanInput) {
             if (extras.length) result = build([...base, ...extras.map(asEmpty)]);
         }
     }
-    return { ...result, extras, manual, gradientDyes };
+    return { ...result, extras, manual, gradientDyes, labTests: [...labByName.keys()] };
+}
+
+
+// ---------- Stock-up horizon ----------
+
+/**
+ * How often the studio dyes: batches per month from the average gap between
+ * the last year's session dates (excluding planned/unfinished ones).
+ * Falls back to 1.5/month with too little history.
+ */
+export function dyeCadence(sessions: any[], today: string): number {
+    const since = daysAgo(today, 365);
+    const dates = [...new Set((sessions || []).filter((s) => s?.archived && s.date && s.date >= since).map((s) => String(s.date).slice(0, 10)))].sort();
+    if (dates.length < 3) return 1.5;
+    const gaps: number[] = [];
+    for (let i = 1; i < dates.length; i++) gaps.push((Date.parse(dates[i]) - Date.parse(dates[i - 1])) / 86400000);
+    const avg = gaps.reduce((t, g) => t + g, 0) / gaps.length;
+    return Math.round((30.4 / Math.max(1, avg)) * 10) / 10;
+}
+
+/**
+ * Undyed yarn a typical future batch uses: its colorway pans (8 pairs with a
+ * gradient tray, else 9) × 300g split by the shop's overall sales mix, plus the
+ * tray's 10 micro skeins. Rounded up per base/size.
+ */
+export function projectedBatchYarn(count: number, withTrays: number, mix: { base: string; hankSize: number; share: number }[], trayYarn: { base: string; hankSize: number }) {
+    const out = new Map<string, number>();
+    if (count <= 0) return out;
+    const sold = mix.filter((m) => m.hankSize > MICRO_GRAMS && m.share > 0);
+    const avgGrams = sold.reduce((t, m) => t + m.share * m.hankSize, 0);
+    for (let b = 0; b < count; b++) {
+        const tray = b < withTrays;
+        const grams = (tray ? RACKS_PER_BATCH - 1 : RACKS_PER_BATCH) * 2 * PAN_GRAMS;
+        if (avgGrams > 0) {
+            const skeins = grams / avgGrams;
+            for (const m of sold) {
+                const k = `${m.base}||${m.hankSize}`;
+                out.set(k, (out.get(k) || 0) + m.share * skeins);
+            }
+        }
+        if (tray) {
+            const k = `${trayYarn.base}||${trayYarn.hankSize}`;
+            out.set(k, (out.get(k) || 0) + 10);
+        }
+    }
+    out.forEach((v, k) => out.set(k, Math.ceil(v)));
+    return out;
+}
+
+// ---------- Color Lab tests ----------
+
+/**
+ * Color Lab sketches worth testing, best first: not archived, not already a
+ * recipe, never dyed in a session — then ones already tested (oldest first).
+ */
+export function labTestCandidates(sketches: any[], sessions: any[], recipes: Recipe[]) {
+    const tested = new Set<string>();
+    (sessions || []).forEach((s) => (s.pans || []).forEach((p: any) => p.type === 'colorLab' && p.colorSketchId && tested.add(String(p.colorSketchId))));
+    const recipeNames = new Set(recipes.map((r) => normText(r.name)));
+    return (sketches || [])
+        .filter((k) => !k.archived && !recipeNames.has(normText(k.customName || k.colorId)))
+        .map((k) => ({ sketch: k, name: String(k.customName || k.colorId || 'Color Lab test'), tested: tested.has(String(k.id)) }))
+        .sort((a, b) => Number(a.tested) - Number(b.tested) || Number(a.sketch.id) - Number(b.sketch.id));
 }

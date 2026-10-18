@@ -7,7 +7,8 @@ import { DateUtils } from './dates';
 import { isCountable, isOwnBrand, lineRevenue, type SaleLine } from './shopify';
 import {
     makeContext, allUnits, windowUnits, byCombo, byColorway, computeSupply, dyeNext, costLookup,
-    plannedSkeins, yarnToOrder, daysAgo, planRestock, type Unit,
+    plannedSkeins, yarnToOrder, daysAgo, planRestock, dyeCadence, projectedBatchYarn, salesMix,
+    labTestCandidates, gradientTrayYarn, type Unit,
 } from './demand';
 
 export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
@@ -20,13 +21,22 @@ export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
 
 // Per-viewer preferences set on the Demand tab (window, weeks of stock to keep).
 const read = (k: string, d: any) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
-export interface PlanEdits { removed: string[]; added: string[]; fill: boolean }
+export interface PlanEdits {
+    removed: string[];      // colorways taken out of the plan
+    added: string[];        // colorways put in
+    fill: boolean;          // top pans to 300g + fill a short batch
+    labTests?: string[];    // Color Lab sketch ids to test in the plan
+    forceBatch?: boolean;   // plan a batch even when nothing is running low
+}
 export const demandPrefs = {
     windowIdx: (): number => read('demand_window', 1),
     targetWeeks: (): number => read('demand_target_weeks', 8),
     // Changes made to the auto-built restock plan (Demand tab).
-    planEdits: (): PlanEdits => ({ removed: [], added: [], fill: true, ...read('demand_plan_edits', {}) }),
-    set: (k: 'demand_window' | 'demand_target_weeks' | 'demand_plan_edits', v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+    planEdits: (): PlanEdits => ({ removed: [], added: [], fill: true, labTests: [], forceBatch: false, ...read('demand_plan_edits', {}) }),
+    // Yarn to order covers this many months of dyeing at this pace (null = from history).
+    yarnMonths: (): number => read('demand_yarn_months', 2),
+    batchesPerMonth: (): number | null => read('demand_batches_per_month', null),
+    set: (k: 'demand_window' | 'demand_target_weeks' | 'demand_plan_edits' | 'demand_yarn_months' | 'demand_batches_per_month', v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
 /** Revenue / skeins / orders for our lines in (today-days-offset, today-offset]. */
@@ -50,7 +60,10 @@ export interface DemandInput {
     inventory?: any[];
     dyeSessions?: any[];
     gradients?: any[];
+    colorSketches?: any[];
     planEdits?: PlanEdits;
+    yarnMonths?: number;
+    batchesPerMonth?: number | null;
     windowIdx?: number;
     targetWeeks?: number;
     today?: string;
@@ -91,21 +104,39 @@ export function demandSummary(input: DemandInput) {
         units,
         supply,
         windowDays,
+        labTests: (edits.labTests || [])
+            .map((id) => (input.colorSketches || []).find((k) => String(k.id) === String(id)))
+            .filter(Boolean),
+        forceBatch: !!edits.forceBatch,
     });
     // Yarn to order = everything the plan (pans + gradient trays) and the
     // already-planned sessions will use.
     const planYarn = plannedSkeins(plan.batches.map((pans) => ({ pans })), ctx).byBaseSize;
+    // Stock up for the next N months of dyeing: batches at your pace, minus
+    // the ones already planned (sessions) or in this plan; the rest are
+    // projected as typical batches in the shop's overall sales mix.
+    const historyPace = dyeCadence(input.dyeSessions || [], today);
+    const months = input.yarnMonths ?? demandPrefs.yarnMonths();
+    const pace = input.batchesPerMonth ?? demandPrefs.batchesPerMonth() ?? historyPace;
+    const horizonBatches = Math.ceil(months * pace - 1e-9);
+    const upcomingSessions = (input.dyeSessions || []).filter((s) => !s.archived && (s.pans || []).length).length;
+    const projectedBatches = Math.max(0, horizonBatches - upcomingSessions - plan.batches.length);
+    const traysLeft = Math.max(0, plan.gradientDyes.length - plan.batches.length);
+    const projected = projectedBatchYarn(projectedBatches, Math.min(projectedBatches, traysLeft), salesMix('', inWindow, units), gradientTrayYarn(input.dyeSessions || [], ctx));
     const yarnOrder = yarnToOrder(
         [...planYarn.entries()].map(([k, q]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), suggest: q }; }),
         planned.byBaseSize,
         input.inventory || [],
-        ctx
+        ctx,
+        projected
     );
     const toBuy = yarnOrder.filter((r) => r.short > 0);
 
     return {
         today, win, targetWeeks, ctx, lines, units, firstDate, lastDate, windowDays, inWindow,
         planned, supply, suggestions, plan, edits, yarnOrder, toBuy,
+        horizon: { months, pace, historyPace, horizonBatches, upcomingSessions, planBatches: plan.batches.length, projectedBatches },
+        labCandidates: labTestCandidates(input.colorSketches || [], input.dyeSessions || [], input.recipes),
         yarnOrderCost: toBuy.reduce((s, r) => s + r.cost, 0),
         getCost: costLookup(input.batches, ctx),
         /** Units sold per colorway in the current window (for Recipes badges). */
