@@ -3,13 +3,13 @@ import { DateUtils } from '../lib/dates';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/dialog';
 import {
-    parseOrdersCsv, parseInventoryCsv, mergeSales, salesSchemaReady, isCountable, ImportError,
+    parseOrdersCsv, parseInventoryCsv, mergeSales, salesSchemaReady, isCountable, isOwnBrand, ImportError, OWN_VENDOR,
     type SaleLine,
 } from '../lib/shopify';
 import {
     makeContext, resolveName, isResolved, normText, allUnits, windowUnits, byColorway, byBase,
     byCombo, lastMonths, monthlyUnits, computeSupply, dyeNext, costLookup, buildRestockPans,
-    comboLabel, daysAgo, isOwnVendor, DEFAULT_VENDOR, type ShopifyMapping, type Suggestion,
+    comboLabel, daysAgo, type ShopifyMapping, type Suggestion,
 } from '../lib/demand';
 
 const WINDOWS: { label: string; days: number | null }[] = [
@@ -49,15 +49,8 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
 
     const allLines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
     const ctx = useMemo(() => makeContext(recipes, kits, settings), [recipes, kits, settings]);
-    // Vendors seen in the import, most units first — for the "count vendor" picker.
-    const vendors = useMemo(() => {
-        const m = new Map<string, number>();
-        allLines.forEach((l) => l.vendor && m.set(l.vendor, (m.get(l.vendor) || 0) + (Number(l.quantity) || 0)));
-        return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
-    }, [allLines]);
-    // Everything below only looks at your own brand's lines.
-    const lines: SaleLine[] = useMemo(() => allLines.filter((l) => isOwnVendor(l.vendor, ctx.vendor)), [allLines, ctx.vendor]);
-    const setVendor = (v: string) => saveSettings({ ...settings, shopifyVendor: v });
+    // Only Celestial Dyeworks lines (import drops others; this also hides any saved earlier).
+    const lines: SaleLine[] = useMemo(() => allLines.filter((l) => isOwnBrand(l.vendor, l.productTitle || l.lineName)), [allLines]);
     const snapshot = settings?.shopifyInventory || null;
     const win = WINDOWS[windowIdx] || WINDOWS[1];
 
@@ -138,12 +131,15 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
         if (!(await salesSchemaReady())) { setSchemaOk(false); toast('Run the one-time database setup first (see the banner).', 'error'); return; }
         setBusy(true);
         try {
-            const parsed = parseOrdersCsv(await readFile(file));
-            const { sales: merged, added, updated } = mergeSales(allLines, parsed);
+            const { lines: parsed, skipped } = parseOrdersCsv(await readFile(file));
+            // Merge into our own lines only, so any other-vendor rows saved by an
+            // earlier version are removed from the database on this save.
+            const { sales: merged, added, updated } = mergeSales(lines, parsed);
             const ok = await saveSales(merged);
             if (ok === false) throw new Error('Saving to the database failed — nothing was imported.');
             const orderCount = new Set(parsed.map((p) => p.orderName)).size;
-            toast(`Imported ${orderCount} orders: ${added} new line${added === 1 ? '' : 's'}${updated ? `, ${updated} updated` : ''}.`, 'success', 6000);
+            toast(`Imported ${orderCount} ${OWN_VENDOR} orders: ${added} new line${added === 1 ? '' : 's'}${updated ? `, ${updated} updated` : ''}.` +
+                (skipped ? ` Skipped ${skipped} line${skipped === 1 ? '' : 's'} from other vendors.` : ''), 'success', 7000);
         } catch (err) {
             toast(err instanceof ImportError ? err.message : `Import failed: ${err?.message || err}`, 'error', 8000);
         }
@@ -227,17 +223,6 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                             ? <>{lines.length.toLocaleString()} order lines · {DateUtils.formatDate(firstDate)} – {DateUtils.formatDate(lines.reduce((m, l) => (l.orderDate > m ? l.orderDate : m), ''))}</>
                             : 'Import your Shopify orders to see what sells and what to dye next.'}
                     </p>
-                    {vendors.length > 0 && (
-                        <label className="text-sm text-gray-600 mt-2 flex flex-wrap items-center gap-2">
-                            Count products from
-                            <select value={ctx.vendor} onChange={(e) => setVendor(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm">
-                                {!vendors.includes(ctx.vendor) && ctx.vendor && <option value={ctx.vendor}>{ctx.vendor}</option>}
-                                {vendors.map((v) => <option key={v} value={v}>{v}</option>)}
-                                <option value="">All vendors</option>
-                            </select>
-                            {lines.length < allLines.length && <span className="text-xs text-gray-500">({(allLines.length - lines.length).toLocaleString()} lines from other vendors left out)</span>}
-                        </label>
-                    )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <input ref={ordersInput} type="file" accept=".csv,text/csv" className="hidden" onChange={importOrders} />
@@ -486,7 +471,7 @@ function HowTo() {
                 <li><em>Optional, for accurate "weeks left":</em> open <strong>Products</strong> → <strong>Inventory</strong> → <strong>Export</strong>, then tap <strong>⬆ Update stock levels</strong>.</li>
                 <li>Open <strong>🔗 Map products</strong> to link any Shopify listing the app couldn't match on its own to a colorway (or kit), base and size.</li>
             </ol>
-            <p className="text-xs text-gray-500">Only product, quantity, price and date are kept. Customer names, emails and addresses in the export are never saved.</p>
+            <p className="text-xs text-gray-500">Only Celestial Dyeworks products are imported (other brands in your order history are skipped), and only product, quantity, price and date are kept. Customer names, emails and addresses in the export are never saved.</p>
         </div>
     );
 }
