@@ -22,10 +22,11 @@ const Settings = named(() => import('./Settings'), 'Settings');
 const BackupRestore = named(() => import('./BackupRestore'), 'BackupRestore');
 const YarnBases = named(() => import('./YarnBases'), 'YarnBases');
 const DyeCatalog = named(() => import('./DyeCatalog'), 'DyeCatalog');
+const Demand = named(() => import('./Demand'), 'Demand');
 
 const VALID_TABS = [
     'dashboard', 'calendar', 'recipes', 'gradients', 'kits', 'colorlab',
-    'sessions', 'queue', 'bases', 'dyes', 'inventory', 'pipeline', 'sales', 'settings',
+    'sessions', 'queue', 'bases', 'dyes', 'inventory', 'pipeline', 'sales', 'demand', 'settings',
 ];
 
 export function YarnDyeManager() {
@@ -153,7 +154,9 @@ export function YarnDyeManager() {
 
     const saveSales = async (newSales) => {
         setSales(newSales);
-        await StorageManager.set('sales', newSales);
+        const ok = await StorageManager.set('sales', newSales);
+        if (!ok) setSales(sales);
+        return ok;
     };
 
     // Apply a restored backup: update in-memory state, persist every collection
@@ -257,6 +260,7 @@ export function YarnDyeManager() {
                             { id: 'inventory', label: '📦 Inventory' },
                             { id: 'pipeline', label: '🔄 Pipeline' },
                             { id: 'sales', label: '🏷️ Stock' },
+                            { id: 'demand', label: '📈 Demand' },
                             { id: 'settings', label: '⚙️ Settings' }
                         ].map(tab => {
                             const isGroupActive = tab.group 
@@ -421,6 +425,20 @@ export function YarnDyeManager() {
                         saveSales={saveSales} 
                         batches={batches}
                         saveBatches={saveBatches}
+                    />
+                )}
+                {activeTab === 'demand' && (
+                    <Demand
+                        sales={sales}
+                        saveSales={saveSales}
+                        batches={batches}
+                        recipes={recipes}
+                        kits={kits}
+                        settings={settings}
+                        saveSettings={saveSettings}
+                        dyeSessions={dyeSessions}
+                        saveDyeSessions={saveDyeSessions}
+                        setActiveTab={setActiveTab}
                     />
                 )}
                 {activeTab === 'settings' && (

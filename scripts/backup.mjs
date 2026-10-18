@@ -39,9 +39,17 @@ const tables = ['recipes', 'inventory', 'batches', 'sales', 'dye_sessions', 'kit
 
 async function getAll(table, select = '*') {
   // No user_id filter — RLS returns only the signed-in user's rows.
-  const res = await fetch(`${url}/rest/v1/${table}?select=${select}`, { headers });
-  if (!res.ok) throw new Error(`${table}: ${res.status} ${await res.text()}`);
-  return res.json();
+  // Page through — PostgREST caps each response at 1000 rows.
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const res = await fetch(`${url}/rest/v1/${table}?select=${select}&order=id`, {
+      headers: { ...headers, Range: `${from}-${from + 999}` },
+    });
+    if (!res.ok) throw new Error(`${table}: ${res.status} ${await res.text()}`);
+    const page = await res.json();
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
 }
 
 const backup = { exportDate: new Date().toISOString(), source: 'scripts/backup.mjs' };

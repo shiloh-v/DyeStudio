@@ -1,0 +1,669 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { DateUtils } from '../lib/dates';
+import { toast } from '../lib/toast';
+import { confirmDialog } from '../lib/dialog';
+import {
+    parseOrdersCsv, parseInventoryCsv, mergeSales, salesSchemaReady, isCountable, ImportError,
+    type SaleLine,
+} from '../lib/shopify';
+import {
+    makeContext, resolveName, isResolved, normText, allUnits, windowUnits, byColorway, byBase,
+    byCombo, lastMonths, monthlyUnits, computeSupply, dyeNext, costLookup, buildRestockPans,
+    comboLabel, daysAgo, isOwnVendor, DEFAULT_VENDOR, type ShopifyMapping, type Suggestion,
+} from '../lib/demand';
+
+const WINDOWS: { label: string; days: number | null }[] = [
+    { label: '30 days', days: 30 },
+    { label: '90 days', days: 90 },
+    { label: '6 months', days: 182 },
+    { label: '12 months', days: 365 },
+    { label: 'All time', days: null },
+];
+
+const money = (n: number) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
+
+// Per-viewer UI preferences (window, target cover) — conveniences only.
+const pref = {
+    get: (k: string, d: any) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+};
+
+export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, dyeSessions, saveDyeSessions, setActiveTab }) {
+    const today = DateUtils.getTodayEST();
+    const [schemaOk, setSchemaOk] = useState<boolean | null>(null);
+    const [busy, setBusy] = useState(false);
+    const [windowIdx, setWindowIdx] = useState<number>(() => pref.get('demand_window', 1));
+    const [targetWeeks, setTargetWeeks] = useState<number>(() => pref.get('demand_target_weeks', 8));
+    const [rankBy, setRankBy] = useState<'colorway' | 'base' | 'combo'>('colorway');
+    const [showAllRank, setShowAllRank] = useState(false);
+    const [trendColorway, setTrendColorway] = useState('');
+    const [showMapper, setShowMapper] = useState(false);
+    const [picks, setPicks] = useState<Record<string, number>>({});
+    const ordersInput = useRef<HTMLInputElement>(null);
+    const invInput = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { salesSchemaReady().then(setSchemaOk); }, []);
+    useEffect(() => { pref.set('demand_window', windowIdx); }, [windowIdx]);
+    useEffect(() => { pref.set('demand_target_weeks', targetWeeks); }, [targetWeeks]);
+
+    const allLines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
+    const ctx = useMemo(() => makeContext(recipes, kits, settings), [recipes, kits, settings]);
+    // Vendors seen in the import, most units first — for the "count vendor" picker.
+    const vendors = useMemo(() => {
+        const m = new Map<string, number>();
+        allLines.forEach((l) => l.vendor && m.set(l.vendor, (m.get(l.vendor) || 0) + (Number(l.quantity) || 0)));
+        return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+    }, [allLines]);
+    // Everything below only looks at your own brand's lines.
+    const lines: SaleLine[] = useMemo(() => allLines.filter((l) => isOwnVendor(l.vendor, ctx.vendor)), [allLines, ctx.vendor]);
+    const setVendor = (v: string) => saveSettings({ ...settings, shopifyVendor: v });
+    const snapshot = settings?.shopifyInventory || null;
+    const win = WINDOWS[windowIdx] || WINDOWS[1];
+
+    const units = useMemo(() => allUnits(lines, ctx), [lines, ctx]);
+    const firstDate = useMemo(() => lines.reduce((m, l) => (!m || l.orderDate < m ? l.orderDate : m), ''), [lines]);
+    // "All time" velocity spans from the first imported order.
+    const windowDays = win.days || Math.max(7, Math.round((Date.parse(today) - Date.parse(firstDate || today)) / 86400000) + 1);
+    const inWindow = useMemo(() => windowUnits(units, today, win.days), [units, today, win.days]);
+
+    const getCost = useMemo(() => costLookup(batches, ctx), [batches, ctx]);
+    const supply = useMemo(() => computeSupply(batches, units, ctx, snapshot), [batches, units, ctx, snapshot]);
+    const suggestions = useMemo(
+        () => dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks),
+        [inWindow, windowDays, supply, targetWeeks]
+    );
+
+    // Distinct line names → resolution, for the mapper + "needs review" count.
+    const distinct = useMemo(() => {
+        const m = new Map<string, { name: string; units: number; revenue: number }>();
+        for (const l of lines) {
+            if (!isCountable(l)) continue;
+            const k = normText(l.lineName);
+            const v = m.get(k) || { name: l.lineName, units: 0, revenue: 0 };
+            v.units += Number(l.quantity) || 0;
+            v.revenue += (Number(l.unitPrice) || 0) * (Number(l.quantity) || 0) - (Number(l.discount) || 0);
+            m.set(k, v);
+        }
+        return [...m.entries()]
+            .map(([key, v]) => ({ key, ...v, resolved: resolveName(v.name, ctx) }))
+            .sort((a, b) => b.units - a.units);
+    }, [lines, ctx]);
+    const needsReview = distinct.filter((d) => !isResolved(d.resolved));
+    const needsReviewUnits = needsReview.reduce((s, d) => s + d.units, 0);
+
+    // Window totals
+    const windowLines = useMemo(() => {
+        const from = win.days ? daysAgo(today, win.days) : '';
+        return lines.filter((l) => isCountable(l) && (!from || l.orderDate > from) && l.orderDate <= today);
+    }, [lines, win.days, today]);
+    const revenue = windowLines.reduce((s, l) => s + Math.max(0, l.unitPrice * l.quantity - (l.discount || 0)), 0);
+    const orders = new Set(windowLines.map((l) => l.orderName)).size;
+    const skeins = inWindow.reduce((s, u) => s + u.qty, 0);
+    const matchedRevenue = inWindow.reduce((s, u) => s + u.revenue, 0);
+    const cogs = inWindow.reduce((s, u) => s + getCost(u) * u.qty, 0);
+    const grossProfit = matchedRevenue - cogs;
+    const margin = matchedRevenue > 0 ? (grossProfit / matchedRevenue) * 100 : 0;
+
+    const ranking = rankBy === 'colorway' ? byColorway(inWindow) : rankBy === 'base' ? byBase(inWindow) : byCombo(inWindow);
+    const rankMax = Math.max(1, ...ranking.map((r) => r.units));
+
+    const profitRows = useMemo(() => {
+        const m = new Map<string, { colorway: string; units: number; revenue: number; cost: number }>();
+        for (const u of inWindow) {
+            const v = m.get(u.colorway) || { colorway: u.colorway, units: 0, revenue: 0, cost: 0 };
+            v.units += u.qty; v.revenue += u.revenue; v.cost += getCost(u) * u.qty;
+            m.set(u.colorway, v);
+        }
+        return [...m.values()].sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost));
+    }, [inWindow, getCost]);
+
+    const months = useMemo(() => lastMonths(today, 12), [today]);
+    const trend = useMemo(() => monthlyUnits(units, months, trendColorway || undefined), [units, months, trendColorway]);
+    const trendColorways = useMemo(() => byColorway(units).map((a) => a.colorway), [units]);
+
+    // ---------- Import ----------
+
+    const readFile = (file: File) => new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || ''));
+        r.onerror = () => rej(r.error);
+        r.readAsText(file);
+    });
+
+    const importOrders = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!(await salesSchemaReady())) { setSchemaOk(false); toast('Run the one-time database setup first (see the banner).', 'error'); return; }
+        setBusy(true);
+        try {
+            const parsed = parseOrdersCsv(await readFile(file));
+            const { sales: merged, added, updated } = mergeSales(allLines, parsed);
+            const ok = await saveSales(merged);
+            if (ok === false) throw new Error('Saving to the database failed — nothing was imported.');
+            const orderCount = new Set(parsed.map((p) => p.orderName)).size;
+            toast(`Imported ${orderCount} orders: ${added} new line${added === 1 ? '' : 's'}${updated ? `, ${updated} updated` : ''}.`, 'success', 6000);
+        } catch (err) {
+            toast(err instanceof ImportError ? err.message : `Import failed: ${err?.message || err}`, 'error', 8000);
+        }
+        setBusy(false);
+    };
+
+    const importInventory = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setBusy(true);
+        try {
+            const snap = parseInventoryCsv(await readFile(file));
+            await saveSettings({ ...settings, shopifyInventory: snap });
+            const total = snap.rows.reduce((s, r) => s + r.available, 0);
+            toast(`Stock levels updated: ${snap.rows.length} variants, ${total} units available.`, 'success', 6000);
+        } catch (err) {
+            toast(err instanceof ImportError ? err.message : `Import failed: ${err?.message || err}`, 'error', 8000);
+        }
+        setBusy(false);
+    };
+
+    const clearSales = async () => {
+        if (!(await confirmDialog({ title: 'Remove imported Shopify sales?', message: `This deletes all ${allLines.length} imported order lines from the app (your Shopify store is not touched). You can re-import any time.`, confirmText: 'Remove', danger: true }))) return;
+        await saveSales((sales || []).filter((s) => !s.lineKey));
+        toast('Imported sales removed.', 'success');
+    };
+
+    // ---------- Dye next → draft session ----------
+
+    const pickedList = suggestions.filter((s) => picks[s.key] > 0);
+    const pickedSkeins = pickedList.reduce((s, x) => s + picks[x.key], 0);
+    const togglePick = (s: Suggestion) =>
+        setPicks((p) => { const n = { ...p }; if (n[s.key]) delete n[s.key]; else n[s.key] = s.suggest; return n; });
+
+    const createDraftSession = async () => {
+        if (!pickedList.length) return;
+        const pans = buildRestockPans(
+            pickedList.map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: picks[s.key] })),
+            recipes
+        );
+        const nums = (dyeSessions || [])
+            .map((s) => s.sessionId || s.session_id)
+            .filter((id) => id && String(id).startsWith('DS-'))
+            .map((id) => parseInt(String(id).substring(3)))
+            .filter((n) => !isNaN(n));
+        let next = (nums.length ? Math.max(...nums) : 0) + 1;
+        const label = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const notes = `Drafted from Demand (${win.label} of Shopify sales, ${targetWeeks}-week target): ` +
+            pickedList.map((s) => `${picks[s.key]}× ${s.label}`).join(', ');
+        // The oven holds 18 pans (DyeSessions MAX_OVEN_CAPACITY) — split bigger restocks.
+        const OVEN = 18;
+        const parts = Math.ceil(pans.length / OVEN);
+        const created = Array.from({ length: parts }, (_, i) => ({
+            id: Date.now() + i,
+            sessionId: `DS-${String(next++).padStart(3, '0')}`,
+            name: `Restock – ${label}${parts > 1 ? ` (${i + 1} of ${parts})` : ''}`,
+            date: today,
+            pans: pans.slice(i * OVEN, (i + 1) * OVEN),
+            notes,
+        }));
+        await saveDyeSessions([...(dyeSessions || []), ...created]);
+        setPicks({});
+        toast(parts > 1
+            ? `${parts} draft sessions created (${pans.length} pans — more than one oven load). Review them in Dye Sessions.`
+            : `Draft session "${created[0].name}" created with ${pans.length} pan${pans.length === 1 ? '' : 's'}. Review it in Dye Sessions.`, 'success', 6000);
+        setActiveTab('sessions');
+    };
+
+    // ---------- Render ----------
+
+    const hasData = allLines.length > 0;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-wrap justify-between items-start gap-3">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Shopify Demand</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                        {hasData
+                            ? <>{lines.length.toLocaleString()} order lines · {DateUtils.formatDate(firstDate)} – {DateUtils.formatDate(lines.reduce((m, l) => (l.orderDate > m ? l.orderDate : m), ''))}</>
+                            : 'Import your Shopify orders to see what sells and what to dye next.'}
+                    </p>
+                    {vendors.length > 0 && (
+                        <label className="text-sm text-gray-600 mt-2 flex flex-wrap items-center gap-2">
+                            Count products from
+                            <select value={ctx.vendor} onChange={(e) => setVendor(e.target.value)} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                                {!vendors.includes(ctx.vendor) && ctx.vendor && <option value={ctx.vendor}>{ctx.vendor}</option>}
+                                {vendors.map((v) => <option key={v} value={v}>{v}</option>)}
+                                <option value="">All vendors</option>
+                            </select>
+                            {lines.length < allLines.length && <span className="text-xs text-gray-500">({(allLines.length - lines.length).toLocaleString()} lines from other vendors left out)</span>}
+                        </label>
+                    )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <input ref={ordersInput} type="file" accept=".csv,text/csv" className="hidden" onChange={importOrders} />
+                    <input ref={invInput} type="file" accept=".csv,text/csv" className="hidden" onChange={importInventory} />
+                    <button disabled={busy} onClick={() => ordersInput.current?.click()} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-50">
+                        {busy ? 'Importing…' : '⬆ Import orders CSV'}
+                    </button>
+                    <button disabled={busy} onClick={() => invInput.current?.click()} className="bg-white text-teal-700 border border-teal-200 px-4 py-2 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-50">
+                        ⬆ Update stock levels
+                    </button>
+                    {hasData && (
+                        <button onClick={() => setShowMapper(true)} className="bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium">
+                            🔗 Map products{needsReview.length ? ` (${needsReview.length})` : ''}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {schemaOk === false && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg px-4 py-3">
+                    <strong>One-time setup needed:</strong> the database doesn't have the sales columns yet. Run <code>sql/shopify-sales.sql</code> in the Supabase SQL editor, then reload this page.
+                </div>
+            )}
+
+            {!hasData && <HowTo />}
+
+            {hasData && (
+                <>
+                    {/* Window */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {WINDOWS.map((w, i) => (
+                            <button key={w.label} onClick={() => setWindowIdx(i)}
+                                className={`px-3 py-1.5 rounded-full text-sm font-medium ${i === windowIdx ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
+                                {w.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {needsReviewUnits > 0 && (
+                        <button onClick={() => setShowMapper(true)} className="w-full text-left bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg px-4 py-3 hover:bg-amber-100">
+                            ⚠️ {needsReview.length} Shopify product{needsReview.length === 1 ? '' : 's'} ({needsReviewUnits} units, all time) aren't fully matched to a colorway, base and size, so some numbers below are incomplete. <span className="underline">Map them →</span>
+                        </button>
+                    )}
+
+                    {/* KPIs */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Kpi label="Skeins sold" value={skeins.toLocaleString()} sub={`${(skeins / Math.max(1, windowDays / 7)).toFixed(1)} / week`} />
+                        <Kpi label="Revenue" value={money0(revenue)} sub={`${orders} orders`} accent="text-green-600" />
+                        <Kpi label="Gross profit" value={money0(grossProfit)} sub={`${margin.toFixed(0)}% margin`} accent="text-blue-600" />
+                        <Kpi label="Avg per skein" value={skeins ? money(matchedRevenue / skeins) : '—'} sub={skeins ? `cost ${money(cogs / skeins)}` : ''} />
+                    </div>
+                    <p className="text-xs text-gray-500 -mt-3">Revenue is item price minus discounts, excluding shipping and tax. Profit subtracts your batch cost per skein; Shopify fees and shipping aren't included.</p>
+
+                    {/* Dye next */}
+                    <div className="bg-white rounded-lg card-shadow p-6">
+                        <div className="flex flex-wrap justify-between items-center gap-3 mb-1">
+                            <h3 className="text-lg font-semibold">🧪 Dye next</h3>
+                            <label className="text-sm text-gray-600 flex items-center gap-2">
+                                Keep
+                                <input type="number" min={1} max={52} value={targetWeeks}
+                                    onChange={(e) => setTargetWeeks(Math.max(1, Math.min(52, parseInt(e.target.value) || 1)))}
+                                    className="w-16 border border-gray-300 rounded px-2 py-1" />
+                                weeks of stock
+                            </label>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-4">
+                            Based on the last {win.label.toLowerCase()} of sales.{' '}
+                            {supply.source === 'shopify'
+                                ? <>On-hand counts from your Shopify stock levels ({DateUtils.formatDateTime(snapshot.importedAt)}).</>
+                                : <>On-hand is <strong>estimated</strong> from Stocked batches minus sales. Use <em>Update stock levels</em> for exact counts.</>}
+                        </p>
+                        {suggestions.length === 0 ? (
+                            <p className="text-sm text-gray-600">Nothing is running low at this target. 🎉</p>
+                        ) : (
+                            <>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="text-left text-gray-500 border-b">
+                                                <th className="py-2 pr-2 w-8"></th>
+                                                <th className="py-2 pr-4">Colorway · base</th>
+                                                <th className="py-2 pr-4 text-right">Sold / wk</th>
+                                                <th className="py-2 pr-4 text-right">On hand</th>
+                                                <th className="py-2 pr-4 text-right">In pipeline</th>
+                                                <th className="py-2 pr-4 text-right">Weeks left</th>
+                                                <th className="py-2 text-right">Dye</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {suggestions.slice(0, 30).map((s) => {
+                                                const urgent = s.weeksLeft < 2;
+                                                return (
+                                                    <tr key={s.key} className="border-b border-gray-100">
+                                                        <td className="py-2 pr-2"><input type="checkbox" checked={!!picks[s.key]} onChange={() => togglePick(s)} aria-label={`Select ${s.label}`} /></td>
+                                                        <td className="py-2 pr-4"><span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span></td>
+                                                        <td className="py-2 pr-4 text-right tabular-nums">{s.perWeek.toFixed(1)}</td>
+                                                        <td className="py-2 pr-4 text-right tabular-nums">{s.onHand}{supply.source === 'estimate' && <span className="text-gray-400"> est.</span>}</td>
+                                                        <td className="py-2 pr-4 text-right tabular-nums">{s.coming || '—'}</td>
+                                                        <td className={`py-2 pr-4 text-right tabular-nums ${urgent ? 'text-red-600 font-semibold' : ''}`}>
+                                                            {urgent ? '⚠ ' : ''}{s.weeksLeft.toFixed(1)}
+                                                        </td>
+                                                        <td className="py-2 text-right">
+                                                            {picks[s.key] ? (
+                                                                <input type="number" min={1} value={picks[s.key]}
+                                                                    onChange={(e) => setPicks((p) => ({ ...p, [s.key]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                                                    className="w-16 border border-gray-300 rounded px-2 py-1 text-right" />
+                                                            ) : <span className="tabular-nums">{s.suggest}</span>}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3 mt-4">
+                                    <button onClick={() => setPicks(Object.fromEntries(suggestions.slice(0, 30).map((s) => [s.key, s.suggest])))} className="text-sm text-teal-700 hover:underline">Select all</button>
+                                    {pickedList.length > 0 && <button onClick={() => setPicks({})} className="text-sm text-gray-500 hover:underline">Clear</button>}
+                                    <button disabled={!pickedList.length} onClick={createDraftSession}
+                                        className="ml-auto bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-40">
+                                        Create draft dye session{pickedSkeins ? ` (${pickedSkeins} skeins)` : ''}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Best sellers */}
+                    <div className="bg-white rounded-lg card-shadow p-6">
+                        <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                            <h3 className="text-lg font-semibold">🏆 Best sellers · {win.label.toLowerCase()}</h3>
+                            <div className="flex gap-1 text-sm">
+                                {(['colorway', 'base', 'combo'] as const).map((k) => (
+                                    <button key={k} onClick={() => { setRankBy(k); setShowAllRank(false); }}
+                                        className={`px-3 py-1 rounded-lg ${rankBy === k ? 'bg-teal-100 text-teal-800 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                        {k === 'colorway' ? 'Colorway' : k === 'base' ? 'Base' : 'Colorway + base'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        {ranking.length === 0 ? <p className="text-sm text-gray-600">No matched sales in this window.</p> : (
+                            <ol className="space-y-2">
+                                {(showAllRank ? ranking : ranking.slice(0, 12)).map((r, i) => (
+                                    <li key={r.key} className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3 text-sm" title={`${r.label}: ${r.units} skeins · ${money(r.revenue)} · ${r.orders} orders`}>
+                                        <span className="text-gray-400 tabular-nums text-right">{i + 1}</span>
+                                        <div className="min-w-0">
+                                            <div className="truncate text-gray-900">{r.label}</div>
+                                            <div className="h-2 mt-1 rounded bg-gray-100">
+                                                <div className="h-2 rounded bg-teal-500" style={{ width: `${(r.units / rankMax) * 100}%` }} />
+                                            </div>
+                                        </div>
+                                        <span className="text-right tabular-nums whitespace-nowrap"><strong>{r.units}</strong> <span className="text-gray-500">· {money0(r.revenue)}</span></span>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                        {ranking.length > 12 && (
+                            <button onClick={() => setShowAllRank(!showAllRank)} className="mt-3 text-sm text-teal-700 hover:underline">
+                                {showAllRank ? 'Show top 12' : `Show all ${ranking.length}`}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Trends */}
+                    <div className="bg-white rounded-lg card-shadow p-6">
+                        <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+                            <h3 className="text-lg font-semibold">📈 Skeins sold per month</h3>
+                            <select value={trendColorway} onChange={(e) => setTrendColorway(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+                                <option value="">All colorways</option>
+                                {trendColorways.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        <MonthlyBars months={months} values={trend} />
+                    </div>
+
+                    {/* Real profit */}
+                    <div className="bg-white rounded-lg card-shadow p-6">
+                        <h3 className="text-lg font-semibold mb-1">💵 Real profit by colorway · {win.label.toLowerCase()}</h3>
+                        <p className="text-sm text-gray-500 mb-4">Actual Shopify revenue minus your average batch cost per skein.</p>
+                        {profitRows.length === 0 ? <p className="text-sm text-gray-600">No matched sales in this window.</p> : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-gray-500 border-b">
+                                            <th className="py-2 pr-4">Colorway</th>
+                                            <th className="py-2 pr-4 text-right">Skeins</th>
+                                            <th className="py-2 pr-4 text-right">Revenue</th>
+                                            <th className="py-2 pr-4 text-right">Cost</th>
+                                            <th className="py-2 pr-4 text-right">Profit</th>
+                                            <th className="py-2 text-right">Margin</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {profitRows.map((r) => (
+                                            <tr key={r.colorway} className="border-b border-gray-100">
+                                                <td className="py-2 pr-4 text-gray-900">{r.colorway}</td>
+                                                <td className="py-2 pr-4 text-right tabular-nums">{r.units}</td>
+                                                <td className="py-2 pr-4 text-right tabular-nums">{money(r.revenue)}</td>
+                                                <td className="py-2 pr-4 text-right tabular-nums text-gray-500">{money(r.cost)}</td>
+                                                <td className="py-2 pr-4 text-right tabular-nums font-medium">{money(r.revenue - r.cost)}</td>
+                                                <td className="py-2 text-right tabular-nums">{r.revenue > 0 ? `${(((r.revenue - r.cost) / r.revenue) * 100).toFixed(0)}%` : '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="text-right">
+                        <button onClick={clearSales} className="text-xs text-gray-400 hover:text-red-600 hover:underline">Remove imported sales</button>
+                    </div>
+                </>
+            )}
+
+            {showMapper && (
+                <Mapper
+                    rows={distinct}
+                    recipes={recipes}
+                    kits={kits}
+                    settings={settings}
+                    saveSettings={saveSettings}
+                    onClose={() => setShowMapper(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+function Kpi({ label, value, sub, accent = 'text-gray-900' }: { label: string; value: string; sub?: string; accent?: string }) {
+    return (
+        <div className="bg-white rounded-lg card-shadow p-5">
+            <div className="text-sm text-gray-600 mb-1">{label}</div>
+            <div className={`text-2xl md:text-3xl font-bold tabular-nums ${accent}`}>{value}</div>
+            {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+        </div>
+    );
+}
+
+function HowTo() {
+    return (
+        <div className="bg-white rounded-lg card-shadow p-6 space-y-4 text-sm text-gray-700">
+            <h3 className="text-lg font-semibold text-gray-900">How to get your sales in</h3>
+            <ol className="list-decimal ml-5 space-y-2">
+                <li>In Shopify admin, open <strong>Orders</strong> → <strong>Export</strong>. Choose a date range (or <em>All orders</em>) and <strong>Plain CSV file</strong>. Shopify emails you the file.</li>
+                <li>Tap <strong>⬆ Import orders CSV</strong> and pick that file. Re-import any time; overlapping orders update instead of duplicating.</li>
+                <li><em>Optional, for accurate "weeks left":</em> open <strong>Products</strong> → <strong>Inventory</strong> → <strong>Export</strong>, then tap <strong>⬆ Update stock levels</strong>.</li>
+                <li>Open <strong>🔗 Map products</strong> to link any Shopify listing the app couldn't match on its own to a colorway (or kit), base and size.</li>
+            </ol>
+            <p className="text-xs text-gray-500">Only product, quantity, price and date are kept. Customer names, emails and addresses in the export are never saved.</p>
+        </div>
+    );
+}
+
+/** Single-series monthly bar chart (SVG) with hover tooltip. */
+function MonthlyBars({ months, values }: { months: string[]; values: number[] }) {
+    const [hover, setHover] = useState<number | null>(null);
+    // Draw at the container's real pixel width so labels stay 11px on a phone.
+    const box = useRef<HTMLDivElement>(null);
+    const [W, setW] = useState(640);
+    useEffect(() => {
+        const el = box.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(([e]) => setW(Math.max(280, Math.round(e.contentRect.width))));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+    const H = 220, padL = 32, padB = 24, padT = 12;
+    const max = Math.max(1, ...values);
+    const step = max <= 4 ? 1 : Math.ceil(max / 4 / 5) * 5 || 1;
+    const top = Math.ceil(max / step) * step;
+    const ticks = Array.from({ length: Math.floor(top / step) + 1 }, (_, i) => i * step);
+    const plotW = W - padL, plotH = H - padB - padT;
+    const slot = plotW / months.length;
+    const barW = Math.max(4, slot - 6);
+    const y = (v: number) => padT + plotH - (v / top) * plotH;
+    const monthLabel = (m: string) => {
+        const s = new Date(m + '-15T12:00:00').toLocaleDateString('en-US', { month: 'short' });
+        return slot < 30 ? s[0] : s; // single letters when bars are narrow
+    };
+    const fullLabel = (m: string) => new Date(m + '-15T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    // One always-mounted wrapper, so the size observer stays attached.
+    const empty = values.every((v) => v === 0);
+    return (
+        <div className="relative" ref={box}>
+            {empty ? <p className="text-sm text-gray-600">No sales in the last 12 months.</p> : <>
+            <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label="Skeins sold per month, last 12 months">
+                {ticks.map((t) => (
+                    <g key={t}>
+                        <line x1={padL} x2={W} y1={y(t)} y2={y(t)} className="text-gray-200" stroke="currentColor" strokeWidth={1} />
+                        <text x={padL - 6} y={y(t) + 4} textAnchor="end" className="text-gray-500" fill="currentColor" fontSize={11}>{t}</text>
+                    </g>
+                ))}
+                {values.map((v, i) => {
+                    const x = padL + i * slot + (slot - barW) / 2;
+                    const h = (v / top) * plotH;
+                    const r = Math.min(4, h, barW / 2);
+                    const yTop = padT + plotH - h;
+                    // Rounded top, square baseline.
+                    const d = h <= 0 ? '' : `M${x},${padT + plotH} V${yTop + r} Q${x},${yTop} ${x + r},${yTop} H${x + barW - r} Q${x + barW},${yTop} ${x + barW},${yTop + r} V${padT + plotH} Z`;
+                    return (
+                        <g key={months[i]} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onTouchStart={() => setHover(i)}>
+                            <rect x={padL + i * slot} y={padT} width={slot} height={plotH} fill="transparent" />
+                            {d && <path d={d} className={hover === i ? 'text-teal-700' : 'text-teal-500'} fill="currentColor" />}
+                            <text x={padL + i * slot + slot / 2} y={H - 6} textAnchor="middle" className="text-gray-500" fill="currentColor" fontSize={11}>{monthLabel(months[i])}</text>
+                        </g>
+                    );
+                })}
+            </svg>
+            {hover != null && (
+                <div className="absolute pointer-events-none bg-gray-900 text-white text-xs rounded px-2 py-1 shadow whitespace-nowrap"
+                    style={{ left: `${((padL + hover * slot + slot / 2) / W) * 100}%`, top: 0, transform: 'translateX(-50%)' }}>
+                    {fullLabel(months[hover])}: <strong>{values[hover]}</strong> skeins
+                </div>
+            )}
+            </>}
+        </div>
+    );
+}
+
+/** Map Shopify line names to colorway/kit + base + size (saved in settings.shopifyMap). */
+function Mapper({ rows, recipes, kits, settings, saveSettings, onClose }) {
+    const [map, setMap] = useState<Record<string, ShopifyMapping>>(() => ({ ...(settings?.shopifyMap || {}) }));
+    const [filter, setFilter] = useState<'review' | 'all'>('review');
+    const [q, setQ] = useState('');
+    const catalog = settings?.yarnBases || [];
+    const ctx = useMemo(() => makeContext(recipes, kits, { ...settings, shopifyMap: map }), [recipes, kits, settings, map]);
+    const sortedRecipes = useMemo(() => [...recipes].sort((a, b) => String(a.name).localeCompare(String(b.name))), [recipes]);
+
+    const live = rows.map((r) => ({ ...r, resolved: resolveName(r.name, ctx) }));
+    const shown = live.filter((r) => (filter === 'all' || !isResolved(rows.find((x) => x.key === r.key)!.resolved) || map[r.key])
+        && (!q || r.name.toLowerCase().includes(q.toLowerCase())));
+
+    const set = (key: string, patch: Partial<ShopifyMapping>) =>
+        setMap((m) => {
+            const next = { ...(m[key] || {}), ...patch };
+            Object.keys(next).forEach((k) => (next[k] === undefined || next[k] === '') && delete next[k]);
+            const copy = { ...m };
+            if (Object.keys(next).length) copy[key] = next; else delete copy[key];
+            return copy;
+        });
+
+    const save = async () => {
+        await saveSettings({ ...settings, shopifyMap: map });
+        toast('Product mappings saved.', 'success');
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+            <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center p-5 border-b">
+                    <div>
+                        <h3 className="text-xl font-semibold">🔗 Map Shopify products</h3>
+                        <p className="text-sm text-gray-500">Auto-matched by name. Change anything that's wrong; leave a field on <em>Auto</em> to keep the match.</p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none" aria-label="Close">✕</button>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center px-5 py-3 border-b">
+                    <button onClick={() => setFilter('review')} className={`px-3 py-1 rounded-lg text-sm ${filter === 'review' ? 'bg-teal-100 text-teal-800 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>Needs review</button>
+                    <button onClick={() => setFilter('all')} className={`px-3 py-1 rounded-lg text-sm ${filter === 'all' ? 'bg-teal-100 text-teal-800 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>All ({rows.length})</button>
+                    <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products…" className="ml-auto border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56 max-w-full" />
+                </div>
+                <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+                    {shown.length === 0 && <p className="p-5 text-sm text-gray-600">Everything is matched. 🎉</p>}
+                    {shown.map((r) => {
+                        const m = map[r.key] || {};
+                        const res = r.resolved;
+                        const kind = m.kind || '';
+                        const ok = isResolved(res);
+                        const baseEntry = catalog.find((b) => b.myName === (m.base || res.base));
+                        const sizes = (baseEntry?.sizes || []).map((s) => Number(s.amount)).filter(Boolean);
+                        return (
+                            <div key={r.key} className="p-4 space-y-2">
+                                <div className="flex flex-wrap justify-between gap-2">
+                                    <div className="font-medium text-gray-900 break-words min-w-0">{r.name}</div>
+                                    <div className="text-xs text-gray-500 whitespace-nowrap">{r.units} sold · {money0(r.revenue)}</div>
+                                </div>
+                                <div className="text-xs">
+                                    {res.kind === 'ignore' ? <span className="text-gray-500">Ignored (not yarn)</span>
+                                        : res.kind === 'kit' ? <span className="text-teal-700">→ Kit: {res.kitName}</span>
+                                        : res.kind === 'colorway' ? <span className={ok ? 'text-teal-700' : 'text-amber-700'}>→ {res.colorway} · {res.base ? comboLabel(res.base, res.hankSize || 0) : 'base unknown'}{res.sizeAssumed ? ' (size assumed)' : ''}</span>
+                                        : <span className="text-amber-700">Not matched</span>}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <select value={kind} onChange={(e) => set(r.key, { kind: (e.target.value || undefined) as any, recipeId: undefined, kitId: undefined })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                                        <option value="">Type: Auto</option>
+                                        <option value="colorway">Colorway</option>
+                                        <option value="kit">Kit / bundle</option>
+                                        <option value="ignore">Ignore (not yarn)</option>
+                                    </select>
+                                    {kind === 'colorway' && (
+                                        <select value={m.recipeId ?? ''} onChange={(e) => set(r.key, { recipeId: e.target.value ? Number(e.target.value) : undefined })} className="border border-gray-300 rounded px-2 py-1 text-sm max-w-[14rem]">
+                                            <option value="">Choose colorway…</option>
+                                            {sortedRecipes.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                                        </select>
+                                    )}
+                                    {kind === 'kit' && (
+                                        <select value={m.kitId ?? ''} onChange={(e) => set(r.key, { kitId: e.target.value ? Number(e.target.value) : undefined })} className="border border-gray-300 rounded px-2 py-1 text-sm max-w-[14rem]">
+                                            <option value="">Choose kit…</option>
+                                            {kits.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                        </select>
+                                    )}
+                                    {kind !== 'ignore' && kind !== 'kit' && res.kind !== 'kit' && (
+                                        <>
+                                            <select value={m.base ?? ''} onChange={(e) => set(r.key, { base: e.target.value || undefined, hankSize: undefined })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                                                <option value="">Base: Auto</option>
+                                                {catalog.map((b) => <option key={b.id} value={b.myName}>{b.myName}</option>)}
+                                            </select>
+                                            <select value={m.hankSize ?? ''} onChange={(e) => set(r.key, { hankSize: e.target.value ? Number(e.target.value) : undefined })} className="border border-gray-300 rounded px-2 py-1 text-sm">
+                                                <option value="">Size: Auto</option>
+                                                {(sizes.length ? sizes : [100, 50, 20, 10]).map((s) => <option key={s} value={s}>{s}g</option>)}
+                                            </select>
+                                        </>
+                                    )}
+                                    {map[r.key] && <button onClick={() => setMap((mm) => { const c = { ...mm }; delete c[r.key]; return c; })} className="text-xs text-gray-500 hover:underline">Reset to auto</button>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="flex justify-end gap-2 p-4 border-t">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Cancel</button>
+                    <button onClick={save} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">Save mappings</button>
+                </div>
+            </div>
+        </div>
+    );
+}

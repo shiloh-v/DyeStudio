@@ -182,8 +182,15 @@ export interface Gradient {
   [key: string]: any;
 }
 
+// One imported Shopify order line (see src/lib/shopify.ts SaleLine).
 export interface Sale {
   id: ID;
+  lineKey?: string;
+  orderName?: string;
+  orderDate?: string;
+  lineName?: string;
+  quantity?: number;
+  unitPrice?: number;
   [key: string]: any;
 }
 
@@ -245,4 +252,9 @@ export interface Settings {
   sizeMappings: { grams: number; name: string }[];
   yarnBases?: YarnBase[];
   dyeCatalog?: DyeCatalogEntry[];
+  // Shopify demand: manual line-name → colorway/kit/base/size overrides, and the
+  // last uploaded Shopify stock-level snapshot. See src/lib/demand.ts.
+  shopifyMap?: Record<string, { kind?: 'colorway' | 'kit' | 'ignore'; recipeId?: number; kitId?: number; base?: string; hankSize?: number }>;
+  shopifyVendor?: string; // only count Shopify lines from this vendor ('' = all); default "Celestial Dyeworks"
+  shopifyInventory?: { importedAt: string; rows: { name: string; sku: string; available: number }[] } | null;
 }
