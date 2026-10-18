@@ -193,15 +193,22 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
             (plan.extras.length ? ` Batch filled with next best sellers: ${plan.extras.join(', ')}.` : '') +
             (plan.labTests.length ? ` Color Lab tests: ${plan.labTests.join(', ')}.` : '');
         const parts = plan.batches.length;
+        // Studio naming: "YYYY Session N", continuing the year's numbering
+        // (counts both "YYYY Session N" and older "YYYY Batch N" names).
+        const year = today.slice(0, 4);
+        let sessionNo = Math.max(0, ...(dyeSessions || []).map((s) => {
+            const m = String(s.name || '').match(/^(\d{4})\s+(?:Session|Batch)\s+(\d+)/i);
+            return m && m[1] === year ? parseInt(m[2]) : 0;
+        }));
         const created = plan.batches.map((load, i) => {
             const tray = load.find((p) => p.type === 'gradientTray');
             return {
                 id: Date.now() + i,
                 sessionId: `DS-${String(next++).padStart(3, '0')}`,
-                name: `${load.some((p) => p.type === 'colorLab') ? 'Test & restock' : 'Restock'} – ${label}${parts > 1 ? ` (${i + 1} of ${parts})` : ''}`,
+                name: `${year} Session ${++sessionNo}`,
                 date: today,
                 pans: load,
-                notes: notes + (tray ? ` Gradient tray: ${tray.gradientDye}.` : ''),
+                notes: `${load.some((p) => p.type === 'colorLab') ? 'Test & restock' : 'Restock'}${parts > 1 ? ` (${i + 1} of ${parts})` : ''} drafted ${label}. ` + notes + (tray ? ` Gradient tray: ${tray.gradientDye}.` : ''),
             };
         });
         await saveDyeSessions([...(dyeSessions || []), ...created]);
@@ -290,7 +297,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                             </label>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">
-                            Based on the last {win.label.toLowerCase()} of sales. These feed the batch plan below.{' '}
+                            Based on the last {win.label.toLowerCase()} of sales; <strong>sold-out</strong> colors use their 12-month pace, since a sold-out color can't show recent sales. These feed the batch plan below.{' '}
                             {supply.source === 'shopify'
                                 ? <>On-hand counts from your Shopify stock levels ({DateUtils.formatDateTime(snapshot.importedAt)}).</>
                                 : <>On-hand is <strong>estimated</strong> from Stocked batches minus sales. Use <em>Update stock levels</em> for exact counts.</>}
@@ -316,7 +323,15 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                                                 const urgent = s.weeksLeft < 2;
                                                 return (
                                                     <tr key={s.key} className="border-b border-gray-100">
-                                                        <td className="py-2 pr-4"><span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span></td>
+                                                        <td className="py-2 pr-4">
+                                                            <span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span>
+                                                            {s.soldOut && (
+                                                                <span className="ml-2 text-xs bg-red-50 text-red-700 rounded px-1.5 py-0.5 whitespace-nowrap"
+                                                                    title={`No stock left. Sold ${s.yearUnits} in the past 12 months${s.lastSale ? `, last on ${DateUtils.formatDate(s.lastSale)}` : ''} — recent sales are low because it's sold out, so this uses the 12-month pace.`}>
+                                                                    Sold out{s.lastSale ? ` since ${DateUtils.formatDate(s.lastSale)}` : ''} · {s.yearUnits}/yr
+                                                                </span>
+                                                            )}
+                                                        </td>
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.perWeek.toFixed(1)}</td>
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.onHand}{supply.source === 'estimate' && <span className="text-gray-400"> est.</span>}</td>
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.coming || '—'}</td>
@@ -727,8 +742,9 @@ function YarnToOrder({ rows, toBuy, total, horizon, yarnMonths, setYarnMonths, p
                     : <button onClick={() => setPace(null)} className="text-xs text-teal-700 hover:underline">use history ({horizon.historyPace})</button>}
             </div>
             <p className="text-sm text-gray-500 mb-4">
-                {horizon.horizonBatches} batch{horizon.horizonBatches === 1 ? '' : 'es'}: {horizon.upcomingSessions} already planned in Dye Sessions + {horizon.planBatches} in the plan above
+                {horizon.horizonBatches} batch{horizon.horizonBatches === 1 ? '' : 'es'}: {horizon.upcomingSessions} already planned in Dye Sessions + {horizon.planBatches} from the plan above
                 {horizon.projectedBatches > 0 && <> + <strong>{horizon.projectedBatches} projected</strong> (typical batches in your overall sales mix)</>}.
+                {horizon.planBeyond > 0 && <> The plan's last {horizon.planBeyond} batch{horizon.planBeyond === 1 ? ' is' : 'es are'} past this window and not in the order yet.</>}
                 Plus each item's low-stock minimum, minus what's in Inventory, rounded up to the pack sizes in Yarn Bases.
             </p>
             {rows.length === 0 ? <p className="text-sm text-gray-600">Nothing planned, so no yarn needed.</p> : (
@@ -782,6 +798,24 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
             <p className="text-sm text-gray-500 mb-4">
                 Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, plus a gradient tray while dyes still need one. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
             </p>
+            {plan.adjust.length > 0 && (
+                <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
+                    <div className="font-semibold text-amber-900 mb-1">➕ Add to batches you've already planned</div>
+                    <p className="text-amber-900 mb-2">These colors are already in an upcoming session, so swap these skeins into their pans there (in Dye Sessions) instead of dyeing them again.</p>
+                    <ul className="list-none m-0 p-0 space-y-1">
+                        {(Object.entries(plan.adjust.reduce((m: Record<string, any[]>, a) => {
+                            const k = `${a.sessionName}|${a.date}`;
+                            (m[k] ||= []).push(a);
+                            return m;
+                        }, {} as Record<string, any[]>)) as [string, any[]][]).map(([k, items]) => (
+                            <li key={k}>
+                                <span className="font-medium text-amber-900">{DateUtils.formatDate(items[0].date)} · {items[0].sessionName}:</span>{' '}
+                                <span className="text-amber-900">{items.map((a) => `${a.colorway} +${a.qty}× ${a.base} ${a.hankSize}g${a.soldOut ? ' (sold out)' : ''}`).join('; ')}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
             {plan.batches.length === 0 ? (
                 <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-4">
                     <p>Nothing is running low right now. 🎉 A good time to test Color Lab sketches.</p>

@@ -339,6 +339,7 @@ export interface Supply {
     onHand: Map<string, number>;
     coming: Map<string, number>;
     source: 'shopify' | 'estimate';
+    listed?: Set<string>;   // combos with a live Shopify listing (from the stock upload)
 }
 
 /**
@@ -361,14 +362,16 @@ export function computeSupply(
 
     const onHand = new Map<string, number>();
     if (snapshot?.rows?.length) {
+        const listed = new Set<string>();
         for (const row of snapshot.rows) {
             if (!isOwnBrand(row.vendor, row.name)) continue;
             const r = resolveName(row.name, ctx);
             if (r.kind !== 'colorway' || !r.colorway) continue; // kits are made from stock
             const k = comboKey(r.colorway, r.base || '', r.hankSize || 0);
             onHand.set(k, (onHand.get(k) || 0) + row.available);
+            listed.add(k);
         }
-        return { onHand, coming, source: 'shopify' };
+        return { onHand, coming, source: 'shopify', listed };
     }
 
     const stocked = batchSkeins(batches, ctx, isStocked);
@@ -491,20 +494,56 @@ export interface Suggestion extends Agg {
     coming: number;
     weeksLeft: number;   // Infinity when nothing sells
     suggest: number;     // skeins to dye to reach the target cover
+    soldOut?: boolean;   // no stock, but sold over the past year (recent sales hidden by the stockout)
+    lastSale?: string;   // YYYY-MM-DD of the last sale (sold-out rows)
+    yearUnits?: number;  // units sold in the past 12 months (sold-out rows)
 }
 
-export function dyeNext(windowAgg: Agg[], windowDays: number, supply: Supply, targetWeeks: number): Suggestion[] {
+// A sold-out color/base needs at least this many sales in 12 months to count.
+export const SOLD_OUT_MIN_YEAR_UNITS = 3;
+
+/**
+ * What to dye next: combos whose stock (on hand + Pipeline + planned) lasts
+ * less than `targetWeeks` at the window's sales pace.
+ *
+ * Sold-out rescue: a combo with NO stock has no recent sales *because* it's
+ * sold out, so the window pace understates demand. If it sold at least
+ * SOLD_OUT_MIN_YEAR_UNITS in the past 12 months (and, when a Shopify stock
+ * upload exists, is still listed there), use the 12-month pace instead and
+ * flag it as sold out.
+ */
+export function dyeNext(
+    windowAgg: Agg[],
+    windowDays: number,
+    supply: Supply,
+    targetWeeks: number,
+    yearAgg: Agg[] = [],
+    lastSale: Map<string, string> = new Map()
+): Suggestion[] {
     const weeks = Math.max(1, windowDays / 7);
-    return windowAgg
+    const byKey = new Map(windowAgg.map((a) => [a.key, a]));
+    yearAgg.forEach((a) => { if (!byKey.has(a.key)) byKey.set(a.key, { ...a, units: 0, revenue: 0, orders: 0 }); });
+    const year = new Map(yearAgg.map((a) => [a.key, a]));
+    return [...byKey.values()]
         .filter((a) => a.colorway && a.base && a.hankSize)
         .map((a) => {
-            const perWeek = a.units / weeks;
             const onHand = supply.onHand.get(a.key) || 0;
             const coming = supply.coming.get(a.key) || 0;
             const have = onHand + coming;
+            let perWeek = a.units / weeks;
+            let soldOut = false;
+            const y = year.get(a.key);
+            const listed = supply.source !== 'shopify' || !supply.listed || supply.listed.has(a.key);
+            if (have <= 0 && listed && y && y.units >= SOLD_OUT_MIN_YEAR_UNITS && y.units / 52 > perWeek) {
+                perWeek = y.units / 52;
+                soldOut = true;
+            }
             const weeksLeft = perWeek > 0 ? have / perWeek : Infinity;
             const suggest = Math.max(0, Math.ceil(perWeek * targetWeeks - have));
-            return { ...a, perWeek, onHand, coming, weeksLeft, suggest };
+            return {
+                ...a, perWeek, onHand, coming, weeksLeft, suggest,
+                ...(soldOut ? { soldOut, yearUnits: y!.units, lastSale: lastSale.get(a.key) } : {}),
+            };
         })
         .filter((s) => s.suggest > 0)
         .sort((x, y) => x.weeksLeft - y.weeksLeft || y.perWeek - x.perWeek);
@@ -868,8 +907,24 @@ export interface RestockPlanInput {
 export function planRestock(input: RestockPlanInput) {
     const { recipes, ctx } = input;
     const removed = input.removed || new Set<string>();
+    // Colorways already in an upcoming session: don't start new pairs for
+    // them — suggest adding the skeins to that session instead.
+    const upcoming = (input.sessions || [])
+        .filter((s) => !s?.archived && (s.pans || []).length)
+        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    const sessionFor = (c: string) => upcoming.find((s) => (s.pans || []).some((p: any) => {
+        const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
+        return (r?.name || p.colorway) === c;
+    }));
+    const adjust: { colorway: string; sessionName: string; date: string; base: string; hankSize: number; qty: number; soldOut?: boolean }[] = [];
     const chosen = input.suggestions
         .filter((s) => s.colorway && !removed.has(s.colorway))
+        .filter((s) => {
+            const sess = sessionFor(s.colorway!);
+            if (!sess) return true;
+            adjust.push({ colorway: s.colorway!, sessionName: sess.name, date: sess.date, base: s.base!, hankSize: s.hankSize!, qty: s.suggest, soldOut: s.soldOut });
+            return false;
+        })
         .map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest }));
     const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
     const asEmpty = (c: string) => ({ colorway: c, recipeId: recipes.find((r) => r.name === c)?.id, base: '', hankSize: 0, qty: 0 });
@@ -947,7 +1002,7 @@ export function planRestock(input: RestockPlanInput) {
             if (extras.length) result = build([...base, ...extras.map(asEmpty)]);
         }
     }
-    return { ...result, extras, manual, gradientDyes, labTests: [...labByName.keys()] };
+    return { ...result, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
 }
 
 
