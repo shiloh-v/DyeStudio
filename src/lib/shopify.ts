@@ -256,7 +256,13 @@ export interface InventorySnapshot {
  */
 export function parseInventoryCsv(text: string): InventorySnapshot {
     const { headers, records } = toRecords(parseCsv(text));
-    const qtyCol = ['available', 'on hand', 'variant inventory qty'].find((h) => headers.includes(h));
+    // Shopify has renamed these over time ("Available" → "Available (not
+    // editable)", "On hand" → "On hand (current)"), so match by prefix. Prefer
+    // Available (what you can actually sell) over On hand; never "On hand (new)",
+    // which is the blank column for typing in new counts.
+    const qtyCol = ['available', 'on hand (current)', 'on hand', 'variant inventory qty']
+        .map((want) => headers.find((h) => (h === want || h.startsWith(want + ' (')) && h !== 'on hand (new)'))
+        .find(Boolean);
     if (!headers.includes('title') && !headers.includes('handle')) {
         throw new ImportError("This doesn't look like a Shopify Inventory or Products export (no Title column).");
     }
