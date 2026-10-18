@@ -33,3 +33,33 @@ export function aliasesAfterRename(oldName: any, newName: any, aliases: string[]
         .map((a) => String(a).trim())
         .filter((a) => a && norm(a) !== norm(newName) && !seen.has(norm(a)) && (seen.add(norm(a)), true));
 }
+
+/** A pan's LIVE recipe (by id), falling back to the copy embedded when the pan was made. */
+export function liveRecipe(pan: any, recipes: any[]): any {
+    const id = pan?.recipeId;
+    const r = id != null && id !== '' ? (recipes || []).find((x) => String(x.id) === String(id)) : undefined;
+    return r || pan?.recipe || null;
+}
+
+/**
+ * The name to SHOW for a pan or batch: its recipe's current name (or Color Lab
+ * sketch's current name), so renames show everywhere. A custom name typed on
+ * the pan (one that isn't the recipe's current or any old name) is kept.
+ */
+export function currentColorName(item: any, recipes: any[], sketches?: any[]): string {
+    const stored = String(item?.colorway || item?.recipeName || '');
+    const id = item?.recipeId;
+    const r = id != null && id !== '' ? (recipes || []).find((x) => String(x.id) === String(id)) : undefined;
+    if (r?.name) {
+        const known = new Set([...recipeNameList(r), item?.recipe?.name].filter(Boolean).map(norm));
+        return !stored || known.has(norm(stored)) ? r.name : stored;
+    }
+    const skId = item?.colorSketchId || item?.colorSketch?.id;
+    if (skId && sketches?.length) {
+        const k = sketches.find((s) => String(s.id) === String(skId));
+        const live = k?.customName || k?.colorId;
+        const snap = item?.colorSketch?.customName || item?.colorSketch?.colorId;
+        if (live && (!stored || norm(stored) === norm(snap))) return live;
+    }
+    return stored;
+}
