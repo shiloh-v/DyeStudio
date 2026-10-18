@@ -1,5 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
-import { findRecipeByName } from '../lib/recipeMatch';
+import { findRecipeByName, liveRecipe, currentColorName } from '../lib/recipeMatch';
 import { DateUtils, byPlannedDate } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
@@ -1619,7 +1619,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                         <div className="flex justify-between items-start">
                                                             <div>
                                                                 <div className="font-medium text-gray-900">
-                                                                    Pan #{idx + 1}: {pan.colorway}
+                                                                    Pan #{idx + 1}: {currentColorName(pan, recipes, colorSketches)}
                                                                     {pan.colorSketch && (
                                                                         <span className={`ml-2 text-xs px-2 py-1 rounded ${
                                                                             pan.colorSketch.type === 'tonal' ? 'bg-blue-100 text-blue-700' :
@@ -2214,7 +2214,7 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
   ) : (
     <>
       <div className="font-medium text-gray-900 mb-1">
-        Pan #{idx + 1}: {pan.colorway}
+        Pan #{idx + 1}: {currentColorName(pan, recipes, colorSketches)}
       </div>
       <div className="text-sm text-gray-600 mb-2">
         Total: {pan.totalWeight || (pan.yarns || []).reduce((s, y) => s + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0)}g{pan.capacity ? ` / ${pan.capacity}g capacity` : ''}

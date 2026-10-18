@@ -1,7 +1,8 @@
 import { DateUtils } from '../lib/dates';
+import { currentColorName } from '../lib/recipeMatch';
 import { isStocked } from '../lib/batches';
 
-export function Sales({ sales, saveSales, batches, saveBatches }) {
+export function Sales({ sales, saveSales, batches, saveBatches, recipes = [] }) {
     // Finished stock (incl. legacy 'sold'). These are projections, not realized sales.
     const stockedBatches = batches.filter(isStocked);
     
@@ -44,7 +45,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     // Top selling colorways (by revenue)
     const colorwayStats: Record<string, { count: number; revenue: number }> = {};
     stockedBatches.forEach(batch => {
-        const key = batch.colorway;
+        const key = currentColorName(batch, recipes);
         if (!colorwayStats[key]) {
             colorwayStats[key] = { count: 0, revenue: 0 };
         }
@@ -60,7 +61,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
     stockedBatches.forEach(batch => {
         if (batch.yarnDetails) {
             batch.yarnDetails.forEach(yarn => {
-                const key = `${yarn.base} - ${batch.colorway}`;
+                const key = `${yarn.base} - ${currentColorName(batch, recipes)}`;
                 if (!comboStats[key]) {
                     comboStats[key] = { count: 0, revenue: 0 };
                 }
@@ -298,7 +299,7 @@ export function Sales({ sales, saveSales, batches, saveBatches }) {
                                         {DateUtils.formatDate(batch.soldDate || batch.startDate)}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="font-medium">{batch.colorway}</div>
+                                        <div className="font-medium">{currentColorName(batch, recipes)}</div>
                                         {batch.notes && (
                                             <div className="text-sm text-gray-500">{batch.notes}</div>
                                         )}

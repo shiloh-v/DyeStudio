@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { liveRecipe, currentColorName } from '../lib/recipeMatch';
 import { DateUtils, byPlannedDate } from '../lib/dates';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
@@ -121,7 +122,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         pan.type === 'gradientTray' ? `🎨 ${pan.gradientDye} Gradient`
         : pan.type === 'dyeSquareTray' ? `🔲 ${pan.squareColorA} × ${pan.squareColorB} Dye Square`
         : pan.type === 'adHoc' ? `🎲 ${pan.adHocLabel || 'Ad Hoc Experiment'}`
-        : (pan.colorway || 'Pan');
+        : (currentColorName(pan, recipes, colorSketches) || 'Pan');
     const panYarns = (pan) => {
         if (pan.type === 'gradientTray') return [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 10 }];
         if (pan.type === 'dyeSquareTray') return [{ base: pan.gradientYarnBase, hankSize: pan.gradientHankSize, quantity: 25 }];
@@ -581,7 +582,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         // Create batches for each pan with yarn details and costs
         const movedAt = new Date().toISOString();
         return session.pans.map((pan, idx) => {
-            const recipe = pan.recipe || (pan.recipeId ? recipes.find(r => r.id === parseInt(pan.recipeId)) : null);
+            const recipe = liveRecipe(pan, recipes); // live recipe wins over the copy embedded in the pan
             const costs = calculatePanCosts(pan, recipe);
             const batchId = `B-${String(nextBatchNum + idx).padStart(3, '0')}`;
 
@@ -655,9 +656,9 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     id: Date.now() + idx,
                     batchId: batchId,
                     recipeId: pan.recipeId || '',
-                    recipeName: pan.recipe?.name || pan.colorway,
-                    colorway: pan.colorway,
-                    customColorway: pan.colorway,
+                    recipeName: recipe?.name || currentColorName(pan, recipes, colorSketches),
+                    colorway: currentColorName(pan, recipes, colorSketches),
+                    customColorway: currentColorName(pan, recipes, colorSketches),
                     skeins: pan.yarns.reduce((sum, y) => sum + parseInt(y.quantity || 0), 0),
                     status: 'dyeing',
                     startDate: session.date || DateUtils.getTodayEST(),
@@ -776,7 +777,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             }
 
             // --- Dye powder (recipe grams → ounces, since dyes are stocked in oz) ---
-            const recipe = pan.recipe || (pan.recipeId ? recipes.find(r => r.id === parseInt(pan.recipeId)) : null);
+            const recipe = liveRecipe(pan, recipes); // live recipe wins over the copy embedded in the pan
             Object.entries(dyeGramsForPan(pan, recipe)).forEach(([nameLc, grams]) => {
                 const dyeItem = findDyeItem(updatedInventory, nameLc);
                 if (dyeItem) {
@@ -1149,7 +1150,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                             )}
                                             <div className="flex-1">
                                                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                                                    🎨 {currentPan.colorway}
+                                                    🎨 {currentColorName(currentPan, recipes, colorSketches)}
                                                 </h3>
                                                 <p className="text-teal-700 font-medium mb-2">
                                                     {isMultiPan

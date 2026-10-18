@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { currentColorName } from '../lib/recipeMatch';
 import { DateUtils } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { isStocked } from '../lib/batches';
@@ -72,8 +73,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             }
             
             const promptMessage = suggestedPrice > 0
-                ? `Enter expected list price for "${batch.colorway}" (${batch.skeins} skeins):\n\nSuggested price: $${suggestedPrice.toFixed(2)} (based on typical prices)`
-                : `Enter expected list price for "${batch.colorway}" (${batch.skeins} skeins):`;
+                ? `Enter expected list price for "${currentColorName(batch, recipes)}" (${batch.skeins} skeins):\n\nSuggested price: $${suggestedPrice.toFixed(2)} (based on typical prices)`
+                : `Enter expected list price for "${currentColorName(batch, recipes)}" (${batch.skeins} skeins):`;
 
             const salePrice = await promptDialog({ title: 'List price', message: promptMessage, defaultValue: suggestedPrice > 0 ? suggestedPrice.toFixed(2) : '', inputType: 'number', confirmText: 'Stock it' });
             if (salePrice === null) return; // User cancelled
@@ -503,7 +504,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                         )}
                                         
                                         <div className="flex-1">
-                                            <div className="font-medium text-sm mb-1">{batch.colorway}</div>
+                                            <div className="font-medium text-sm mb-1">{currentColorName(batch, recipes)}</div>
                                             {batch.batchId && (
                                                 <div className="text-xs text-gray-500 mb-1">ID: {batch.batchId}</div>
                                             )}

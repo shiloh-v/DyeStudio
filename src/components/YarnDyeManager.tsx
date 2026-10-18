@@ -431,6 +431,7 @@ export function YarnDyeManager() {
                         saveSales={saveSales} 
                         batches={batches}
                         saveBatches={saveBatches}
+                        recipes={recipes}
                     />
                 )}
                 {activeTab === 'demand' && (
