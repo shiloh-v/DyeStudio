@@ -7,7 +7,7 @@ import { byColorway, comboLabel, windowUnits } from '../lib/demand';
 
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
-export function Dashboard({ recipes, inventory, batches, sales, kits, settings, dyeSessions, setActiveTab }) {
+export function Dashboard({ recipes, inventory, batches, sales, kits, settings, dyeSessions, gradients = [], setActiveTab }) {
     const activeBatches = batches.filter(b => !isStocked(b)).length;
     const lowStock = inventory.filter(isLowStock).length;
 
@@ -67,7 +67,7 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
                 />
             </div>
 
-            <ShopifyPanel {...{ recipes, inventory, batches, sales, kits, settings, dyeSessions, setActiveTab }} />
+            <ShopifyPanel {...{ recipes, inventory, batches, sales, kits, settings, dyeSessions, gradients, setActiveTab }} />
 
             {/* Pipeline Status */}
             <div className="bg-white rounded-lg card-shadow p-6">
@@ -121,10 +121,10 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
 }
 
 /** Last 30 days of real Shopify sales + what to dye and order (from the Demand tab's model). */
-function ShopifyPanel({ recipes, inventory, batches, sales, kits, settings, dyeSessions, setActiveTab }) {
+function ShopifyPanel({ recipes, inventory, batches, sales, kits, settings, dyeSessions, gradients, setActiveTab }) {
     const D = useMemo(
-        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions }),
-        [sales, batches, recipes, kits, settings, inventory, dyeSessions]
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients]
     );
     const go = () => setActiveTab('demand');
 

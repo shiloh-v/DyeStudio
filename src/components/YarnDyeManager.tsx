@@ -357,17 +357,19 @@ export function YarnDyeManager() {
                         kits={kits}
                         settings={settings}
                         dyeSessions={dyeSessions}
+                        gradients={gradients}
                         setActiveTab={setActiveTab}
                     />
                 )}
                 {activeTab === 'calendar' && (
                     <Calendar 
                         dyeSessions={dyeSessions}
+                        gradients={gradients}
                         setActiveTab={setActiveTab}
                     />
                 )}
                 {activeTab === 'recipes' && (
-                    <Recipes recipes={recipes} saveRecipes={saveRecipes} settings={settings} inventory={inventory} sales={sales} batches={batches} kits={kits} dyeSessions={dyeSessions} />
+                    <Recipes recipes={recipes} saveRecipes={saveRecipes} settings={settings} inventory={inventory} sales={sales} batches={batches} kits={kits} dyeSessions={dyeSessions} gradients={gradients} />
                 )}
                 {activeTab === 'colorlab' && (
                     <ColorLab colorSketches={colorSketches} saveColorSketches={saveColorSketches} settings={settings} inventory={inventory} recipes={recipes} saveRecipes={saveRecipes} />
@@ -411,7 +413,7 @@ export function YarnDyeManager() {
                     <DyeCatalog settings={settings} saveSettings={saveSettings} />
                 )}
                 {activeTab === 'inventory' && (
-                    <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} sales={sales} batches={batches} recipes={recipes} kits={kits} dyeSessions={dyeSessions} setActiveTab={setActiveTab} />
+                    <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} sales={sales} batches={batches} recipes={recipes} kits={kits} dyeSessions={dyeSessions} gradients={gradients} setActiveTab={setActiveTab} />
                 )}
                 {activeTab === 'pipeline' && (
                     <Pipeline 
@@ -443,6 +445,7 @@ export function YarnDyeManager() {
                         inventory={inventory}
                         dyeSessions={dyeSessions}
                         saveDyeSessions={saveDyeSessions}
+                        gradients={gradients}
                         setActiveTab={setActiveTab}
                     />
                 )}

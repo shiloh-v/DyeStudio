@@ -64,12 +64,12 @@ function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
     );
 }
 
-export function Inventory({ inventory, saveInventory, settings, sales = [], batches = [], recipes = [], kits = [], dyeSessions = [], setActiveTab = (_t: string) => {} }) {
+export function Inventory({ inventory, saveInventory, settings, sales = [], batches = [], recipes = [], kits = [], dyeSessions = [], gradients = [], setActiveTab = (_t: string) => {} }) {
     // Undyed yarn to buy, from Shopify demand + planned sessions (see Demand tab).
     const yarnOrder = useMemo(() => {
-        const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions });
+        const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients });
         return D.lines.length ? { rows: D.toBuy, cost: D.yarnOrderCost } : null;
-    }, [sales, batches, recipes, kits, settings, inventory, dyeSessions]);
+    }, [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients]);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     // "Fill from Yarn Base catalog" picker (UI only — fills existing fields).
