@@ -800,6 +800,8 @@ export interface RestockPlanInput {
     plannedByBaseSize: Map<string, number>;
     inWindow: Unit[];
     units: Unit[];
+    supply?: Supply;                // on hand + coming (Pipeline incl. Ready for Labels, planned sessions)
+    windowDays?: number;
 }
 
 /**
@@ -851,9 +853,26 @@ export function planRestock(input: RestockPlanInput) {
                     if (r?.name || p.colorway) taken.add(r?.name || p.colorway);
                 }
             }
-            extras = [...byColorway(input.inWindow), ...byColorway(input.units)]
-                .map((a) => a.colorway!)
-                .filter((c, i, arr) => c && arr.indexOf(c) === i && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c))
+            // Best sellers with the FEWEST weeks of stock first — skeins on
+            // hand, in the Pipeline (incl. Ready for Labels) or planned all
+            // count, so a color waiting on labels goes to the back of the line.
+            const weeks = Math.max(1, (input.windowDays || 90) / 7);
+            const sold = new Map(byColorway(input.inWindow).map((a) => [a.colorway!, a.units]));
+            const have = new Map<string, number>();
+            const addHave = (m?: Map<string, number>) => m?.forEach((q, k) => {
+                const cw = k.split('||')[0];
+                have.set(cw, (have.get(cw) || 0) + q);
+            });
+            addHave(input.supply?.onHand);
+            addHave(input.supply?.coming);
+            const cover = (c: string) => {
+                const perWeek = (sold.get(c) || 0) / weeks;
+                return perWeek > 0 ? (have.get(c) || 0) / perWeek : Infinity;
+            };
+            const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
+            extras = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
+                .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c))
+                .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0))
                 .slice(0, freeRacks);
             if (extras.length) result = build([...base, ...extras.map(asEmpty)]);
         }
