@@ -7,7 +7,7 @@ import { DateUtils } from './dates';
 import { isCountable, isOwnBrand, lineRevenue, type SaleLine } from './shopify';
 import {
     makeContext, allUnits, windowUnits, byCombo, byColorway, computeSupply, dyeNext, costLookup,
-    plannedSkeins, yarnToOrder, daysAgo, type Unit,
+    plannedSkeins, yarnToOrder, daysAgo, planRestock, type Unit,
 } from './demand';
 
 export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
@@ -20,10 +20,13 @@ export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
 
 // Per-viewer preferences set on the Demand tab (window, weeks of stock to keep).
 const read = (k: string, d: any) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
+export interface PlanEdits { removed: string[]; added: string[]; fill: boolean }
 export const demandPrefs = {
     windowIdx: (): number => read('demand_window', 1),
     targetWeeks: (): number => read('demand_target_weeks', 8),
-    set: (k: 'demand_window' | 'demand_target_weeks', v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+    // Changes made to the auto-built restock plan (Demand tab).
+    planEdits: (): PlanEdits => ({ removed: [], added: [], fill: true, ...read('demand_plan_edits', {}) }),
+    set: (k: 'demand_window' | 'demand_target_weeks' | 'demand_plan_edits', v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
 /** Revenue / skeins / orders for our lines in (today-days-offset, today-offset]. */
@@ -46,6 +49,8 @@ export interface DemandInput {
     settings: any;
     inventory?: any[];
     dyeSessions?: any[];
+    gradients?: any[];
+    planEdits?: PlanEdits;
     windowIdx?: number;
     targetWeeks?: number;
     today?: string;
@@ -68,12 +73,37 @@ export function demandSummary(input: DemandInput) {
     const planned = plannedSkeins(input.dyeSessions || [], ctx);
     const supply = computeSupply(input.batches, units, ctx, input.settings?.shopifyInventory, planned.byCombo);
     const suggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks);
-    const yarnOrder = yarnToOrder(suggestions, planned.byBaseSize, input.inventory || [], ctx);
+
+    // The restock plan: built automatically from dye-next, then the user's edits.
+    const edits = input.planEdits || demandPrefs.planEdits();
+    const plan = planRestock({
+        suggestions,
+        removed: new Set(edits.removed),
+        added: edits.added,
+        fill: edits.fill,
+        recipes: input.recipes,
+        inventory: input.inventory || [],
+        sessions: input.dyeSessions || [],
+        gradients: input.gradients || [],
+        ctx,
+        plannedByBaseSize: planned.byBaseSize,
+        inWindow,
+        units,
+    });
+    // Yarn to order = everything the plan (pans + gradient trays) and the
+    // already-planned sessions will use.
+    const planYarn = plannedSkeins(plan.batches.map((pans) => ({ pans })), ctx).byBaseSize;
+    const yarnOrder = yarnToOrder(
+        [...planYarn.entries()].map(([k, q]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), suggest: q }; }),
+        planned.byBaseSize,
+        input.inventory || [],
+        ctx
+    );
     const toBuy = yarnOrder.filter((r) => r.short > 0);
 
     return {
         today, win, targetWeeks, ctx, lines, units, firstDate, lastDate, windowDays, inWindow,
-        planned, supply, suggestions, yarnOrder, toBuy,
+        planned, supply, suggestions, plan, edits, yarnOrder, toBuy,
         yarnOrderCost: toBuy.reduce((s, r) => s + r.cost, 0),
         getCost: costLookup(input.batches, ctx),
         /** Units sold per colorway in the current window (for Recipes badges). */

@@ -7,10 +7,10 @@ import type { Recipe } from '../types';
 import { demandSummary } from '../lib/demandSummary';
 import { byColorway } from '../lib/demand';
 
-export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [], batches = [], kits = [], dyeSessions = [] }) {
+export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [], batches = [], kits = [], dyeSessions = [], gradients = [] }) {
     // Shopify sales per colorway (window set on the Demand tab) for card badges + sorting.
     const demand = useMemo(() => {
-        const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions });
+        const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients });
         if (!D.lines.length) return null;
         const recent = byColorway(D.inWindow);
         const rank = new Map(recent.map((a, i) => [a.colorway, i + 1]));
@@ -19,7 +19,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
         const low = new Map<string, number>();
         D.suggestions.forEach((s) => low.set(s.colorway!, Math.min(low.get(s.colorway!) ?? Infinity, s.weeksLeft)));
         return { label: D.win.label.toLowerCase(), rank, recentUnits, allTime, low };
-    }, [sales, batches, recipes, kits, settings, inventory, dyeSessions]);
+    }, [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients]);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');

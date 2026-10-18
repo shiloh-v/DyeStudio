@@ -8,17 +8,17 @@ import {
 } from '../lib/shopify';
 import {
     makeContext, resolveName, isResolved, normText, byColorway, byBase,
-    byCombo, lastMonths, monthlyUnits, buildRestockPans,
+    byCombo, lastMonths, monthlyUnits, PAN_GRAMS,
     comboLabel, daysAgo, type ShopifyMapping, type Suggestion,
 } from '../lib/demand';
-import { DEMAND_WINDOWS, demandPrefs, demandSummary } from '../lib/demandSummary';
+import { DEMAND_WINDOWS, demandPrefs, demandSummary, type PlanEdits } from '../lib/demandSummary';
 
 
 const money = (n: number) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
 
-export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, setActiveTab }) {
+export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, gradients = [], setActiveTab }) {
     const today = DateUtils.getTodayEST();
     const [schemaOk, setSchemaOk] = useState<boolean | null>(null);
     const [busy, setBusy] = useState(false);
@@ -28,7 +28,10 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const [showAllRank, setShowAllRank] = useState(false);
     const [trendColorway, setTrendColorway] = useState('');
     const [showMapper, setShowMapper] = useState(false);
-    const [picks, setPicks] = useState<Record<string, number>>({});
+    // Edits to the auto-built restock plan (shared with Dashboard/Inventory via prefs).
+    const [edits, setEdits] = useState<PlanEdits>(() => demandPrefs.planEdits());
+    useEffect(() => { demandPrefs.set('demand_plan_edits', edits); }, [edits]);
+    const [addPick, setAddPick] = useState('');
     const ordersInput = useRef<HTMLInputElement>(null);
     const invInput = useRef<HTMLInputElement>(null);
 
@@ -39,8 +42,8 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const allLines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
     // Shared with Dashboard / Inventory / Recipes so every tab shows the same numbers.
     const D = useMemo(
-        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, windowIdx, targetWeeks, today }),
-        [sales, batches, recipes, kits, settings, inventory, dyeSessions, windowIdx, targetWeeks, today]
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, planEdits: edits, windowIdx, targetWeeks, today }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, edits, windowIdx, targetWeeks, today]
     );
     const { ctx, lines, units, firstDate, windowDays, inWindow, getCost, supply, suggestions, yarnOrder, toBuy, yarnOrderCost } = D;
     const snapshot = settings?.shopifyInventory || null;
@@ -149,17 +152,21 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
 
     // ---------- Dye next → draft session ----------
 
-    const pickedList = suggestions.filter((s) => picks[s.key] > 0);
-    const pickedSkeins = pickedList.reduce((s, x) => s + picks[x.key], 0);
-    const togglePick = (s: Suggestion) =>
-        setPicks((p) => { const n = { ...p }; if (n[s.key]) delete n[s.key]; else n[s.key] = s.suggest; return n; });
+    const plan = D.plan;
+    const planPans = plan.batches.flat().filter((p) => p.type === 'pan');
+    const planColorways = [...new Set(planPans.map((p) => p.colorway))];
+    const removeColorway = (c: string) => setEdits((e) => ({ ...e, removed: [...new Set([...e.removed, c])], added: e.added.filter((x) => x !== c) }));
+    const addColorway = (c: string) => c && setEdits((e) => ({ ...e, added: [...new Set([...e.added, c])], removed: e.removed.filter((x) => x !== c) }));
+    const edited = edits.removed.length > 0 || edits.added.length > 0;
+    const resetPlan = () => {
+        const fresh = { removed: [], added: [], fill: edits.fill };
+        // Save now: drafting navigates away before the effect would persist it.
+        demandPrefs.set('demand_plan_edits', fresh);
+        setEdits(fresh);
+    };
 
-    const createDraftSession = async () => {
-        if (!pickedList.length) return;
-        const pans = buildRestockPans(
-            pickedList.map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: picks[s.key] })),
-            recipes
-        );
+    const createDraftSessions = async () => {
+        if (!plan.batches.length) return;
         const nums = (dyeSessions || [])
             .map((s) => s.sessionId || s.session_id)
             .filter((id) => id && String(id).startsWith('DS-'))
@@ -167,24 +174,24 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
             .filter((n) => !isNaN(n));
         let next = (nums.length ? Math.max(...nums) : 0) + 1;
         const label = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        const notes = `Drafted from Demand (${win.label} of Shopify sales, ${targetWeeks}-week target): ` +
-            pickedList.map((s) => `${picks[s.key]}× ${s.label}`).join(', ');
-        // The oven holds 18 pans (DyeSessions MAX_OVEN_CAPACITY) — split bigger restocks.
-        const OVEN = 18;
-        const parts = Math.ceil(pans.length / OVEN);
-        const created = Array.from({ length: parts }, (_, i) => ({
-            id: Date.now() + i,
-            sessionId: `DS-${String(next++).padStart(3, '0')}`,
-            name: `Restock – ${label}${parts > 1 ? ` (${i + 1} of ${parts})` : ''}`,
-            date: today,
-            pans: pans.slice(i * OVEN, (i + 1) * OVEN),
-            notes,
-        }));
+        const notes = `Drafted from Demand (${win.label} of Shopify sales, ${targetWeeks}-week target).` +
+            (plan.topUps ? ` Pans topped up to ${PAN_GRAMS}g in each color's sales mix (see pan notes).` : '') +
+            (plan.extras.length ? ` Batch filled with next best sellers: ${plan.extras.join(', ')}.` : '');
+        const parts = plan.batches.length;
+        const created = plan.batches.map((load, i) => {
+            const tray = load.find((p) => p.type === 'gradientTray');
+            return {
+                id: Date.now() + i,
+                sessionId: `DS-${String(next++).padStart(3, '0')}`,
+                name: `Restock – ${label}${parts > 1 ? ` (${i + 1} of ${parts})` : ''}`,
+                date: today,
+                pans: load,
+                notes: notes + (tray ? ` Gradient tray: ${tray.gradientDye}.` : ''),
+            };
+        });
         await saveDyeSessions([...(dyeSessions || []), ...created]);
-        setPicks({});
-        toast(parts > 1
-            ? `${parts} draft sessions created (${pans.length} pans — more than one oven load). Review them in Dye Sessions.`
-            : `Draft session "${created[0].name}" created with ${pans.length} pan${pans.length === 1 ? '' : 's'}. Review it in Dye Sessions.`, 'success', 6000);
+        resetPlan();
+        toast(`${parts} draft batch${parts === 1 ? '' : 'es'} created. Review and edit ${parts === 1 ? 'it' : 'them'} in Dye Sessions.`, 'success', 7000);
         setActiveTab('sessions');
     };
 
@@ -268,7 +275,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                             </label>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">
-                            Based on the last {win.label.toLowerCase()} of sales.{' '}
+                            Based on the last {win.label.toLowerCase()} of sales. These feed the batch plan below.{' '}
                             {supply.source === 'shopify'
                                 ? <>On-hand counts from your Shopify stock levels ({DateUtils.formatDateTime(snapshot.importedAt)}).</>
                                 : <>On-hand is <strong>estimated</strong> from Stocked batches minus sales. Use <em>Update stock levels</em> for exact counts.</>}
@@ -281,7 +288,6 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="text-left text-gray-500 border-b">
-                                                <th className="py-2 pr-2 w-8"></th>
                                                 <th className="py-2 pr-4">Colorway · base</th>
                                                 <th className="py-2 pr-4 text-right">Sold / wk</th>
                                                 <th className="py-2 pr-4 text-right">On hand</th>
@@ -295,7 +301,6 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                                                 const urgent = s.weeksLeft < 2;
                                                 return (
                                                     <tr key={s.key} className="border-b border-gray-100">
-                                                        <td className="py-2 pr-2"><input type="checkbox" checked={!!picks[s.key]} onChange={() => togglePick(s)} aria-label={`Select ${s.label}`} /></td>
                                                         <td className="py-2 pr-4"><span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span></td>
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.perWeek.toFixed(1)}</td>
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.onHand}{supply.source === 'estimate' && <span className="text-gray-400"> est.</span>}</td>
@@ -303,30 +308,32 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                                                         <td className={`py-2 pr-4 text-right tabular-nums ${urgent ? 'text-red-600 font-semibold' : ''}`}>
                                                             {urgent ? '⚠ ' : ''}{s.weeksLeft.toFixed(1)}
                                                         </td>
-                                                        <td className="py-2 text-right">
-                                                            {picks[s.key] ? (
-                                                                <input type="number" min={1} value={picks[s.key]}
-                                                                    onChange={(e) => setPicks((p) => ({ ...p, [s.key]: Math.max(1, parseInt(e.target.value) || 1) }))}
-                                                                    className="w-16 border border-gray-300 rounded px-2 py-1 text-right" />
-                                                            ) : <span className="tabular-nums">{s.suggest}</span>}
-                                                        </td>
+                                                        <td className={`py-2 text-right tabular-nums ${edits.removed.includes(s.colorway!) ? 'text-gray-400 line-through' : ''}`} title={edits.removed.includes(s.colorway!) ? 'Removed from the plan' : undefined}>{s.suggest}</td>
                                                     </tr>
                                                 );
                                             })}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-3 mt-4">
-                                    <button onClick={() => setPicks(Object.fromEntries(suggestions.slice(0, 30).map((s) => [s.key, s.suggest])))} className="text-sm text-teal-700 hover:underline">Select all</button>
-                                    {pickedList.length > 0 && <button onClick={() => setPicks({})} className="text-sm text-gray-500 hover:underline">Clear</button>}
-                                    <button disabled={!pickedList.length} onClick={createDraftSession}
-                                        className="ml-auto bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-40">
-                                        Create draft dye session{pickedSkeins ? ` (${pickedSkeins} skeins)` : ''}
-                                    </button>
-                                </div>
                             </>
                         )}
                     </div>
+
+                    {/* Restock plan */}
+                    <PlanPreview
+                        plan={plan}
+                        planColorways={planColorways}
+                        edits={edits}
+                        setEdits={setEdits}
+                        edited={edited}
+                        resetPlan={resetPlan}
+                        removeColorway={removeColorway}
+                        addColorway={addColorway}
+                        addPick={addPick}
+                        setAddPick={setAddPick}
+                        recipes={recipes}
+                        onCreate={createDraftSessions}
+                    />
 
                     {/* Yarn to order */}
                     <YarnToOrder rows={yarnOrder} toBuy={toBuy} total={yarnOrderCost} targetWeeks={targetWeeks} />
@@ -668,8 +675,8 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
         <thead>
             <tr className="text-left text-gray-500 border-b">
                 <th className="py-2 pr-4">Base · size</th>
-                <th className="py-2 pr-4 text-right" title="Skeins the Dye next suggestions need">Dye next</th>
-                <th className="py-2 pr-4 text-right" title="Skeins your planned dye sessions need">Planned</th>
+                <th className="py-2 pr-4 text-right" title="Skeins the batch plan below needs (pans + gradient trays)">This plan</th>
+                <th className="py-2 pr-4 text-right" title="Skeins your already-planned dye sessions need">Sessions</th>
                 <th className="py-2 pr-4 text-right" title="Low-stock minimum set on the Inventory item">Keep</th>
                 <th className="py-2 pr-4 text-right" title="Undyed skeins in Inventory">Have</th>
                 <th className="py-2 pr-4 text-right">Order (packs)</th>
@@ -684,9 +691,9 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
                 {toBuy.length > 0 && <button onClick={copy} className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium">📋 Copy order list</button>}
             </div>
             <p className="text-sm text-gray-500 mb-4">
-                Undyed skeins for the Dye next list ({targetWeeks}-week target) and your planned sessions, plus each item's low-stock minimum, minus what's in Inventory. Rounded up to the pack sizes in Yarn Bases.
+                Undyed skeins for the batch plan above and your already-planned sessions, plus each item's low-stock minimum, minus what's in Inventory. Rounded up to the pack sizes in Yarn Bases.
             </p>
-            {rows.length === 0 ? <p className="text-sm text-gray-600">Nothing to dye yet, so no yarn needed.</p> : (
+            {rows.length === 0 ? <p className="text-sm text-gray-600">Nothing planned, so no yarn needed.</p> : (
                 <>
                     {toBuy.length === 0 ? <p className="text-sm text-gray-600 mb-2">You have enough undyed yarn for everything above. 🎉</p> : (
                         [...bySupplier.entries()].map(([sup, rs]) => (
@@ -707,6 +714,97 @@ function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
                     )}
                 </>
             )}
+        </div>
+    );
+}
+
+/** The auto-built batch plan: batches → colorway pairs (+ gradient tray), editable before drafting. */
+function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, removeColorway, addColorway, addPick, setAddPick, recipes, onCreate }) {
+    const sumYarns = (pans: any[]) => {
+        const m = new Map<string, number>();
+        pans.forEach((p) => (p.yarns || []).forEach((y) => m.set(`${y.base} ${y.hankSize}g`, (m.get(`${y.base} ${y.hankSize}g`) || 0) + y.quantity)));
+        return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${n}× ${k}`).join(' · ');
+    };
+    // Top-up skeins are listed in each pan's notes as "+N× Base Size".
+    const extraCount = (pans: any[]): number => pans.reduce((t: number, p: any) => {
+        const found: string[] = String(p.notes || '').match(/\+(\d+)×/g) || [];
+        return t + found.reduce((n: number, m: string) => n + parseInt(m.slice(1)), 0);
+    }, 0);
+    const options = [...recipes].map((r) => r.name).filter((n) => n && !planColorways.includes(n)).sort((a, b) => a.localeCompare(b));
+    return (
+        <div className="bg-white rounded-lg card-shadow p-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-1">
+                <h3 className="text-lg font-semibold">📋 Batch plan</h3>
+                <label className="text-sm text-gray-600 flex items-center gap-2" title="Top each pan up to 300g in the bases/sizes that colorway sells in, and fill a short last batch with your next best sellers.">
+                    <input type="checkbox" checked={edits.fill} onChange={(e) => setEdits((x) => ({ ...x, fill: e.target.checked }))} />
+                    Fill pans to 300g
+                </label>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, plus a gradient tray while dyes still need one. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
+            </p>
+            {plan.batches.length === 0 ? (
+                <p className="text-sm text-gray-600">Nothing to plan right now.{edited && <> <button onClick={resetPlan} className="text-teal-700 hover:underline">Reset plan</button></>}</p>
+            ) : (
+                <div className="space-y-4">
+                    {plan.batches.map((batch, bi) => {
+                        const groups: any[][] = [];
+                        batch.filter((p) => p.type === 'pan').forEach((p) => {
+                            const g = groups[groups.length - 1];
+                            if (g && g[0].colorway === p.colorway) g.push(p); else groups.push([p]);
+                        });
+                        const tray = batch.find((p) => p.type === 'gradientTray');
+                        const racks = Math.ceil(groups.reduce((t, g) => t + g.length, 0) / 2) + (tray ? 1 : 0);
+                        return (
+                            <div key={bi} className="border border-gray-200 rounded-lg">
+                                <div className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-t-lg text-sm">
+                                    <span className="font-semibold text-gray-800">Batch {bi + 1}</span>
+                                    <span className="text-gray-500">{racks} of 9 racks</span>
+                                </div>
+                                <ul className="list-none m-0 p-0 divide-y divide-gray-100">
+                                    {groups.map((g) => {
+                                        const extra = extraCount(g);
+                                        const fromBestSellers = plan.extras.includes(g[0].colorway);
+                                        const manual = plan.manual.includes(g[0].colorway);
+                                        return (
+                                            <li key={g[0].colorway} className="px-4 py-2 text-sm flex gap-3 items-start">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-medium text-gray-900">
+                                                        {g[0].colorway} <span className="text-gray-500 font-normal">· {g.length} pans</span>
+                                                        {fromBestSellers && <span className="ml-2 text-xs bg-teal-50 text-teal-700 rounded px-1.5 py-0.5">best seller, fills the batch</span>}
+                                                        {manual && <span className="ml-2 text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">added</span>}
+                                                    </div>
+                                                    <div className="text-gray-600 break-words">{sumYarns(g)}</div>
+                                                    {extra > 0 && !fromBestSellers && !manual && <div className="text-xs text-gray-500">incl. {extra} extra skein{extra === 1 ? '' : 's'} to fill the pans</div>}
+                                                </div>
+                                                <button onClick={() => removeColorway(g[0].colorway)} className="text-gray-400 hover:text-red-600 px-1" aria-label={`Remove ${g[0].colorway} from the plan`} title="Remove from plan">✕</button>
+                                            </li>
+                                        );
+                                    })}
+                                    {tray && (
+                                        <li className="px-4 py-2 text-sm">
+                                            <span className="font-medium text-gray-900">🌈 Gradient tray · {tray.gradientDye}</span>
+                                            <span className="text-gray-600"> · 10× {tray.gradientYarnBase} {tray.gradientHankSize}g</span>
+                                        </li>
+                                    )}
+                                </ul>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+            <div className="flex flex-wrap items-center gap-3 mt-4">
+                <select value={addPick} onChange={(e) => setAddPick(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm max-w-[16rem]">
+                    <option value="">Add a colorway…</option>
+                    {options.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <button disabled={!addPick} onClick={() => { addColorway(addPick); setAddPick(''); }} className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-40">+ Add</button>
+                {edited && <button onClick={resetPlan} className="text-sm text-gray-500 hover:underline">Reset plan</button>}
+                <button disabled={!plan.batches.length} onClick={onCreate}
+                    className="ml-auto bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-40">
+                    Create {plan.batches.length || ''} draft batch{plan.batches.length === 1 ? '' : 'es'}
+                </button>
+            </div>
         </div>
     );
 }

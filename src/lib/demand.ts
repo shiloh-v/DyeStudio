@@ -426,7 +426,7 @@ export function plannedSkeins(sessions: any[], ctx: DemandContext) {
 export interface YarnOrderRow {
     base: string;
     hankSize: number;
-    forDyeNext: number;   // skeins the dye-next suggestions need
+    forDyeNext: number;   // skeins the restock plan needs (pans + gradient trays)
     forPlanned: number;   // skeins already-planned sessions need
     keep: number;         // low-stock minimum to keep on the shelf
     have: number;         // undyed skeins in Inventory
@@ -550,11 +550,146 @@ export function costLookup(batches: Batch[], ctx: DemandContext) {
 // ---------- Draft dye session from suggestions ----------
 
 /**
- * Build pans for a restock session: one colorway per pan, its skeins packed
- * up to the pan capacity (grams), overflow spilling into another pan.
+ * Undyed yarn on hand per `${base}||${hankSize}` (canonical base names). With
+ * `minusKeep`, each item's low-stock minimum is held back (what's spare).
  */
-export function buildRestockPans(picks: { colorway: string; recipeId?: number; base: string; hankSize: number; qty: number }[], recipes: Recipe[], capacity = 300) {
+export function undyedStock(inventory: any[], ctx: DemandContext, minusKeep = false): Map<string, number> {
+    const m = new Map<string, number>();
+    for (const i of inventory || []) {
+        if (i.category !== 'yarn base') continue;
+        const base = canonicalYarnRef(i.myYarnName || i.name, ctx.catalog);
+        const k = `${base}||${Number(i.hankSize) || 0}`;
+        const keep = minusKeep ? parseFloat(String(i.lowStockThreshold)) || 0 : 0;
+        m.set(k, (m.get(k) || 0) + (parseFloat(String(i.quantity)) || 0) - keep);
+    }
+    return m;
+}
+
+/**
+ * How a colorway sells, as base/size shares of skeins: the window if it sold
+ * then, else all time, else the shop's overall mix.
+ */
+export function salesMix(colorway: string, inWindow: Unit[], all: Unit[]): { base: string; hankSize: number; share: number }[] {
+    const tally = (us: Unit[], only?: string) => {
+        const m = new Map<string, number>();
+        for (const u of us) {
+            if (!u.base || !(u.hankSize > MICRO_GRAMS) || (only && u.colorway !== only)) continue;
+            const k = `${u.base}||${u.hankSize}`;
+            m.set(k, (m.get(k) || 0) + u.qty);
+        }
+        return m;
+    };
+    let m = tally(inWindow, colorway);
+    if (!m.size) m = tally(all, colorway);
+    if (!m.size) m = tally(all);
+    const tot = [...m.values()].reduce((t, n) => t + n, 0) || 1;
+    return [...m.entries()]
+        .map(([k, n]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), share: n / tot }; })
+        .sort((a, b) => b.share - a.share);
+}
+
+// ---------- Draft batches (studio process) ----------
+//
+// How a batch is dyed: 9 oven racks; a rack holds 2 pans or 1 tray. Every
+// colorway is dyed as a PAIR of 300g pans. While some dye colors don't have a
+// gradient yet, each batch also gets one gradient tray (1 rack) → 8 colorways
+// + 1 tray; after that, 9 colorways.
+export const PAN_GRAMS = 300;
+// Micro skeins (10g) are only for gradient trays — never sold, never pan filler.
+export const MICRO_GRAMS = 10;
+export const RACKS_PER_BATCH = 9;
+export const GRADIENT_DEPTHS = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 1.5, 2.0, 2.5, 3.0];
+
+/**
+ * Dye colors that still need a gradient, in dye-number order: every dye in
+ * Inventory minus those with a saved gradient (same rule as the Dye Sessions
+ * gradient picker) or already in a gradient tray in any session.
+ */
+export function dyesNeedingGradient(inventory: any[], gradients: any[], sessions: any[]): string[] {
+    const done = new Set<string>();
+    (gradients || []).forEach((g) => g?.dyeColor && done.add(normText(g.dyeColor)));
+    (sessions || []).forEach((s) => (s.pans || []).forEach((p: any) => p.type === 'gradientTray' && p.gradientDye && done.add(normText(p.gradientDye))));
+    return (inventory || [])
+        .filter((i) => i.category === 'dye' && i.name && !done.has(normText(i.name)))
+        .map((i) => String(i.name))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+/** Yarn for gradient trays: whatever the most recent tray used (else Nova Fingering 10g). */
+export function gradientTrayYarn(sessions: any[], ctx: DemandContext): { base: string; hankSize: number } {
+    const trays = (sessions || [])
+        .slice()
+        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+        .flatMap((s) => (s.pans || []).filter((p: any) => p.type === 'gradientTray' && p.gradientYarnBase));
+    const last = trays[trays.length - 1];
+    return last
+        ? { base: canonicalYarnRef(last.gradientYarnBase, ctx.catalog), hankSize: Number(last.gradientHankSize) || 10 }
+        : { base: 'Nova Fingering', hankSize: 10 };
+}
+
+/**
+ * Group a restock's pans into batches: whole colorway pairs only, up to
+ * 8 colorways + a gradient tray while dyes still need gradients, else 9.
+ */
+export function planBatches(pans: any[], gradientDyes: string[], trayYarn: { base: string; hankSize: number }) {
+    const groups: any[][] = [];
+    for (const p of pans) {
+        const g = groups[groups.length - 1];
+        if (g && g[0].colorway === p.colorway) g.push(p); else groups.push([p]);
+    }
+    const dyes = [...gradientDyes];
+    const batches: any[][] = [];
+    let cur: any[] = [];
+    let racks = 0;
+    let trayAdded = false;
+    const open = () => {
+        cur = []; racks = 0; trayAdded = false;
+        if (dyes.length) {
+            cur.push({
+                id: Date.now() + batches.length / 100 + 0.5,
+                type: 'gradientTray',
+                gradientDye: dyes.shift(),
+                gradientYarnBase: trayYarn.base,
+                gradientHankSize: trayYarn.hankSize,
+                depths: GRADIENT_DEPTHS,
+            });
+            racks = 1; trayAdded = true;
+        }
+        batches.push(cur);
+    };
+    for (const g of groups) {
+        const need = Math.ceil(g.length / 2);
+        if (!batches.length || racks + need > RACKS_PER_BATCH) open();
+        // Colorways first, tray last (it's the "extra" rack in the oven).
+        cur.splice(trayAdded ? cur.length - 1 : cur.length, 0, ...g);
+        racks += need;
+    }
+    return batches;
+}
+
+export interface RestockOptions {
+    capacity?: number;                                   // grams per pan (studio standard: 300)
+    fill?: boolean;                                      // top pans up to capacity
+    mix?: (colorway: string) => { base: string; hankSize: number; share: number }[]; // colorway's sales mix
+    stock?: Map<string, number>;                         // spare undyed skeins (only for odd gaps no sold size fits)
+}
+
+/**
+ * Build pans for a restock: each colorway as a pair of pans (see above), its
+ * skeins balanced across the pair. With `fill`, each pan's gap is topped up to
+ * capacity with that colorway's best-selling base/sizes, using only spare
+ * undyed stock — every real pan in the studio is a full 300g. Same-colorway
+ * pans stay adjacent (the Queue groups them).
+ */
+export function buildRestockPans(
+    picks: { colorway: string; recipeId?: number; base: string; hankSize: number; qty: number }[],
+    recipes: Recipe[],
+    opts: RestockOptions = {}
+) {
+    const capacity = opts.capacity || 300;
+    const stock = new Map(opts.stock || []);
     const pans: any[] = [];
+    let topUps = 0;
     const byColor = new Map<string, typeof picks>();
     for (const p of picks) {
         if (!byColor.has(p.colorway)) byColor.set(p.colorway, []);
@@ -563,10 +698,74 @@ export function buildRestockPans(picks: { colorway: string; recipeId?: number; b
     let seq = 0;
     byColor.forEach((items, colorway) => {
         const recipe = recipes.find((r) => r.name === colorway) || recipes.find((r) => Number(r.id) === Number(items[0].recipeId));
-        let yarns: { base: string; hankSize: number; quantity: number }[] = [];
-        let grams = 0;
-        const flush = () => {
-            if (!yarns.length) return;
+        type Y = { base: string; hankSize: number; quantity: number };
+        const bins: { yarns: Y[]; grams: number; extra: Y[] }[] = [];
+        const put = (list: Y[], base: string, hankSize: number) => {
+            const y = list.find((x) => x.base === base && x.hankSize === hankSize);
+            if (y) y.quantity++; else list.push({ base, hankSize, quantity: 1 });
+        };
+        // Every colorway is dyed as a PAIR of pans (two pairs if it needs more
+        // than 2 × capacity). Spread skeins largest-first into the lightest pan
+        // so the pair is balanced.
+        const skeins = items.flatMap((it) => Array.from({ length: it.qty }, () => ({ base: it.base, hankSize: it.hankSize })))
+            .sort((a, b) => b.hankSize - a.hankSize);
+        const grams = skeins.reduce((t, k) => t + k.hankSize, 0);
+        const nPans = 2 * Math.max(1, Math.ceil(grams / (2 * capacity)));
+        for (let i = 0; i < nPans; i++) bins.push({ yarns: [], grams: 0, extra: [] });
+        for (const sk of skeins) {
+            const fits = bins.filter((b) => b.grams + sk.hankSize <= capacity);
+            let bin = (fits.length ? fits : []).sort((a, b) => a.grams - b.grams)[0];
+            if (!bin) { bin = { yarns: [], grams: 0, extra: [] }; bins.push(bin); }
+            put(bin.yarns, sk.base, sk.hankSize);
+            bin.grams += sk.hankSize;
+        }
+        if (opts.fill) {
+            // Top up to match how this colorway sells: each added skein goes to
+            // the base/size furthest below its sales share (largest-remainder
+            // apportionment across the whole pair). Yarn not on hand shows up
+            // on Yarn to order once the draft is saved.
+            const mix = (opts.mix ? opts.mix(colorway) : []).filter((m) => m.hankSize > 0 && m.share > 0);
+            const counts = new Map<string, number>();
+            bins.forEach((b) => b.yarns.forEach((y) => counts.set(`${y.base}||${y.hankSize}`, (counts.get(`${y.base}||${y.hankSize}`) || 0) + y.quantity)));
+            const total = () => [...counts.values()].reduce((t, n) => t + n, 0);
+            const addTo = (bin: (typeof bins)[number], base: string, hankSize: number) => {
+                put(bin.yarns, base, hankSize);
+                put(bin.extra, base, hankSize);
+                bin.grams += hankSize;
+                const k = `${base}||${hankSize}`;
+                counts.set(k, (counts.get(k) || 0) + 1);
+                if (stock.has(k)) stock.set(k, (stock.get(k) || 0) - 1);
+                topUps++;
+            };
+            for (;;) {
+                const bin = bins.filter((b) => b.grams < capacity).sort((a, b) => a.grams - b.grams)[0];
+                if (!bin) break;
+                const gap = capacity - bin.grams;
+                const n = total() + 1;
+                // Look ahead: only pick a size that leaves a gap the colorway's
+                // sold sizes can still fill exactly (no stray micro skeins).
+                const sizes = [...new Set(mix.map((m) => m.hankSize))];
+                const exact = new Array(gap + 1).fill(false);
+                exact[0] = true;
+                for (let g = 1; g <= gap; g++) exact[g] = sizes.some((z) => z <= g && exact[g - z]);
+                const next = mix
+                    .filter((m) => m.hankSize <= gap && exact[gap - m.hankSize])
+                    .map((m) => ({ ...m, deficit: m.share * n - (counts.get(`${m.base}||${m.hankSize}`) || 0) }))
+                    .sort((a, b) => b.deficit - a.deficit || b.hankSize - a.hankSize)[0];
+                if (next) { addTo(bin, next.base, next.hankSize); continue; }
+                // Gap no sold size fits: any spare undyed (non-micro) size that
+                // fits — a base already in the pan first, then the largest.
+                const inPan = new Set(bin.yarns.map((y) => y.base));
+                const spare = [...stock.entries()]
+                    .map(([k, q]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), q }; })
+                    .filter((o) => o.q > 0 && o.hankSize > MICRO_GRAMS && o.hankSize <= gap)
+                    .sort((a, b) => Number(inPan.has(b.base)) - Number(inPan.has(a.base)) || b.hankSize - a.hankSize)[0];
+                if (!spare) { bin.grams = capacity; break; } // can't fill exactly; leave it
+                addTo(bin, spare.base, spare.hankSize);
+            }
+            bins.forEach((b) => { b.grams = b.yarns.reduce((t, y) => t + y.hankSize * y.quantity, 0); });
+        }
+        for (const bin of bins) {
             pans.push({
                 id: Date.now() + seq++ / 1000,
                 type: 'pan',
@@ -574,22 +773,90 @@ export function buildRestockPans(picks: { colorway: string; recipeId?: number; b
                 recipeId: recipe?.id || '',
                 recipe: recipe || null,
                 capacity,
-                yarns,
-                totalWeight: grams,
+                yarns: bin.yarns,
+                totalWeight: bin.grams,
+                notes: bin.extra.length
+                    ? `Topped up to fill the pan (extra stock): ${bin.extra.map((y) => `+${y.quantity}× ${y.base} ${y.hankSize}g`).join(', ')}`
+                    : '',
             });
-            yarns = [];
-            grams = 0;
-        };
-        for (const it of items) {
-            for (let i = 0; i < it.qty; i++) {
-                if (grams + it.hankSize > capacity && grams > 0) flush();
-                const last = yarns[yarns.length - 1];
-                if (last && last.base === it.base && last.hankSize === it.hankSize) last.quantity++;
-                else yarns.push({ base: it.base, hankSize: it.hankSize, quantity: 1 });
-                grams += it.hankSize;
-            }
         }
-        flush();
     });
-    return pans;
+    return { pans, topUps };
+}
+
+
+// ---------- Restock plan (what the Demand tab previews and drafts) ----------
+
+export interface RestockPlanInput {
+    suggestions: Suggestion[];      // dye-next rows (all of them; no manual picking)
+    removed?: Set<string>;          // colorways the user took out of the plan
+    added?: string[];               // colorways the user put in (dyed purely by sales mix)
+    fill: boolean;                  // top pans to 300g + fill a short last batch
+    recipes: Recipe[];
+    inventory: any[];
+    sessions: any[];
+    gradients: any[];
+    ctx: DemandContext;
+    plannedByBaseSize: Map<string, number>;
+    inWindow: Unit[];
+    units: Unit[];
+}
+
+/**
+ * Build the whole restock plan: every dye-next colorway as pan pairs, batched
+ * 9 racks at a time with a gradient tray while dyes still need one, the short
+ * last batch topped up with the next best sellers.
+ */
+export function planRestock(input: RestockPlanInput) {
+    const { recipes, ctx } = input;
+    const removed = input.removed || new Set<string>();
+    const chosen = input.suggestions
+        .filter((s) => s.colorway && !removed.has(s.colorway))
+        .map((s) => ({ colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest }));
+    const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
+    const asEmpty = (c: string) => ({ colorway: c, recipeId: recipes.find((r) => r.name === c)?.id, base: '', hankSize: 0, qty: 0 });
+    const base = [...chosen, ...manual.map(asEmpty)];
+
+    const gradientDyes = dyesNeedingGradient(input.inventory, input.gradients, input.sessions);
+    const trayYarn = gradientTrayYarn(input.sessions, ctx);
+    // Spare undyed yarn (for odd gaps) = Inventory − minimums − planned − picks − trays.
+    const free = undyedStock(input.inventory, ctx, true);
+    const take = (k: string, q: number) => free.set(k, (free.get(k) || 0) - q);
+    input.plannedByBaseSize.forEach((q, k) => take(k, q));
+    chosen.forEach((c) => take(`${c.base}||${c.hankSize}`, c.qty));
+    take(`${trayYarn.base}||${trayYarn.hankSize}`, Math.min(gradientDyes.length, Math.ceil(new Set(base.map((c) => c.colorway)).size / 8)) * 10);
+
+    const build = (list: typeof base) => {
+        const built = buildRestockPans(list, recipes, {
+            capacity: PAN_GRAMS,
+            fill: input.fill,
+            mix: (cw) => salesMix(cw, input.inWindow, input.units),
+            stock: free,
+        });
+        return { ...built, batches: planBatches(built.pans, gradientDyes, trayYarn) };
+    };
+    let result = build(base);
+    let extras: string[] = [];
+    if (input.fill && result.batches.length) {
+        const last = result.batches[result.batches.length - 1];
+        const used = last.filter((p) => p.type === 'pan').length / 2 + last.filter((p) => p.type === 'gradientTray').length;
+        const freeRacks = RACKS_PER_BATCH - Math.ceil(used);
+        if (freeRacks > 0) {
+            // Skip colorways already in this plan or in an upcoming session.
+            const taken = new Set(base.map((c) => c.colorway));
+            for (const sess of input.sessions || []) {
+                if (sess?.archived) continue;
+                for (const p of sess.pans || []) {
+                    const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
+                    if (r?.name || p.colorway) taken.add(r?.name || p.colorway);
+                }
+            }
+            extras = [...byColorway(input.inWindow), ...byColorway(input.units)]
+                .map((a) => a.colorway!)
+                .filter((c, i, arr) => c && arr.indexOf(c) === i && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c))
+                .slice(0, freeRacks);
+            if (extras.length) result = build([...base, ...extras.map(asEmpty)]);
+        }
+    }
+    return { ...result, extras, manual, gradientDyes };
 }
