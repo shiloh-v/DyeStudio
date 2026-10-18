@@ -1014,28 +1014,24 @@ export function labTestCandidates(sketches: any[], sessions: any[], recipes: Rec
 }
 
 
-/** Bases Color Lab tests are dyed on (one pan each). */
-export const LAB_TEST_BASES = ['Nova Fingering', 'Luna DK'];
-export const LAB_MINIS_PER_PAN = 5;
-
 /**
- * A Color Lab test pair: one pan per test base, each 5 minis (20g) topped to
- * 300g with 50s or fulls — whichever size that base sells more of (only sizes
- * in the Yarn Bases catalog).
+ * The studio's Color Lab test pair (fixed recipe): each pan mixes both test
+ * bases — minis of one, the larger size of the other — so every test shows the
+ * color on Nova Fingering AND Luna DK in both pans.
+ *   Pan 1: 5 × Nova Fingering 20g + 4 × Luna DK 50g
+ *   Pan 2: 5 × Luna DK 20g + 2 × Nova Fingering 100g
  */
-export function labTestPans(name: string, sketch: any, ctx: DemandContext, units: Unit[]) {
-    return LAB_TEST_BASES.map((wanted, i) => {
-        const entry = ctx.catalog.find((b) => normText(b.myName) === normText(wanted));
-        const baseName = entry?.myName || wanted;
-        const sizes = new Set((entry?.sizes || []).map((z) => Number(z.amount)));
-        const sold = (h: number) => units.filter((u) => u.base === baseName && u.hankSize === h).reduce((t, u) => t + u.qty, 0);
-        const options = [100, 50].filter((h) => !entry || sizes.has(h));
-        const big = options.sort((a, b) => sold(b) - sold(a) || b - a)[0] || 100;
-        const miniGrams = 20 * LAB_MINIS_PER_PAN;
-        const yarns = [
-            { base: baseName, hankSize: 20, quantity: LAB_MINIS_PER_PAN },
-            { base: baseName, hankSize: big, quantity: Math.round((PAN_GRAMS - miniGrams) / big) },
-        ];
+export const LAB_TEST_PANS: { base: string; hankSize: number; quantity: number }[][] = [
+    [{ base: 'Nova Fingering', hankSize: 20, quantity: 5 }, { base: 'Luna DK', hankSize: 50, quantity: 4 }],
+    [{ base: 'Luna DK', hankSize: 20, quantity: 5 }, { base: 'Nova Fingering', hankSize: 100, quantity: 2 }],
+];
+
+/** A Color Lab test pair for a sketch (see LAB_TEST_PANS). */
+export function labTestPans(name: string, sketch: any, ctx: DemandContext, _units?: Unit[]) {
+    // Use the catalog's spelling of the base names when present.
+    const baseName = (b: string) => ctx.catalog.find((x) => normText(x.myName) === normText(b))?.myName || b;
+    return LAB_TEST_PANS.map((recipe, i) => {
+        const yarns = recipe.map((y) => ({ ...y, base: baseName(y.base) }));
         return {
             id: Date.now() + Math.random(),
             type: 'colorLab',
@@ -1047,7 +1043,7 @@ export function labTestPans(name: string, sketch: any, ctx: DemandContext, units
             capacity: PAN_GRAMS,
             yarns,
             totalWeight: yarns.reduce((t, y) => t + y.hankSize * y.quantity, 0),
-            notes: `Color Lab test (${baseName} pan ${i + 1} of 2)`,
+            notes: `Color Lab test (pan ${i + 1} of 2)`,
         };
     });
 }
