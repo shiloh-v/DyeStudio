@@ -307,6 +307,12 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                                 ? <>On-hand counts from your Shopify stock levels ({DateUtils.formatDateTime(snapshot.importedAt)}).</>
                                 : <>On-hand is <strong>estimated</strong> from Stocked batches minus sales. Use <em>Update stock levels</em> for exact counts.</>}
                         </p>
+                        {D.specialtyLow.length > 0 && (
+                            <p className="text-xs text-gray-500 mb-3">
+                                Also low on <strong>specialty bases</strong> (not dyed automatically; these colors are planned on your default bases):{' '}
+                                {D.specialtyLow.map((s) => `${s.colorway} · ${comboLabel(s.base!, s.hankSize!)}${s.soldOut ? ' (sold out)' : ''}`).join('; ')}.
+                            </p>
+                        )}
                         {suggestions.length === 0 ? (
                             <p className="text-sm text-gray-600">Nothing is running low at this target. 🎉</p>
                         ) : (

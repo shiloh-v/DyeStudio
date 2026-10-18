@@ -93,13 +93,18 @@ export function demandSummary(input: DemandInput) {
     }
     // Retired colors keep their sales history but are never suggested.
     const retired = new Set((input.recipes || []).filter((r: any) => r?.retired).map((r: any) => r.name));
-    const suggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale)
+    const allSuggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale)
         .filter((s) => !retired.has(s.colorway!));
+    // Specialty bases (Solis, Stardust, Nova DK…) are never dyed automatically,
+    // so they're not listed in Dye next. Their demand still feeds the plan:
+    // the color gets planned on default bases.
+    const suggestions = allSuggestions.filter((s) => !isSpecialtyBase(s.base!, ctx.catalog));
+    const specialtyLow = allSuggestions.filter((s) => isSpecialtyBase(s.base!, ctx.catalog));
 
     // The restock plan: built automatically from dye-next, then the user's edits.
     const edits = input.planEdits || demandPrefs.planEdits();
     const plan = planRestock({
-        suggestions,
+        suggestions: allSuggestions,
         removed: new Set(edits.removed),
         added: edits.added,
         fill: edits.fill,
@@ -149,7 +154,7 @@ export function demandSummary(input: DemandInput) {
 
     return {
         today, win, targetWeeks, ctx, lines, units, firstDate, lastDate, windowDays, inWindow,
-        planned, supply, suggestions, plan, edits, yarnOrder, toBuy,
+        planned, supply, suggestions, specialtyLow, plan, edits, yarnOrder, toBuy,
         horizon: { months, pace, historyPace, horizonBatches, upcomingSessions, planBatches: planInHorizon, planBeyond, projectedBatches },
         labCandidates: labTestCandidates(input.colorSketches || [], input.dyeSessions || [], input.recipes),
         yarnOrderCost: toBuy.reduce((s, r) => s + r.cost, 0),
