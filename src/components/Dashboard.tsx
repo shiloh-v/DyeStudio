@@ -184,7 +184,7 @@ function ShopifyPanel({ recipes, inventory, batches, sales, kits, settings, dyeS
                         <ul className="space-y-1">
                             {urgent.map((s) => (
                                 <li key={s.key} className="flex justify-between gap-2">
-                                    <span className="truncate">{s.colorway} <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span></span>
+                                    <span className="truncate">{s.colorway} <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span>{s.soldOut && <span className="ml-1 text-xs text-red-600">sold out</span>}</span>
                                     <span className={`tabular-nums whitespace-nowrap ${s.weeksLeft < 2 ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{s.weeksLeft.toFixed(1)} wk</span>
                                 </li>
                             ))}

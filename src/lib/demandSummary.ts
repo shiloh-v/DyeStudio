@@ -8,7 +8,7 @@ import { isCountable, isOwnBrand, lineRevenue, type SaleLine } from './shopify';
 import {
     makeContext, allUnits, windowUnits, byCombo, byColorway, computeSupply, dyeNext, costLookup,
     plannedSkeins, yarnToOrder, daysAgo, planRestock, dyeCadence, projectedBatchYarn, salesMix,
-    labTestCandidates, gradientTrayYarn, type Unit,
+    labTestCandidates, gradientTrayYarn, comboKey, type Unit,
 } from './demand';
 
 export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
@@ -85,7 +85,13 @@ export function demandSummary(input: DemandInput) {
 
     const planned = plannedSkeins(input.dyeSessions || [], ctx);
     const supply = computeSupply(input.batches, units, ctx, input.settings?.shopifyInventory, planned.byCombo);
-    const suggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks);
+    // Past year, for spotting sold-out colors (no stock → no recent sales).
+    const lastSale = new Map<string, string>();
+    for (const u of units) {
+        const k = comboKey(u.colorway, u.base, u.hankSize);
+        if (!lastSale.has(k) || u.date > lastSale.get(k)!) lastSale.set(k, u.date);
+    }
+    const suggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale);
 
     // The restock plan: built automatically from dye-next, then the user's edits.
     const edits = input.planEdits || demandPrefs.planEdits();
@@ -109,9 +115,6 @@ export function demandSummary(input: DemandInput) {
             .filter(Boolean),
         forceBatch: !!edits.forceBatch,
     });
-    // Yarn to order = everything the plan (pans + gradient trays) and the
-    // already-planned sessions will use.
-    const planYarn = plannedSkeins(plan.batches.map((pans) => ({ pans })), ctx).byBaseSize;
     // Stock up for the next N months of dyeing: batches at your pace, minus
     // the ones already planned (sessions) or in this plan; the rest are
     // projected as typical batches in the shop's overall sales mix.
@@ -120,8 +123,19 @@ export function demandSummary(input: DemandInput) {
     const pace = input.batchesPerMonth ?? demandPrefs.batchesPerMonth() ?? historyPace;
     const horizonBatches = Math.ceil(months * pace - 1e-9);
     const upcomingSessions = (input.dyeSessions || []).filter((s) => !s.archived && (s.pans || []).length).length;
+    // Only plan batches that fall inside the stock-up window are ordered for
+    // now; later ones are shown in the plan but bought for next time.
+    const planInHorizon = Math.min(plan.batches.length, Math.max(0, horizonBatches - upcomingSessions));
+    const planBeyond = plan.batches.length - planInHorizon;
     const projectedBatches = Math.max(0, horizonBatches - upcomingSessions - plan.batches.length);
     const traysLeft = Math.max(0, plan.gradientDyes.length - plan.batches.length);
+    // Yarn to order = plan batches in the window (pans + trays) + skeins to add
+    // to already-planned sessions + those sessions themselves (+ projected).
+    const planYarn = plannedSkeins(plan.batches.slice(0, planInHorizon).map((pans) => ({ pans })), ctx).byBaseSize;
+    for (const a of plan.adjust) {
+        const k = `${a.base}||${a.hankSize}`;
+        planYarn.set(k, (planYarn.get(k) || 0) + a.qty);
+    }
     const projected = projectedBatchYarn(projectedBatches, Math.min(projectedBatches, traysLeft), salesMix('', inWindow, units), gradientTrayYarn(input.dyeSessions || [], ctx));
     const yarnOrder = yarnToOrder(
         [...planYarn.entries()].map(([k, q]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), suggest: q }; }),
@@ -135,7 +149,7 @@ export function demandSummary(input: DemandInput) {
     return {
         today, win, targetWeeks, ctx, lines, units, firstDate, lastDate, windowDays, inWindow,
         planned, supply, suggestions, plan, edits, yarnOrder, toBuy,
-        horizon: { months, pace, historyPace, horizonBatches, upcomingSessions, planBatches: plan.batches.length, projectedBatches },
+        horizon: { months, pace, historyPace, horizonBatches, upcomingSessions, planBatches: planInHorizon, planBeyond, projectedBatches },
         labCandidates: labTestCandidates(input.colorSketches || [], input.dyeSessions || [], input.recipes),
         yarnOrderCost: toBuy.reduce((s, r) => s + r.cost, 0),
         getCost: costLookup(input.batches, ctx),
