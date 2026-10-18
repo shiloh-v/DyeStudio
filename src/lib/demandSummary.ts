@@ -89,6 +89,8 @@ export function demandSummary(input: DemandInput) {
         plannedByBaseSize: planned.byBaseSize,
         inWindow,
         units,
+        supply,
+        windowDays,
     });
     // Yarn to order = everything the plan (pans + gradient trays) and the
     // already-planned sessions will use.
