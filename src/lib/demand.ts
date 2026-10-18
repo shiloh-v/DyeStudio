@@ -65,8 +65,8 @@ const containsPhrase = (hay: string, needle: string) =>
     !!needle && ` ${hay} `.includes(` ${needle} `);
 
 const SIZE_WORDS: [RegExp, number][] = [
-    [/\bmicro\b/, 10],
-    [/\bmini\b/, 20],
+    [/\bmicros?\b/, 10],
+    [/\bminis?\b/, 20],
     [/\bhalf\b/, 50],
     [/\bfull\b/, 100],
 ];
@@ -99,6 +99,10 @@ function autoBase(text: string, catalog: YarnBase[]): YarnBase | undefined {
         }
     }
     if (best) return best;
+    // A base family word ("nova", "luna"…) with no full-name match means a base
+    // that isn't in the catalog yet (e.g. "Nova DK") — don't guess from weight.
+    const families = new Set(catalog.map((b) => normText(b.myName).split(' ')[0]).filter(Boolean));
+    if (t.split(' ').some((w) => families.has(w))) return undefined;
     // A weight word only one base has ("dk", "bulky", "worsted").
     const byWeight = catalog.filter((b) => b.weight && containsPhrase(t, normText(b.weight)));
     return byWeight.length === 1 ? byWeight[0] : undefined;
