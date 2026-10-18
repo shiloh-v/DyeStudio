@@ -1020,7 +1020,11 @@ export function planRestock(input: RestockPlanInput) {
             const sess = sessionFor(s.colorway!);
             if (!sess) return true;
             if (isSpecialtyBase(s.base!, ctx.catalog)) return false; // never auto-plan specialty yarn
-            adjust.push({ colorway: s.colorway!, sessionName: sess.name, date: sess.date, base: s.base!, hankSize: s.hankSize!, qty: s.suggest, soldOut: s.soldOut });
+            // This color already has its pair in that session (one pair per
+            // color per batch), so this waits for a later batch — at least the
+            // size's minimum (SIZE_BOUNDS).
+            const b = sizeBounds(s.hankSize!);
+            adjust.push({ colorway: s.colorway!, sessionName: sess.name, date: sess.date, base: s.base!, hankSize: s.hankSize!, qty: Math.min(b.max, Math.max(b.min, s.suggest)), soldOut: s.soldOut });
             return false;
         })
         // Demand on a specialty base still says "dye this color", but on the

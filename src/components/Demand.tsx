@@ -805,8 +805,8 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
             </p>
             {plan.adjust.length > 0 && (
                 <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
-                    <div className="font-semibold text-amber-900 mb-1">➕ Add to batches you've already planned</div>
-                    <p className="text-amber-900 mb-2">These colors are already in an upcoming session, so swap these skeins into their pans there (in Dye Sessions) instead of dyeing them again.</p>
+                    <div className="font-semibold text-amber-900 mb-1">⏭ Already scheduled — dye more in a later batch</div>
+                    <p className="text-amber-900 mb-2">These colors already have their pair in an upcoming session (one pair per color per batch), so these base/sizes wait for a later batch. Quantities are at least your minimums. They aren't in the yarn order yet.</p>
                     <ul className="list-none m-0 p-0 space-y-1">
                         {(Object.entries(plan.adjust.reduce((m: Record<string, any[]>, a) => {
                             const k = `${a.sessionName}|${a.date}`;
@@ -814,8 +814,8 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                             return m;
                         }, {} as Record<string, any[]>)) as [string, any[]][]).map(([k, items]) => (
                             <li key={k}>
-                                <span className="font-medium text-amber-900">{DateUtils.formatDate(items[0].date)} · {items[0].sessionName}:</span>{' '}
-                                <span className="text-amber-900">{items.map((a) => `${a.colorway} +${a.qty}× ${a.base} ${a.hankSize}g${a.soldOut ? ' (sold out)' : ''}`).join('; ')}</span>
+                                <span className="font-medium text-amber-900">After {items[0].sessionName}{items[0].date ? ` (${DateUtils.formatDate(items[0].date)})` : ''}:</span>{' '}
+                                <span className="text-amber-900">{items.map((a) => `${a.colorway} · ${a.qty}× ${a.base} ${a.hankSize}g${a.soldOut ? ' (sold out)' : ''}`).join('; ')}</span>
                             </li>
                         ))}
                     </ul>
