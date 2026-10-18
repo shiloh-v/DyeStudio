@@ -86,6 +86,16 @@ const SIZE_WORDS: [RegExp, number][] = [
     [/\bfull\b/, 100],
 ];
 
+/**
+ * Names a recipe can be sold under: its full name plus any quoted nickname in
+ * it — `WnF Muted Teal ("Fuzzy")` is listed in Shopify as "Fuzzy Mini".
+ */
+export function recipeNames(name: any): string[] {
+    const out = [normText(name)];
+    for (const m of String(name ?? '').matchAll(/["“”']([^"“”']{2,})["“”']/g)) out.push(normText(m[1]));
+    return out.filter(Boolean);
+}
+
 /** Skein size in grams mentioned in text ("50g", "50s", "Mini", "Half skein"). */
 export function sizeFromText(text: string, sizeMappings: { grams: number; name: string }[] = []): number | undefined {
     const t = normText(text);
@@ -108,7 +118,7 @@ function autoBase(text: string, catalog: YarnBase[]): YarnBase | undefined {
     let best: YarnBase | undefined;
     let bestLen = 0;
     for (const b of catalog) {
-        for (const n of [b.myName, b.supplierName]) {
+        for (const n of [b.myName, b.supplierName, ...(b.aliases || [])]) {
             const nn = normText(n);
             if (nn.length > bestLen && containsPhrase(t, nn)) { best = b; bestLen = nn.length; }
         }
@@ -143,10 +153,11 @@ export function resolveName(name: string, ctx: DemandContext): Resolved {
         // Longest recipe or kit name contained in the text wins.
         let bestLen = 0;
         for (const r of ctx.recipes) {
-            const n = normText(r.name);
-            if (n.length > bestLen && containsPhrase(key, n)) {
-                bestLen = n.length;
-                out = { kind: 'colorway', recipeId: r.id, colorway: r.name };
+            for (const n of recipeNames(r.name)) {
+                if (n.length > bestLen && containsPhrase(key, n)) {
+                    bestLen = n.length;
+                    out = { kind: 'colorway', recipeId: r.id, colorway: r.name };
+                }
             }
         }
         for (const k of ctx.kits) {
