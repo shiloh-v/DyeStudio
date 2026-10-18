@@ -6,6 +6,9 @@ import { recipeDyeCost } from '../lib/dyeCost';
 import type { Recipe } from '../types';
 import { demandSummary } from '../lib/demandSummary';
 import { byColorway } from '../lib/demand';
+import { aliasesAfterRename } from '../lib/recipeMatch';
+import { supabase } from '../lib/supabase';
+import { toast } from '../lib/toast';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [], batches = [], kits = [], dyeSessions = [], gradients = [] }) {
     // Shopify sales per colorway (window set on the Demand tab) for card badges + sorting.
@@ -71,16 +74,34 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
         return `${prefix}${String(nextNum).padStart(3, '0')}`;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        // "Also called" text → aliases; a rename adds the old name automatically
+        // so Shopify sales, stock and kits under the old name keep matching.
+        const { _aliasText, ...data } = formData as any;
+        const typed = String(_aliasText ?? (data.aliases || []).join(', ')).split(',').map((a) => a.trim()).filter(Boolean);
+        const old = editingId ? recipes.find(r => r.id === editingId) : null;
+        const record = { ...data, aliases: aliasesAfterRename(old?.name, data.name, typed), retired: !!data.retired };
+        if ((record.aliases.length || record.retired) && !(await recipeColumnsReady())) {
+            toast('Heads up: run sql/recipes-aliases-retired.sql in Supabase so old names and "Retired" are saved.', 'info', 9000);
+        }
+        if (old && old.name !== data.name && old.name) {
+            toast(`Renamed — "${old.name}" is kept as an old name, so past Shopify sales and kits still match.`, 'success', 6000);
+        }
         if (editingId) {
-            saveRecipes(recipes.map(r => r.id === editingId ? { ...formData, id: editingId } : r));
+            saveRecipes(recipes.map(r => r.id === editingId ? { ...record, id: editingId } : r));
         } else {
             // Generate recipeId for new recipe
             const recipeId = generateRecipeId(formData.colorType);
-            saveRecipes([...recipes, { ...formData, recipeId, id: Date.now() }]);
+            saveRecipes([...recipes, { ...record, recipeId, id: Date.now() }]);
         }
         resetForm();
+    };
+
+    // The aliases/retired columns come from sql/recipes-aliases-retired.sql.
+    const recipeColumnsReady = async () => {
+        const { error } = await supabase.from('recipes').select('aliases,retired').limit(1);
+        return !error;
     };
 
     const guard = useFormGuard();
@@ -233,7 +254,8 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
             } else if (sortBy === 'colorType') {
                 return a.colorType.localeCompare(b.colorType);
             } else if (sortBy === 'sales' && demand) {
-                return (demand.recentUnits.get(b.name) || 0) - (demand.recentUnits.get(a.name) || 0)
+                return Number(!!a.retired) - Number(!!b.retired)
+                    || (demand.recentUnits.get(b.name) || 0) - (demand.recentUnits.get(a.name) || 0)
                     || (demand.allTime.get(b.name) || 0) - (demand.allTime.get(a.name) || 0)
                     || a.name.localeCompare(b.name);
             }
@@ -315,6 +337,18 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
                                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                                     placeholder="e.g., Deep Ocean Blue"
                                 />
+                                <label className="block text-xs font-medium text-gray-600 mt-2 mb-1">Also called (old names)</label>
+                                <input
+                                    type="text"
+                                    value={(formData as any)._aliasText ?? (formData.aliases || []).join(', ')}
+                                    onChange={(e) => setFormData({ ...formData, _aliasText: e.target.value } as any)}
+                                    className="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500"
+                                    placeholder="Added automatically when you rename"
+                                />
+                                <label className="flex items-center gap-2 text-sm text-gray-700 mt-2">
+                                    <input type="checkbox" checked={!!formData.retired} onChange={(e) => setFormData({ ...formData, retired: e.target.checked })} />
+                                    Retired <span className="text-xs text-gray-500">(keeps sales history; never planned)</span>
+                                </label>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Yarn Weight (grams) *</label>
@@ -727,7 +761,11 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
                                 {recipe.recipeId && (
                                     <p className="text-xs font-semibold text-teal-600 mb-1">{recipe.recipeId}</p>
                                 )}
-                                <h3 className="text-lg font-semibold text-gray-900">{recipe.name}</h3>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    {recipe.name}
+                                    {recipe.retired && <span className="ml-2 align-middle text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-medium">Retired</span>}
+                                </h3>
+                                {recipe.aliases?.length > 0 && <p className="text-xs text-gray-500">formerly {recipe.aliases.join(', ')}</p>}
                                 {demand && (demand.allTime.get(recipe.name) || 0) > 0 && (
                                     <div className="flex gap-2 items-center mt-1 flex-wrap text-xs">
                                         <span className="bg-teal-50 text-teal-700 rounded px-1.5 py-0.5 font-medium" title={`Shopify sales: ${demand.recentUnits.get(recipe.name) || 0} skeins in the last ${demand.label}, ${demand.allTime.get(recipe.name)} all time`}>

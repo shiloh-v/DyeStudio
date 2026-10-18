@@ -30,6 +30,8 @@ export interface Recipe {
   photos?: { id: ID; data: string; label?: string }[];
   notes?: string;
   created?: string;
+  aliases?: string[];   // old names (recorded on rename) — still matched in Shopify sales, stock, kits
+  retired?: boolean;    // keeps sales history, never planned
   [key: string]: any;
 }
 

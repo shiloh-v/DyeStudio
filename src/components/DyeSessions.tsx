@@ -1,4 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { findRecipeByName } from '../lib/recipeMatch';
 import { DateUtils, byPlannedDate } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
@@ -534,11 +535,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                 (sum, y) => sum + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0
             );
             const newPans = selectedColors.map(color => {
-                const recipe = recipes.find(r => r.name === color.colorwayName);
+                const recipe = findRecipeByName(recipes, color.colorwayName);
                 return {
                     id: Date.now() + Math.random(),
                     type: 'pan',
-                    colorway: color.colorwayName,
+                    colorway: recipe?.name || color.colorwayName, // current name, even if the kit has an old one
                     recipeId: recipe?.id || '',
                     recipe: recipe,
                     yarns: validYarns.map(y => ({ ...y })),
@@ -1272,11 +1273,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
 
                                                 // Create individual pans for each selected colorway, each with the shared yarn list
                                                 const newPans = selectedColors.map(color => {
-                                                    const recipe = recipes.find(r => r.name === color.colorwayName);
+                                                    const recipe = findRecipeByName(recipes, color.colorwayName);
                                                     return {
                                                         id: Date.now() + Math.random(),
                                                         type: 'pan',
-                                                        colorway: color.colorwayName,
+                                                        colorway: recipe?.name || color.colorwayName, // current name, even if the kit has an old one
                                                         recipeId: recipe?.id || '',
                                                         recipe: recipe,
                                                         yarns: validYarns.map(y => ({ ...y })),

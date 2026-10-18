@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { findRecipeByName } from '../lib/recipeMatch';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 
@@ -272,7 +273,7 @@ export function Kits({ kits, saveKits, recipes, inventory }) {
                             <div className="grid grid-cols-2 gap-3" style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)'}}>
                                 {kit.colors.flatMap((color, colorIdx) => {
                                     const qty = parseInt(color.quantity || 1);
-                                    const recipe = recipes.find(r => r.name === color.colorwayName);
+                                    const recipe = findRecipeByName(recipes, color.colorwayName);
                                     return Array.from({ length: qty }, (_, i) => (
                                         <div key={`${colorIdx}-${i}`} className="p-2 bg-teal-50 rounded border">
                                             <div className="flex items-center gap-2">
