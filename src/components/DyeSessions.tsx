@@ -669,13 +669,23 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                             </div>
                         </div>
 
-                        {/* Current Pan/Tray Builder */}
-                        <div className="border-2 border-teal-200 rounded-lg p-4 bg-teal-50">
+                        {/* Current Pan/Tray Builder — inline for adding; a popup over
+                            the session while editing an existing pan (no scrolling up). */}
+                        <div
+                            className={editingPanId != null ? 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4' : ''}
+                            onClick={editingPanId != null ? cancelPanEdit : undefined}
+                        >
+                        <div
+                            className={`border-2 border-teal-200 rounded-lg p-4 bg-teal-50 ${editingPanId != null ? 'max-w-2xl w-full max-h-[85vh] overflow-y-auto shadow-xl' : ''}`}
+                            onClick={(e) => e.stopPropagation()}
+                            role={editingPanId != null ? 'dialog' : undefined}
+                            aria-label={editingPanId != null ? 'Edit pan' : undefined}
+                        >
                             <div className="flex justify-between items-center mb-3">
                                 <h4 className="font-semibold text-gray-900">{editingPanId ? '✏️ Editing Pan' : 'Add to Session'}</h4>
                                 <div className="flex items-center gap-3">
                                     {editingPanId && (
-                                        <button type="button" onClick={cancelPanEdit} className="text-sm text-gray-500 hover:text-gray-700 underline bg-transparent">Cancel edit</button>
+                                        <button type="button" onClick={cancelPanEdit} className="text-gray-400 hover:text-gray-600 text-2xl leading-none bg-transparent" aria-label="Cancel edit">✕</button>
                                     )}
                                     <div className="text-sm text-gray-600">
                                         Oven: {calculateOvenLoad(formData.pans)}/18 pans (or {Math.floor(calculateOvenLoad(formData.pans)/2)}/9 trays)
@@ -1461,6 +1471,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     </div>
                                 </>
                             )}
+                        </div>
                         </div>
 
                         {/* Pans in Session */}

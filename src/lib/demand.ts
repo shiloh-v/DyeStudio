@@ -600,6 +600,9 @@ export function salesMix(colorway: string, inWindow: Unit[], all: Unit[]): { bas
 export const PAN_GRAMS = 300;
 // Micro skeins (10g) are only for gradient trays — never sold, never pan filler.
 export const MICRO_GRAMS = 10;
+// Minis (20g): at most 12 per colorway+base across a pair (any split, e.g. 10 + 2).
+export const MINI_GRAMS = 20;
+export const MAX_MINIS_PER_COLOR_BASE = 12;
 export const RACKS_PER_BATCH = 9;
 export const GRADIENT_DEPTHS = [0.0625, 0.125, 0.25, 0.5, 0.75, 1, 1.5, 2.0, 2.5, 3.0];
 
@@ -684,6 +687,8 @@ export interface RestockOptions {
     capacity?: number;                                   // grams per pan (studio standard: 300)
     fill?: boolean;                                      // top pans up to capacity
     mix?: (colorway: string) => { base: string; hankSize: number; share: number }[]; // colorway's sales mix
+    globalMix?: { base: string; hankSize: number; share: number }[];                  // shop-wide mix (tie-breaks)
+    sizesFor?: (base: string) => number[];                                             // catalog sizes of a base
     stock?: Map<string, number>;                         // spare undyed skeins (only for odd gaps no sold size fits)
 }
 
@@ -737,17 +742,31 @@ export function buildRestockPans(
             // the base/size furthest below its sales share (largest-remainder
             // apportionment across the whole pair). Yarn not on hand shows up
             // on Yarn to order once the draft is saved.
-            const mix = (opts.mix ? opts.mix(colorway) : []).filter((m) => m.hankSize > 0 && m.share > 0);
+            const mix = (opts.mix ? opts.mix(colorway) : []).filter((m) => m.hankSize > MICRO_GRAMS && m.share > 0);
+            const global = new Map((opts.globalMix || []).map((m) => [`${m.base}||${m.hankSize}`, m.share]));
+            // Candidates: the sizes this colorway sells, plus the other
+            // (non-micro) catalog sizes of those bases, so a color that only
+            // sells as minis can still reach 300g without a pan full of minis.
+            const cand = new Map<string, { base: string; hankSize: number; share: number }>();
+            mix.forEach((m) => cand.set(`${m.base}||${m.hankSize}`, m));
+            for (const b of new Set(mix.map((m) => m.base))) {
+                for (const h of opts.sizesFor ? opts.sizesFor(b) : []) {
+                    if (h > MICRO_GRAMS && !cand.has(`${b}||${h}`)) cand.set(`${b}||${h}`, { base: b, hankSize: h, share: 0 });
+                }
+            }
+            const options = [...cand.values()];
+            const isMini = (h: number) => h === MINI_GRAMS;
             const counts = new Map<string, number>();
             bins.forEach((b) => b.yarns.forEach((y) => counts.set(`${y.base}||${y.hankSize}`, (counts.get(`${y.base}||${y.hankSize}`) || 0) + y.quantity)));
             const total = () => [...counts.values()].reduce((t, n) => t + n, 0);
+            // Minis of a base already in this colorway's pans (any pan of the pair).
+            const minisUsed = (base: string) => counts.get(`${base}||${MINI_GRAMS}`) || 0;
             const addTo = (bin: (typeof bins)[number], base: string, hankSize: number) => {
                 put(bin.yarns, base, hankSize);
                 put(bin.extra, base, hankSize);
                 bin.grams += hankSize;
                 const k = `${base}||${hankSize}`;
                 counts.set(k, (counts.get(k) || 0) + 1);
-                if (stock.has(k)) stock.set(k, (stock.get(k) || 0) - 1);
                 topUps++;
             };
             for (;;) {
@@ -755,26 +774,48 @@ export function buildRestockPans(
                 if (!bin) break;
                 const gap = capacity - bin.grams;
                 const n = total() + 1;
-                // Look ahead: only pick a size that leaves a gap the colorway's
-                // sold sizes can still fill exactly (no stray micro skeins).
-                const sizes = [...new Set(mix.map((m) => m.hankSize))];
-                const exact = new Array(gap + 1).fill(false);
-                exact[0] = true;
-                for (let g = 1; g <= gap; g++) exact[g] = sizes.some((z) => z <= g && exact[g - z]);
-                const next = mix
-                    .filter((m) => m.hankSize <= gap && exact[gap - m.hankSize])
-                    .map((m) => ({ ...m, deficit: m.share * n - (counts.get(`${m.base}||${m.hankSize}`) || 0) }))
-                    .sort((a, b) => b.deficit - a.deficit || b.hankSize - a.hankSize)[0];
-                if (next) { addTo(bin, next.base, next.hankSize); continue; }
-                // Gap no sold size fits: any spare undyed (non-micro) size that
-                // fits — a base already in the pan first, then the largest.
-                const inPan = new Set(bin.yarns.map((y) => y.base));
-                const spare = [...stock.entries()]
-                    .map(([k, q]) => { const [base, h] = k.split('||'); return { base, hankSize: Number(h), q }; })
-                    .filter((o) => o.q > 0 && o.hankSize > MICRO_GRAMS && o.hankSize <= gap)
-                    .sort((a, b) => Number(inPan.has(b.base)) - Number(inPan.has(a.base)) || b.hankSize - a.hankSize)[0];
-                if (!spare) { bin.grams = capacity; break; } // can't fill exactly; leave it
-                addTo(bin, spare.base, spare.hankSize);
+                // Minis still allowed, per base: ≤ 12 per color/base across the
+                // whole pair — they can all sit in one pan (e.g. 10 + 0).
+                const allow = new Map<string, number>();
+                options.filter((o) => isMini(o.hankSize)).forEach((o) => allow.set(o.base, Math.max(0, MAX_MINIS_PER_COLOR_BASE - minisUsed(o.base))));
+                // Look ahead: can `g` grams be filled exactly with these sizes,
+                // using at most the allowed minis?
+                const memo = new Map<string, boolean>();
+                const reach = (g: number, al: Map<string, number>): boolean => {
+                    if (g === 0) return true;
+                    const key = `${g}|${[...al.values()].join(',')}`;
+                    if (memo.has(key)) return memo.get(key)!;
+                    let ok = false;
+                    for (const o of options) {
+                        if (o.hankSize > g) continue;
+                        if (isMini(o.hankSize)) {
+                            const left = al.get(o.base) || 0;
+                            if (left <= 0) continue;
+                            const al2 = new Map(al); al2.set(o.base, left - 1);
+                            if (reach(g - o.hankSize, al2)) { ok = true; break; }
+                        } else if (reach(g - o.hankSize, al)) { ok = true; break; }
+                    }
+                    memo.set(key, ok);
+                    return ok;
+                };
+                const next = options
+                    .filter((o) => {
+                        if (o.hankSize > gap) return false;
+                        if (!isMini(o.hankSize)) return reach(gap - o.hankSize, allow);
+                        const left = allow.get(o.base) || 0;
+                        if (left <= 0) return false;
+                        const al2 = new Map(allow); al2.set(o.base, left - 1);
+                        return reach(gap - o.hankSize, al2);
+                    })
+                    .map((o) => ({ ...o, deficit: o.share * n - (counts.get(`${o.base}||${o.hankSize}`) || 0) }))
+                    // Sizes this color sells first (by deficit); other catalog
+                    // sizes only when needed, best-selling shop-wide first.
+                    .sort((a, b) => Number(b.share > 0) - Number(a.share > 0)
+                        || b.deficit - a.deficit
+                        || (global.get(`${b.base}||${b.hankSize}`) || 0) - (global.get(`${a.base}||${a.hankSize}`) || 0)
+                        || b.hankSize - a.hankSize)[0];
+                if (!next) { bin.grams = capacity; break; } // can't fill exactly within the rules; leave it
+                addTo(bin, next.base, next.hankSize);
             }
             bins.forEach((b) => { b.grams = b.yarns.reduce((t, y) => t + y.hankSize * y.quantity, 0); });
         }
@@ -856,6 +897,8 @@ export function planRestock(input: RestockPlanInput) {
             capacity: PAN_GRAMS,
             fill: input.fill,
             mix: (cw) => salesMix(cw, input.inWindow, input.units),
+            globalMix: salesMix('', input.inWindow, input.units),
+            sizesFor: (b) => (ctx.catalog.find((x) => x.myName === b)?.sizes || []).map((z) => Number(z.amount)).filter((n) => n > 0),
             stock: free,
         });
         const pans = [...built.pans, ...labPans];
