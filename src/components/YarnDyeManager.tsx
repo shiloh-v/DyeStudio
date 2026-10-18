@@ -354,6 +354,10 @@ export function YarnDyeManager() {
                         inventory={inventory} 
                         batches={batches} 
                         sales={sales} 
+                        kits={kits}
+                        settings={settings}
+                        dyeSessions={dyeSessions}
+                        setActiveTab={setActiveTab}
                     />
                 )}
                 {activeTab === 'calendar' && (
@@ -363,7 +367,7 @@ export function YarnDyeManager() {
                     />
                 )}
                 {activeTab === 'recipes' && (
-                    <Recipes recipes={recipes} saveRecipes={saveRecipes} settings={settings} inventory={inventory} />
+                    <Recipes recipes={recipes} saveRecipes={saveRecipes} settings={settings} inventory={inventory} sales={sales} batches={batches} kits={kits} dyeSessions={dyeSessions} />
                 )}
                 {activeTab === 'colorlab' && (
                     <ColorLab colorSketches={colorSketches} saveColorSketches={saveColorSketches} settings={settings} inventory={inventory} recipes={recipes} saveRecipes={saveRecipes} />
@@ -407,7 +411,7 @@ export function YarnDyeManager() {
                     <DyeCatalog settings={settings} saveSettings={saveSettings} />
                 )}
                 {activeTab === 'inventory' && (
-                    <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} />
+                    <Inventory inventory={inventory} saveInventory={saveInventory} settings={settings} sales={sales} batches={batches} recipes={recipes} kits={kits} dyeSessions={dyeSessions} setActiveTab={setActiveTab} />
                 )}
                 {activeTab === 'pipeline' && (
                     <Pipeline 
@@ -436,6 +440,7 @@ export function YarnDyeManager() {
                         kits={kits}
                         settings={settings}
                         saveSettings={saveSettings}
+                        inventory={inventory}
                         dyeSessions={dyeSessions}
                         saveDyeSessions={saveDyeSessions}
                         setActiveTab={setActiveTab}

@@ -1,11 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog } from '../lib/dialog';
 import { unitList } from '../lib/units';
 import { recipeDyeCost } from '../lib/dyeCost';
 import type { Recipe } from '../types';
+import { demandSummary } from '../lib/demandSummary';
+import { byColorway } from '../lib/demand';
 
-export function Recipes({ recipes, saveRecipes, settings, inventory }) {
+export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [], batches = [], kits = [], dyeSessions = [] }) {
+    // Shopify sales per colorway (window set on the Demand tab) for card badges + sorting.
+    const demand = useMemo(() => {
+        const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions });
+        if (!D.lines.length) return null;
+        const recent = byColorway(D.inWindow);
+        const rank = new Map(recent.map((a, i) => [a.colorway, i + 1]));
+        const recentUnits = new Map(recent.map((a) => [a.colorway, a.units]));
+        const allTime = new Map(byColorway(D.units).map((a) => [a.colorway, a.units]));
+        const low = new Map<string, number>();
+        D.suggestions.forEach((s) => low.set(s.colorway!, Math.min(low.get(s.colorway!) ?? Infinity, s.weeksLeft)));
+        return { label: D.win.label.toLowerCase(), rank, recentUnits, allTime, low };
+    }, [sales, batches, recipes, kits, settings, inventory, dyeSessions]);
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -218,6 +232,10 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                 return a.name.localeCompare(b.name);
             } else if (sortBy === 'colorType') {
                 return a.colorType.localeCompare(b.colorType);
+            } else if (sortBy === 'sales' && demand) {
+                return (demand.recentUnits.get(b.name) || 0) - (demand.recentUnits.get(a.name) || 0)
+                    || (demand.allTime.get(b.name) || 0) - (demand.allTime.get(a.name) || 0)
+                    || a.name.localeCompare(b.name);
             }
             return 0;
         });
@@ -272,6 +290,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                     >
                         <option value="name">Colorway Name</option>
                         <option value="colorType">Color Type</option>
+                        {demand && <option value="sales">Best selling (Shopify)</option>}
                     </select>
                 </div>
             </div>
@@ -709,6 +728,18 @@ export function Recipes({ recipes, saveRecipes, settings, inventory }) {
                                     <p className="text-xs font-semibold text-teal-600 mb-1">{recipe.recipeId}</p>
                                 )}
                                 <h3 className="text-lg font-semibold text-gray-900">{recipe.name}</h3>
+                                {demand && (demand.allTime.get(recipe.name) || 0) > 0 && (
+                                    <div className="flex gap-2 items-center mt-1 flex-wrap text-xs">
+                                        <span className="bg-teal-50 text-teal-700 rounded px-1.5 py-0.5 font-medium" title={`Shopify sales: ${demand.recentUnits.get(recipe.name) || 0} skeins in the last ${demand.label}, ${demand.allTime.get(recipe.name)} all time`}>
+                                            🛍️ {demand.rank.has(recipe.name) ? `#${demand.rank.get(recipe.name)} · ` : ''}{demand.recentUnits.get(recipe.name) || 0} sold · {demand.label}
+                                        </span>
+                                        {demand.low.has(recipe.name) && (
+                                            <span className={`rounded px-1.5 py-0.5 font-medium ${demand.low.get(recipe.name) < 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`} title="On the Demand tab's Dye next list">
+                                                🧪 Dye soon · {demand.low.get(recipe.name).toFixed(1)} wk left
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex gap-2 items-center mt-1 flex-wrap">
                                     <p className="text-xs text-teal-600 font-medium">{recipe.yarnWeight}g</p>
                                     <span className="text-gray-400">•</span>

@@ -7,34 +7,23 @@ import {
     type SaleLine,
 } from '../lib/shopify';
 import {
-    makeContext, resolveName, isResolved, normText, allUnits, windowUnits, byColorway, byBase,
-    byCombo, lastMonths, monthlyUnits, computeSupply, dyeNext, costLookup, buildRestockPans,
+    makeContext, resolveName, isResolved, normText, byColorway, byBase,
+    byCombo, lastMonths, monthlyUnits, buildRestockPans,
     comboLabel, daysAgo, type ShopifyMapping, type Suggestion,
 } from '../lib/demand';
+import { DEMAND_WINDOWS, demandPrefs, demandSummary } from '../lib/demandSummary';
 
-const WINDOWS: { label: string; days: number | null }[] = [
-    { label: '30 days', days: 30 },
-    { label: '90 days', days: 90 },
-    { label: '6 months', days: 182 },
-    { label: '12 months', days: 365 },
-    { label: 'All time', days: null },
-];
 
 const money = (n: number) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
-// Per-viewer UI preferences (window, target cover) — conveniences only.
-const pref = {
-    get: (k: string, d: any) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-    set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
-};
 
-export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, dyeSessions, saveDyeSessions, setActiveTab }) {
+export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, setActiveTab }) {
     const today = DateUtils.getTodayEST();
     const [schemaOk, setSchemaOk] = useState<boolean | null>(null);
     const [busy, setBusy] = useState(false);
-    const [windowIdx, setWindowIdx] = useState<number>(() => pref.get('demand_window', 1));
-    const [targetWeeks, setTargetWeeks] = useState<number>(() => pref.get('demand_target_weeks', 8));
+    const [windowIdx, setWindowIdx] = useState<number>(() => demandPrefs.windowIdx());
+    const [targetWeeks, setTargetWeeks] = useState<number>(() => demandPrefs.targetWeeks());
     const [rankBy, setRankBy] = useState<'colorway' | 'base' | 'combo'>('colorway');
     const [showAllRank, setShowAllRank] = useState(false);
     const [trendColorway, setTrendColorway] = useState('');
@@ -44,28 +33,18 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const invInput = useRef<HTMLInputElement>(null);
 
     useEffect(() => { salesSchemaReady().then(setSchemaOk); }, []);
-    useEffect(() => { pref.set('demand_window', windowIdx); }, [windowIdx]);
-    useEffect(() => { pref.set('demand_target_weeks', targetWeeks); }, [targetWeeks]);
+    useEffect(() => { demandPrefs.set('demand_window', windowIdx); }, [windowIdx]);
+    useEffect(() => { demandPrefs.set('demand_target_weeks', targetWeeks); }, [targetWeeks]);
 
     const allLines: SaleLine[] = useMemo(() => (sales || []).filter((s) => s.lineKey), [sales]);
-    const ctx = useMemo(() => makeContext(recipes, kits, settings), [recipes, kits, settings]);
-    // Only Celestial Dyeworks lines (import drops others; this also hides any saved earlier).
-    const lines: SaleLine[] = useMemo(() => allLines.filter((l) => isOwnBrand(l.vendor, l.productTitle || l.lineName)), [allLines]);
-    const snapshot = settings?.shopifyInventory || null;
-    const win = WINDOWS[windowIdx] || WINDOWS[1];
-
-    const units = useMemo(() => allUnits(lines, ctx), [lines, ctx]);
-    const firstDate = useMemo(() => lines.reduce((m, l) => (!m || l.orderDate < m ? l.orderDate : m), ''), [lines]);
-    // "All time" velocity spans from the first imported order.
-    const windowDays = win.days || Math.max(7, Math.round((Date.parse(today) - Date.parse(firstDate || today)) / 86400000) + 1);
-    const inWindow = useMemo(() => windowUnits(units, today, win.days), [units, today, win.days]);
-
-    const getCost = useMemo(() => costLookup(batches, ctx), [batches, ctx]);
-    const supply = useMemo(() => computeSupply(batches, units, ctx, snapshot), [batches, units, ctx, snapshot]);
-    const suggestions = useMemo(
-        () => dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks),
-        [inWindow, windowDays, supply, targetWeeks]
+    // Shared with Dashboard / Inventory / Recipes so every tab shows the same numbers.
+    const D = useMemo(
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, windowIdx, targetWeeks, today }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions, windowIdx, targetWeeks, today]
     );
+    const { ctx, lines, units, firstDate, windowDays, inWindow, getCost, supply, suggestions, yarnOrder, toBuy, yarnOrderCost } = D;
+    const snapshot = settings?.shopifyInventory || null;
+    const win = D.win;
 
     // Distinct line names → resolution, for the mapper + "needs review" count.
     const distinct = useMemo(() => {
@@ -253,7 +232,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                 <>
                     {/* Window */}
                     <div className="flex flex-wrap items-center gap-2">
-                        {WINDOWS.map((w, i) => (
+                        {DEMAND_WINDOWS.map((w, i) => (
                             <button key={w.label} onClick={() => setWindowIdx(i)}
                                 className={`px-3 py-1.5 rounded-full text-sm font-medium ${i === windowIdx ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}>
                                 {w.label}
@@ -306,7 +285,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                                                 <th className="py-2 pr-4">Colorway · base</th>
                                                 <th className="py-2 pr-4 text-right">Sold / wk</th>
                                                 <th className="py-2 pr-4 text-right">On hand</th>
-                                                <th className="py-2 pr-4 text-right">In pipeline</th>
+                                                <th className="py-2 pr-4 text-right" title="In the Pipeline (dyeing/drying/ready) or in a planned dye session">Coming</th>
                                                 <th className="py-2 pr-4 text-right">Weeks left</th>
                                                 <th className="py-2 text-right">Dye</th>
                                             </tr>
@@ -348,6 +327,9 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                             </>
                         )}
                     </div>
+
+                    {/* Yarn to order */}
+                    <YarnToOrder rows={yarnOrder} toBuy={toBuy} total={yarnOrderCost} targetWeeks={targetWeeks} />
 
                     {/* Best sellers */}
                     <div className="bg-white rounded-lg card-shadow p-6">
@@ -649,6 +631,82 @@ function Mapper({ rows, recipes, kits, settings, saveSettings, onClose }) {
                     <button onClick={save} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">Save mappings</button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+/** Undyed yarn to buy, rounded to supplier packs, grouped by supplier. */
+function YarnToOrder({ rows, toBuy, total, targetWeeks }) {
+    const [showCovered, setShowCovered] = useState(false);
+    const covered = rows.filter((r) => r.short === 0);
+    const bySupplier = new Map<string, typeof toBuy>();
+    toBuy.forEach((r) => {
+        const k = r.supplier || 'Supplier not set';
+        if (!bySupplier.has(k)) bySupplier.set(k, []);
+        bySupplier.get(k).push(r);
+    });
+    const label = (r) => `${r.base} ${r.hankSize}g`;
+    const copy = async () => {
+        const text = [...bySupplier.entries()].map(([sup, rs]) =>
+            `${sup}\n` + rs.map((r) => `  ${r.packs} × ${label(r)}${r.packSize > 1 ? ` (${r.packSize}-pack)` : ''}${r.sku ? ` — SKU ${r.sku}` : ''}${r.packPrice != null ? ` — ${money(r.cost)}` : ''}`).join('\n')
+        ).join('\n\n');
+        try { await navigator.clipboard.writeText(text); toast('Order list copied.', 'success'); }
+        catch { toast('Could not copy — select the list and copy it manually.', 'error'); }
+    };
+    const Row = ({ r }) => (
+        <tr className="border-b border-gray-100">
+            <td className="py-2 pr-4"><span className="font-medium text-gray-900">{label(r)}</span>{r.sku && <span className="text-xs text-gray-500"> · SKU {r.sku}</span>}</td>
+            <td className="py-2 pr-4 text-right tabular-nums">{r.forDyeNext || '—'}</td>
+            <td className="py-2 pr-4 text-right tabular-nums">{r.forPlanned || '—'}</td>
+            <td className="py-2 pr-4 text-right tabular-nums">{r.keep || '—'}</td>
+            <td className="py-2 pr-4 text-right tabular-nums">{r.have}</td>
+            <td className="py-2 pr-4 text-right tabular-nums font-semibold">{r.short ? `${r.packs} × ${r.packSize}` : '✓'}</td>
+            <td className="py-2 text-right tabular-nums">{r.short && r.packPrice != null ? money(r.cost) : r.short ? '—' : ''}</td>
+        </tr>
+    );
+    const head = (
+        <thead>
+            <tr className="text-left text-gray-500 border-b">
+                <th className="py-2 pr-4">Base · size</th>
+                <th className="py-2 pr-4 text-right" title="Skeins the Dye next suggestions need">Dye next</th>
+                <th className="py-2 pr-4 text-right" title="Skeins your planned dye sessions need">Planned</th>
+                <th className="py-2 pr-4 text-right" title="Low-stock minimum set on the Inventory item">Keep</th>
+                <th className="py-2 pr-4 text-right" title="Undyed skeins in Inventory">Have</th>
+                <th className="py-2 pr-4 text-right">Order (packs)</th>
+                <th className="py-2 text-right">Cost</th>
+            </tr>
+        </thead>
+    );
+    return (
+        <div className="bg-white rounded-lg card-shadow p-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-1">
+                <h3 className="text-lg font-semibold">🧶 Yarn to order</h3>
+                {toBuy.length > 0 && <button onClick={copy} className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium">📋 Copy order list</button>}
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+                Undyed skeins for the Dye next list ({targetWeeks}-week target) and your planned sessions, plus each item's low-stock minimum, minus what's in Inventory. Rounded up to the pack sizes in Yarn Bases.
+            </p>
+            {rows.length === 0 ? <p className="text-sm text-gray-600">Nothing to dye yet, so no yarn needed.</p> : (
+                <>
+                    {toBuy.length === 0 ? <p className="text-sm text-gray-600 mb-2">You have enough undyed yarn for everything above. 🎉</p> : (
+                        [...bySupplier.entries()].map(([sup, rs]) => (
+                            <div key={sup} className="mb-4">
+                                <div className="text-sm font-semibold text-gray-700 mb-1">{sup}</div>
+                                <div className="overflow-x-auto"><table className="w-full text-sm">{head}<tbody>{rs.map((r) => <Row key={r.base + r.hankSize} r={r} />)}</tbody></table></div>
+                            </div>
+                        ))
+                    )}
+                    {toBuy.length > 0 && <div className="text-right text-sm text-gray-700">Estimated total: <strong>{money(total)}</strong> <span className="text-gray-500">(before shipping)</span></div>}
+                    {covered.length > 0 && (
+                        <div className="mt-3">
+                            <button onClick={() => setShowCovered(!showCovered)} className="text-sm text-teal-700 hover:underline">
+                                {showCovered ? 'Hide' : 'Show'} {covered.length} base{covered.length === 1 ? '' : 's'} already covered
+                            </button>
+                            {showCovered && <div className="overflow-x-auto mt-2"><table className="w-full text-sm">{head}<tbody>{covered.map((r) => <Row key={r.base + r.hankSize} r={r} />)}</tbody></table></div>}
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }
