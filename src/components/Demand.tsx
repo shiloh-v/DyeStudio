@@ -8,7 +8,7 @@ import {
 } from '../lib/shopify';
 import {
     makeContext, resolveName, isResolved, normText, byColorway, byBase,
-    byCombo, lastMonths, monthlyUnits, PAN_GRAMS,
+    byCombo, lastMonths, monthlyUnits, PAN_GRAMS, LAB_TESTS_PER_BATCH,
     comboLabel, daysAgo, type ShopifyMapping, type Suggestion,
 } from '../lib/demand';
 import { DEMAND_WINDOWS, demandPrefs, demandSummary, type PlanEdits } from '../lib/demandSummary';
@@ -169,7 +169,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const planAnyway = () => setEdits((e) => ({
         ...e,
         forceBatch: true,
-        labTests: (e.labTests || []).length ? e.labTests : D.labCandidates.filter((c) => !c.tested).slice(0, 4).map((c) => String(c.sketch.id)),
+        labTests: (e.labTests || []).length ? e.labTests : D.labCandidates.filter((c) => !c.tested).slice(0, LAB_TESTS_PER_BATCH).map((c) => String(c.sketch.id)),
     }));
     const edited = edits.removed.length > 0 || edits.added.length > 0 || labIds.length > 0 || !!edits.forceBatch;
     const resetPlan = () => {
@@ -788,7 +788,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                     <button onClick={planAnyway} className="mt-3 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium">
                         🧪 Plan a batch anyway
                     </button>
-                    <p className="text-xs text-gray-500 mt-2">Starts with up to 4 untested Color Lab sketches, fills the rest with the colorways that have the fewest weeks of stock, plus the gradient tray.</p>
+                    <p className="text-xs text-gray-500 mt-2">Starts with 2 untested Color Lab sketches (each a Nova Fingering pan + a Luna DK pan), fills the rest with the colorways that have the fewest weeks of stock, plus the gradient tray.</p>
                     {edited && <button onClick={resetPlan} className="mt-2 text-teal-700 hover:underline">Reset plan</button>}
                 </div>
             ) : (
@@ -848,7 +848,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                 </select>
                 <button disabled={!addPick} onClick={() => { addColorway(addPick); setAddPick(''); }} className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-40">+ Add</button>
                 <select value={labPick} onChange={(e) => setLabPick(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm max-w-[16rem]">
-                    <option value="">Add a Color Lab test…</option>
+                    <option value="">Add a Color Lab test (max 2 per batch)…</option>
                     {labCandidates.filter((c) => !labIds.includes(String(c.sketch.id))).map((c) => (
                         <option key={c.sketch.id} value={String(c.sketch.id)}>{c.name}{c.tested ? ' (tested before)' : ''}</option>
                     ))}
