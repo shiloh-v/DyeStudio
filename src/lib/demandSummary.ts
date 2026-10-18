@@ -132,13 +132,10 @@ export function demandSummary(input: DemandInput) {
     const planBeyond = plan.batches.length - planInHorizon;
     const projectedBatches = Math.max(0, horizonBatches - upcomingSessions - plan.batches.length);
     const traysLeft = Math.max(0, plan.gradientDyes.length - plan.batches.length);
-    // Yarn to order = plan batches in the window (pans + trays) + skeins to add
-    // to already-planned sessions + those sessions themselves (+ projected).
+    // Yarn to order = plan batches in the window (pans + trays) + the
+    // already-planned sessions (+ projected). Leftovers for colors that are
+    // already scheduled wait for a later batch and are ordered then.
     const planYarn = plannedSkeins(plan.batches.slice(0, planInHorizon).map((pans) => ({ pans })), ctx).byBaseSize;
-    for (const a of plan.adjust) {
-        const k = `${a.base}||${a.hankSize}`;
-        planYarn.set(k, (planYarn.get(k) || 0) + a.qty);
-    }
     const defaultMix = salesMix('', inWindow, units).filter((m) => !isSpecialtyBase(m.base, ctx.catalog));
     const projected = projectedBatchYarn(projectedBatches, Math.min(projectedBatches, traysLeft), defaultMix, gradientTrayYarn(input.dyeSessions || [], ctx));
     const yarnOrder = yarnToOrder(
