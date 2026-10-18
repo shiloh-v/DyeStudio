@@ -646,7 +646,7 @@ function Mapper({ rows, recipes, kits, settings, saveSettings, onClose }) {
                                     {kind === 'colorway' && (
                                         <select value={m.recipeId ?? ''} onChange={(e) => set(r.key, { recipeId: e.target.value ? Number(e.target.value) : undefined })} className="border border-gray-300 rounded px-2 py-1 text-sm max-w-[14rem]">
                                             <option value="">Choose colorway…</option>
-                                            {sortedRecipes.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                                            {sortedRecipes.map((x) => <option key={x.id} value={x.id}>{x.name}{x.retired ? ' (retired)' : ''}</option>)}
                                         </select>
                                     )}
                                     {kind === 'kit' && (
@@ -790,7 +790,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
         const found: string[] = String(p.notes || '').match(/\+(\d+)×/g) || [];
         return t + found.reduce((n: number, m: string) => n + parseInt(m.slice(1)), 0);
     }, 0);
-    const options = [...recipes].map((r) => r.name).filter((n) => n && !planColorways.includes(n)).sort((a, b) => a.localeCompare(b));
+    const options = [...recipes].filter((r) => !r.retired).map((r) => r.name).filter((n) => n && !planColorways.includes(n)).sort((a, b) => a.localeCompare(b));
     return (
         <div className="bg-white rounded-lg card-shadow p-6">
             <div className="flex flex-wrap justify-between items-center gap-3 mb-1">

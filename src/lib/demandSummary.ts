@@ -91,7 +91,10 @@ export function demandSummary(input: DemandInput) {
         const k = comboKey(u.colorway, u.base, u.hankSize);
         if (!lastSale.has(k) || u.date > lastSale.get(k)!) lastSale.set(k, u.date);
     }
-    const suggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale);
+    // Retired colors keep their sales history but are never suggested.
+    const retired = new Set((input.recipes || []).filter((r: any) => r?.retired).map((r: any) => r.name));
+    const suggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale)
+        .filter((s) => !retired.has(s.colorway!));
 
     // The restock plan: built automatically from dye-next, then the user's edits.
     const edits = input.planEdits || demandPrefs.planEdits();

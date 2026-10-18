@@ -14,6 +14,7 @@ import type { Batch, Kit, Recipe, Settings, YarnBase } from '../types';
 import { canonicalYarnRef, matchesYarnBase } from './yarnMatch';
 import { isStocked } from './batches';
 import { isCountable, isOwnBrand, lineRevenue, type SaleLine, type InventorySnapshot } from './shopify';
+import { findRecipeByName, recipeNameList, isRetired } from './recipeMatch';
 
 export interface ShopifyMapping {
     kind?: 'colorway' | 'kit' | 'ignore';
@@ -138,7 +139,8 @@ export function resolveName(name: string, ctx: DemandContext): Resolved {
         // Longest recipe or kit name contained in the text wins.
         let bestLen = 0;
         for (const r of ctx.recipes) {
-            for (const n of recipeNames(r.name)) {
+            // Current name, old names (renames), and quoted nicknames of each.
+            for (const n of recipeNameList(r).flatMap((x) => recipeNames(x))) {
                 if (n.length > bestLen && containsPhrase(key, n)) {
                     bestLen = n.length;
                     out = { kind: 'colorway', recipeId: r.id, colorway: r.name };
@@ -219,7 +221,7 @@ export function unitsForLine(line: SaleLine, ctx: DemandContext, resolveCache?: 
         if (!perKit) return [];
         return colors.map((c: any) => {
             const each = Number(c.quantity) || 1;
-            const recipe = ctx.recipes.find((x) => normText(x.name) === normText(c.colorwayName));
+            const recipe = findRecipeByName(ctx.recipes, c.colorwayName);
             const baseRef = c.baseYarn || kit?.baseYarn || '';
             const base = canonicalYarnRef(baseRef, ctx.catalog);
             const entry = ctx.catalog.find((b) => b.myName === base);
@@ -776,7 +778,7 @@ export function buildRestockPans(
     }
     let seq = 0;
     byColor.forEach((items, colorway) => {
-        const recipe = recipes.find((r) => r.name === colorway) || recipes.find((r) => Number(r.id) === Number(items[0].recipeId));
+        const recipe = findRecipeByName(recipes, colorway) || recipes.find((r) => Number(r.id) === Number(items[0].recipeId));
         // Skeins sales call for, per base/size — raised to the size's minimum
         // and capped at its maximum (SIZE_BOUNDS).
         const need = new Map<string, { base: string; hankSize: number; need: number }>();
@@ -1011,8 +1013,9 @@ export function planRestock(input: RestockPlanInput) {
         return (r?.name || p.colorway) === c;
     }));
     const adjust: { colorway: string; sessionName: string; date: string; base: string; hankSize: number; qty: number; soldOut?: boolean }[] = [];
+    const retiredNames = new Set(recipes.filter(isRetired).map((r) => r.name));
     const chosen = input.suggestions
-        .filter((s) => s.colorway && !removed.has(s.colorway))
+        .filter((s) => s.colorway && !removed.has(s.colorway) && !retiredNames.has(s.colorway))
         .filter((s) => {
             const sess = sessionFor(s.colorway!);
             if (!sess) return true;
@@ -1026,7 +1029,7 @@ export function planRestock(input: RestockPlanInput) {
             ? { colorway: s.colorway!, recipeId: s.recipeId, base: '', hankSize: 0, qty: 0 }
             : { colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest });
     const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
-    const asEmpty = (c: string) => ({ colorway: c, recipeId: recipes.find((r) => r.name === c)?.id, base: '', hankSize: 0, qty: 0 });
+    const asEmpty = (c: string) => ({ colorway: c, recipeId: findRecipeByName(recipes, c)?.id, base: '', hankSize: 0, qty: 0 });
     // Color Lab tests: a pair per sketch — one Nova Fingering pan, one Luna DK
     // pan, each 5 minis + 50s or fulls (whichever that base sells more of).
     const labByName = new Map<string, any>();
@@ -1096,7 +1099,7 @@ export function planRestock(input: RestockPlanInput) {
             };
             const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
             extras = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
-                .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c))
+                .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c && !isRetired(r)))
                 .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0))
                 .slice(0, freeRacks);
             if (extras.length) result = build([...base, ...extras.map(asEmpty)]);
