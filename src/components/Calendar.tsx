@@ -93,8 +93,11 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                         const cycleInfo = [];
                         
                         dyeSessions.forEach(session => {
-                            // Show all sessions, including archived ones
-                            
+                            // Show all sessions, including archived ones.
+                            // Undated drafts aren't on the calendar (and would
+                            // make an Invalid Date that throws below).
+                            if (!session.date) return;
+
                             const sessionDate = new Date(session.date + 'T12:00:00');
                             const prepDate = new Date(sessionDate);
                             prepDate.setDate(prepDate.getDate() - 1);

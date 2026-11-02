@@ -130,6 +130,7 @@ export interface Batch {
   profit?: number;         // projected: salePrice - totalCost
   profitMargin?: number;   // projected: profit / salePrice
   soldDate?: string;       // date the batch was stocked (kept name for back-compat)
+  notesUsedAt?: string | null; // ISO timestamp: batchNotes were reviewed/used before stocking; cleared when the notes are edited
   lastMovedAt?: string;    // ISO timestamp stamped on creation and on every status change; drives Pipeline column ordering (newest on top)
   [key: string]: any;
 }

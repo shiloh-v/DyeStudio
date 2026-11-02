@@ -115,6 +115,50 @@ async function upsertWithRetry(key: CollectionKey, items: Row[]): Promise<boolea
   return false;
 }
 
+/**
+ * snake_case -> camelCase on read (preserved verbatim). Also used to restore
+ * raw-row backups written by scripts/backup.mjs.
+ */
+export function fromDbShape(key: CollectionKey, rows: Row[]): Row[] {
+  let resultData = rows;
+
+  if (key === 'color_sketches') {
+    resultData = resultData.map((item) => ({
+      ...item,
+      colorId: item.color_id,
+      customName: item.custom_name,
+      yarnWeight: item.yarn_weight,
+      baseColors: item.base_colors,
+      experimentNotes: item.experiment_notes || '',
+    }));
+  }
+  if (key === 'recipes') {
+    resultData = resultData.map((item) => ({ ...item, recipeId: item.recipe_id }));
+  }
+  if (key === 'batches') {
+    resultData = resultData.map((item) => ({
+      ...item,
+      batchId: item.batch_id || '',
+      batchNotes: item.batch_notes || '',
+      experimentNotes: item.experiment_notes || '',
+      colorSketch: item.color_sketch || null,
+      lastMovedAt: item.last_moved_at || null,
+    }));
+  }
+  if (key === 'kits') {
+    resultData = resultData.map((item) => ({
+      ...item,
+      bundleId: item.bundle_id || '',
+      bundleType: item.bundle_type || '',
+      baseYarn: item.base_yarn || '',
+    }));
+  }
+  if (key === 'dye_sessions') {
+    resultData = resultData.map((item) => ({ ...item, sessionId: item.session_id || '' }));
+  }
+  return resultData;
+}
+
 // PostgREST caps every response at 1000 rows (Supabase default max-rows), so a
 // plain select silently truncates big tables — and a truncated load followed by
 // a save would DELETE the missing rows. Page through with .range() instead.
@@ -139,73 +183,35 @@ async function selectAll(key: CollectionKey, columns: string, userId: string): P
 const UPSERT_CHUNK = 500;
 
 export const StorageManager = {
+  // Throws on any failure. A failed load must never look like an empty table:
+  // set() deletes every row missing from the saved array, so saving after a
+  // silently-empty load would wipe the real data.
   async get(key: CollectionKey | 'settings'): Promise<any> {
-    try {
-      const userId = await getUserId();
-      if (!userId) return key === 'settings' ? null : [];
-      if (key === 'settings') {
-        const { data, error } = await supabase
-          .from('settings')
-          .select('settings_data')
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (error) {
-          console.error('Error fetching settings:', error);
-          return null;
-        }
-        return data?.settings_data || null;
-      }
-
-      const { data, error } = await selectAll(key, '*', userId);
+    const userId = await getUserId();
+    if (!userId) throw new Error(`Not signed in (loading ${key})`);
+    if (key === 'settings') {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('settings_data')
+        .eq('user_id', userId)
+        .maybeSingle();
       if (error) {
-        console.error(`Error fetching ${key}:`, error.message, error);
-        return [];
+        console.error('Error fetching settings:', error);
+        throw new Error(`Could not load settings: ${error.message}`);
       }
-
-      let resultData: Row[] = data || [];
-
-      // snake_case -> camelCase on read (preserved verbatim).
-      if (key === 'color_sketches') {
-        resultData = resultData.map((item) => ({
-          ...item,
-          colorId: item.color_id,
-          customName: item.custom_name,
-          yarnWeight: item.yarn_weight,
-          baseColors: item.base_colors,
-          experimentNotes: item.experiment_notes || '',
-        }));
-      }
-      if (key === 'recipes') {
-        resultData = resultData.map((item) => ({ ...item, recipeId: item.recipe_id }));
-      }
-      if (key === 'batches') {
-        resultData = resultData.map((item) => ({
-          ...item,
-          batchId: item.batch_id || '',
-          batchNotes: item.batch_notes || '',
-          experimentNotes: item.experiment_notes || '',
-          colorSketch: item.color_sketch || null,
-          lastMovedAt: item.last_moved_at || null,
-        }));
-      }
-      if (key === 'kits') {
-        resultData = resultData.map((item) => ({
-          ...item,
-          bundleId: item.bundle_id || '',
-          bundleType: item.bundle_type || '',
-          baseYarn: item.base_yarn || '',
-        }));
-      }
-      if (key === 'dye_sessions') {
-        resultData = resultData.map((item) => ({ ...item, sessionId: item.session_id || '' }));
-      }
-
-      console.log(`Fetched ${key}:`, resultData?.length || 0, 'items');
-      return resultData;
-    } catch (error) {
-      console.error(`Exception in get(${key}):`, error);
-      return key === 'settings' ? null : [];
+      return data?.settings_data || null;
     }
+
+    const { data, error } = await selectAll(key, '*', userId);
+    if (error) {
+      console.error(`Error fetching ${key}:`, error.message, error);
+      throw new Error(`Could not load ${key}: ${error.message}`);
+    }
+
+    const resultData = fromDbShape(key, data || []);
+
+    console.log(`Fetched ${key}:`, resultData?.length || 0, 'items');
+    return resultData;
   },
 
   async set(key: CollectionKey | 'settings', value: any): Promise<boolean> {
@@ -243,9 +249,10 @@ export const StorageManager = {
       const { data: existing, error: exErr } = await selectAll(key, 'id', userId);
 
       if (exErr) {
-        // The upsert already succeeded; a failed diff just leaves stale rows
-        // (no data loss). Surface it but don't fail the save.
+        // The upsert succeeded but removals didn't happen, so deleted items
+        // would reappear on reload. Report failure so the caller can say so.
         console.error(`Could not compute removals for ${key}:`, exErr.message);
+        return false;
       } else {
         const removedIds = (existing || [])
           .map((r: Row) => Number(r.id))
@@ -258,7 +265,10 @@ export const StorageManager = {
             .delete()
             .eq('user_id', userId)
             .in('id', chunk);
-          if (delErr) console.error(`Error deleting removed ${key} rows:`, delErr.message);
+          if (delErr) {
+            console.error(`Error deleting removed ${key} rows:`, delErr.message);
+            return false;
+          }
         }
         if (removedIds.length > 0) console.log(`Removed ${removedIds.length} ${key} row(s)`);
       }
