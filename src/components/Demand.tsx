@@ -807,8 +807,26 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                 </label>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, plus a gradient tray while dyes still need one. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
+                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, at most 2 yarn combos (base + size, e.g. Nova Fingering 20g + Luna DK 50g) per batch, plus a gradient tray while dyes still need one. Pans are listed in dye order, lightest to darkest. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
             </p>
+            {plan.unplanned?.length > 0 && (
+                <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
+                    <div className="font-semibold text-amber-900 mb-1">⚠️ Not planned — nothing to fill the pans with</div>
+                    <p className="text-amber-900 mb-2">
+                        {edits.fill
+                            ? "These colors have no sales mix or catalog sizes on a default base to fill a pair with, so they weren't given pans. Add their yarn by hand in Dye Sessions after creating the drafts."
+                            : 'With "Fill pans to 300g" off, these colors have no sized demand to put in a pair. Turn fill on, or add their yarn by hand in Dye Sessions.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {plan.unplanned.map((c) => (
+                            <span key={c} className="inline-flex items-center gap-1 bg-white border border-amber-200 rounded px-2 py-1 text-amber-900">
+                                {c}
+                                <button type="button" onClick={() => removeColorway(c)} className="ml-1 px-1.5 text-amber-700 hover:text-amber-900" aria-label={`Remove ${c} from the plan`}>✕</button>
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
             {plan.adjust.length > 0 && (
                 <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
                     <div className="font-semibold text-amber-900 mb-1">⏭ Already scheduled — dye more in a later batch</div>
@@ -846,10 +864,11 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                         });
                         const tray = batch.find((p) => p.type === 'gradientTray');
                         const racks = Math.ceil(groups.reduce((t, g) => t + g.length, 0) / 2) + (tray ? 1 : 0);
+                        const combos = [...new Set(groups.flat().flatMap((p) => (p.yarns || []).map((y: any) => `${y.base} ${y.hankSize}g`)))];
                         return (
                             <div key={bi} className="border border-gray-200 rounded-lg">
                                 <div className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-t-lg text-sm">
-                                    <span className="font-semibold text-gray-800">Batch {bi + 1}</span>
+                                    <span className="font-semibold text-gray-800">Batch {bi + 1}{combos.length > 0 && <span className="font-normal text-gray-500"> · {combos.join(' + ')}</span>}</span>
                                     <span className="text-gray-500">{racks} of 9 racks</span>
                                 </div>
                                 <ul className="list-none m-0 p-0 divide-y divide-gray-100">
