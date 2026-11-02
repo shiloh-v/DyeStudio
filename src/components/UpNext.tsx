@@ -758,7 +758,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             return out;
         };
 
-        const updatedInventory = [...inventory];
+        const updatedInventory = inventory.map(item => ({ ...item })); // copies: edited below before saving
         let citricGrams = 0, vinegarMl = 0;
 
         selectedSession.pans.forEach(pan => {

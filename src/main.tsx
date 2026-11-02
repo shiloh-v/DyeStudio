@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 import { IS_PREVIEW } from './lib/preview';
 
@@ -12,7 +13,9 @@ if (savedTheme === 'dark' || (!savedTheme && IS_PREVIEW)) {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>
+  <ErrorBoundary>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </ErrorBoundary>
 );

@@ -15,6 +15,7 @@ import { canonicalYarnRef, matchesYarnBase } from './yarnMatch';
 import { isStocked } from './batches';
 import { isCountable, isOwnBrand, lineRevenue, type SaleLine, type InventorySnapshot } from './shopify';
 import { findRecipeByName, recipeNameList, isRetired } from './recipeMatch';
+import { sortPansLightToDark } from './darkness';
 
 export interface ShopifyMapping {
     kind?: 'colorway' | 'kit' | 'ignore';
@@ -695,54 +696,159 @@ export function gradientTrayYarn(sessions: any[], ctx: DemandContext): { base: s
         : { base: 'Nova Fingering', hankSize: 10 };
 }
 
-/**
- * Group a restock's pans into batches: whole colorway pairs only, up to
- * 8 colorways + a gradient tray while dyes still need gradients, else 9.
- */
 export const LAB_TESTS_PER_BATCH = 2;
+/**
+ * Most yarn combos (base + size, e.g. Nova Fingering 20g) one batch uses —
+ * fewer kinds of skein to pull, soak and weigh. Gradient-tray micros don't count.
+ */
+export const MAX_COMBOS_PER_BATCH = 2;
+const comboOf = (base: string, hankSize: number) => `${base}||${hankSize}`;
+export const comboName = (k: string) => { const [b, h] = k.split('||'); return `${b} ${h}g`; };
 
-export function planBatches(pans: any[], gradientDyes: string[], trayYarn: { base: string; hankSize: number }) {
-    const groups: any[][] = [];
-    for (const p of pans) {
-        const g = groups[groups.length - 1];
-        if (g && g[0].colorway === p.colorway && g[0].type === p.type) g.push(p); else groups.push([p]);
-    }
-    const dyes = [...gradientDyes];
-    type B = { items: any[]; racks: number; tray: any | null; labs: number };
-    const batches: B[] = [];
-    const open = (): B => {
-        const tray = dyes.length ? {
-            id: Date.now() + batches.length / 100 + 0.5,
-            type: 'gradientTray',
-            gradientDye: dyes.shift(),
-            gradientYarnBase: trayYarn.base,
-            gradientHankSize: trayYarn.hankSize,
-            depths: GRADIENT_DEPTHS,
-        } : null;
-        const b: B = { items: [], racks: tray ? 1 : 0, tray, labs: 0 };
-        batches.push(b);
-        return b;
+/** One colorway as the batch planner sees it: combo → weight (sales need first, then its sales mix). */
+export interface BatchCandidate { colorway: string; weights: Map<string, number>; needBased: boolean }
+export interface BatchSlot { combos: string[]; colorways: string[]; labs: string[]; tray: boolean; cap: number }
+
+const topCombo = (c: BatchCandidate) => [...c.weights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+const coverage = (c: BatchCandidate, combos: string[]) => {
+    const tot = [...c.weights.values()].reduce((t, v) => t + v, 0);
+    return tot > 0 ? combos.reduce((t, k) => t + (c.weights.get(k) || 0), 0) / tot : 0;
+};
+// A color with sales need goes where its most-needed combo is dyed; one planned
+// purely by mix can go wherever any of its combos is.
+const fitsCombos = (c: BatchCandidate, combos: string[]) =>
+    c.needBased ? combos.includes(topCombo(c)!) : coverage(c, combos) > 0;
+
+export interface AssignOptions {
+    allCombos?: string[];                     // every default-base combo (to complete a batch's pair)
+    feasible?: (combos: string[]) => boolean; // can these combos alone fill a 2 × 300g pair?
+    prior?: (combo: string) => number;        // shop-wide share (tie-break for a combo nobody here needs)
+}
+
+/**
+ * Decide which colorways go in which batch, at most MAX_COMBOS_PER_BATCH
+ * combos each (and only sets that can fill a pair within SIZE_BOUNDS). Color
+ * Lab tests (fixed to `labCombos`) open the first batches, LAB_TESTS_PER_BATCH
+ * at a time. Otherwise each batch starts with the most urgent colorway left
+ * and picks the second combo that lets the most of the next urgent colorways
+ * join, then fills up in urgency order. `fillers` (next best sellers) only take
+ * free racks in batches that already exist — or open one when there are none
+ * and `forceBatch`. Batches get a gradient tray (1 rack) while `trays` lasts.
+ */
+export function assignBatches(
+    colorways: BatchCandidate[],
+    fillers: BatchCandidate[],
+    labs: string[],
+    labCombos: string[],
+    trays: number,
+    forceBatch = false,
+    o: AssignOptions = {}
+): { slots: BatchSlot[]; noCombo: string[] } {
+    const feasible = o.feasible || (() => true);
+    const prior = o.prior || (() => 0);
+    const slots: BatchSlot[] = [];
+    const noCombo = colorways.filter((c) => !topCombo(c)).map((c) => c.colorway);
+    let rest = colorways.filter((c) => topCombo(c));
+    const labsLeft = [...labs];
+    const open = (): BatchSlot => {
+        const tray = slots.length < trays;
+        const s: BatchSlot = { combos: [], colorways: [], labs: [], tray, cap: RACKS_PER_BATCH - (tray ? 1 : 0) };
+        slots.push(s);
+        return s;
     };
-    // Color Lab tests claim their slots first: LAB_TESTS_PER_BATCH per batch.
-    const labGroups = groups.filter((g) => g[0].type === 'colorLab');
-    labGroups.forEach((g, i) => {
-        const b = batches[Math.floor(i / LAB_TESTS_PER_BATCH)] || open();
-        b.items.push(...g);
-        b.racks += Math.ceil(g.length / 2);
-        b.labs++;
-    });
-    // Colorways then fill batches in order (first batch with room).
-    for (const g of groups.filter((x) => x[0].type !== 'colorLab')) {
-        const need = Math.ceil(g.length / 2);
-        const b = batches.find((x) => x.racks + need <= RACKS_PER_BATCH) || open();
-        b.items.push(...g);
-        b.racks += need;
+    const used = (s: BatchSlot) => s.colorways.length + s.labs.length;
+    // Fill a batch's free racks from `pool` (in urgency order), adding combos
+    // up to MAX_COMBOS_PER_BATCH: whichever let the most of the pool join.
+    const fillSlot = (s: BatchSlot, pool: BatchCandidate[]) => {
+        const room = s.cap - used(s);
+        if (room <= 0) return [];
+        const pick = (combos: string[]) => {
+            const out: BatchCandidate[] = [];
+            for (const c of pool) { if (out.length >= room) break; if (fitsCombos(c, combos)) out.push(c); }
+            return out;
+        };
+        const extra = [...new Set([...pool.flatMap((c) => [...c.weights.keys()]), ...(o.allCombos || [])])].filter((k) => !s.combos.includes(k));
+        const free = MAX_COMBOS_PER_BATCH - s.combos.length;
+        const adds: string[][] = [[]];
+        if (free >= 1) extra.forEach((k) => adds.push([k]));
+        if (free >= 2) extra.forEach((x, i) => extra.slice(i + 1).forEach((y) => adds.push([x, y])));
+        let best: { combos: string[]; got: BatchCandidate[]; score: number } | null = null;
+        for (const add of adds) {
+            const combos = [...s.combos, ...add];
+            // A set that can't make a full pair on its own never wins (unless nothing can).
+            const ok = feasible(combos);
+            const got = pick(combos);
+            // Fewer combos win a tie; then the combo the shop sells more of.
+            const score = (ok ? 1e6 : 0) + got.reduce((t, c) => t + coverage(c, combos), 0)
+                + add.reduce((t, k) => t + prior(k), 0) * 1e-4 - add.length * 1e-6;
+            if (!best || score > best.score + 1e-9) best = { combos, got, score };
+        }
+        s.combos = best!.combos;
+        s.colorways.push(...best!.got.map((c) => c.colorway));
+        return best!.got;
+    };
+    while (rest.length || labsLeft.length) {
+        const s = open();
+        if (labsLeft.length) {
+            s.labs = labsLeft.splice(0, LAB_TESTS_PER_BATCH);
+            s.combos = [...labCombos];
+        } else {
+            // The most urgent colorway left always makes this batch.
+            s.combos = [topCombo(rest[0])!];
+        }
+        const got = fillSlot(s, rest);
+        rest = rest.filter((c) => !got.includes(c));
     }
-    // Within a batch: colorways, then Color Lab tests, tray last.
-    return batches.map((b) => {
-        const ordered = [...b.items.filter((p) => p.type !== 'colorLab'), ...b.items.filter((p) => p.type === 'colorLab')];
-        return b.tray ? [...ordered, b.tray] : ordered;
-    });
+    if (!slots.length && forceBatch && fillers.length) open();
+    let pool = fillers.filter((f) => topCombo(f));
+    for (const s of slots) {
+        const got = fillSlot(s, pool);
+        pool = pool.filter((c) => !got.includes(c));
+    }
+    return { slots: slots.filter((s) => used(s) > 0), noCombo };
+}
+
+/** A gradient tray (1 rack) for the next dye still needing a gradient. */
+function gradientTray(dye: string, trayYarn: { base: string; hankSize: number }, n: number) {
+    return {
+        id: Date.now() + n / 100 + 0.5,
+        type: 'gradientTray',
+        gradientDye: dye,
+        gradientYarnBase: trayYarn.base,
+        gradientHankSize: trayYarn.hankSize,
+        depths: GRADIENT_DEPTHS,
+    };
+}
+
+/** The colorway's mix used to fill its pans: default bases, no micros, top 4 (else the shop's mix). */
+function fillMix(colorway: string, opts: RestockOptions, special: (b: string) => boolean) {
+    const clean = (m: { base: string; hankSize: number; share: number }[]) =>
+        m.filter((x) => x.hankSize > MICRO_GRAMS && x.share > 0 && !special(x.base));
+    let mix = clean(opts.mix ? opts.mix(colorway) : []);
+    if (!mix.length) mix = clean(opts.globalMix || []);
+    return mix.slice(0, 4);
+}
+
+/** How strongly a colorway's restock leans on each combo (BatchCandidate). */
+export function batchCandidate(
+    colorway: string,
+    items: { base: string; hankSize: number; qty: number }[],
+    opts: RestockOptions
+): BatchCandidate {
+    const special = opts.isSpecialty || (() => false);
+    const weights = new Map<string, number>();
+    let needBased = false;
+    for (const it of items) {
+        if (!it.base || !it.hankSize || it.qty <= 0 || special(it.base)) continue;
+        needBased = true;
+        const k = comboOf(it.base, it.hankSize);
+        weights.set(k, (weights.get(k) || 0) + 1000 * it.qty * it.hankSize);
+    }
+    if (opts.fill || !needBased) for (const m of fillMix(colorway, opts, special)) {
+        const k = comboOf(m.base, m.hankSize);
+        weights.set(k, (weights.get(k) || 0) + m.share);
+    }
+    return { colorway, weights, needBased };
 }
 
 export interface RestockOptions {
@@ -753,6 +859,7 @@ export interface RestockOptions {
     sizesFor?: (base: string) => number[];                                             // catalog sizes of a base
     stock?: Map<string, number>;                         // (unused; kept for callers)
     isSpecialty?: (base: string) => boolean;             // bases never used automatically
+    combos?: string[];                                   // only these base||size combos (the batch's two)
 }
 
 /**
@@ -770,6 +877,7 @@ export function buildRestockPans(
     const capacity = opts.capacity || PAN_GRAMS;
     const special = opts.isSpecialty || (() => false);
     const pans: any[] = [];
+    const unplanned: string[] = [];
     let topUps = 0;
     const byColor = new Map<string, typeof picks>();
     for (const p of picks) {
@@ -782,8 +890,10 @@ export function buildRestockPans(
         // Skeins sales call for, per base/size — raised to the size's minimum
         // and capped at its maximum (SIZE_BOUNDS).
         const need = new Map<string, { base: string; hankSize: number; need: number }>();
+        const otherCombo: string[] = [];
         for (const it of items) {
             if (!it.base || !it.hankSize || it.qty <= 0 || special(it.base)) continue;
+            if (opts.combos && !opts.combos.includes(comboOf(it.base, it.hankSize))) { otherCombo.push(`${it.base} ${it.hankSize}g`); continue; }
             const k = `${it.base}||${it.hankSize}`;
             const v = need.get(k) || { base: it.base, hankSize: it.hankSize, need: 0 };
             v.need += it.qty;
@@ -809,13 +919,10 @@ export function buildRestockPans(
         let split: { key: string; base: string; hankSize: number; n: number }[][] | null = null;
         if (opts.fill) {
             // Candidates: what this color sells (default bases only), plus the
-            // other catalog sizes of those bases. A color that only sells on a
+            // other catalog sizes of those bases — or, in a batch limited to
+            // two combos, exactly those two. A color that only sells on a
             // specialty base is planned in the shop's overall default-base mix.
-            const clean = (m: { base: string; hankSize: number; share: number }[]) =>
-                m.filter((x) => x.hankSize > MICRO_GRAMS && x.share > 0 && !special(x.base));
-            let mix = clean(opts.mix ? opts.mix(colorway) : []);
-            if (!mix.length) mix = clean(opts.globalMix || []);
-            mix = mix.slice(0, 4);
+            const mix = fillMix(colorway, opts, special).filter((m) => !opts.combos || opts.combos.includes(comboOf(m.base, m.hankSize)));
             const cand = new Map<string, { key: string; base: string; hankSize: number; share: number; need: number; global: number }>();
             const globalShare = new Map((opts.globalMix || []).map((m) => [`${m.base}||${m.hankSize}`, m.share]));
             const add = (base: string, hankSize: number, share: number) => {
@@ -824,8 +931,12 @@ export function buildRestockPans(
             };
             need.forEach((v) => add(v.base, v.hankSize, 0));
             mix.forEach((m) => { const c = cand.get(`${m.base}||${m.hankSize}`); if (c) c.share = m.share; else add(m.base, m.hankSize, m.share); });
-            for (const b of new Set([...cand.values()].map((c) => c.base))) {
-                for (const h of opts.sizesFor ? opts.sizesFor(b) : []) if (h > MICRO_GRAMS) add(b, h, 0);
+            if (opts.combos) {
+                for (const k of opts.combos) { const [b, h] = k.split('||'); add(b, Number(h), 0); }
+            } else {
+                for (const b of new Set([...cand.values()].map((c) => c.base))) {
+                    for (const h of opts.sizesFor ? opts.sizesFor(b) : []) if (h > MICRO_GRAMS) add(b, h, 0);
+                }
             }
             const options = [...cand.values()];
             // Try with every kept need; if no combination fits, drop the least
@@ -857,6 +968,13 @@ export function buildRestockPans(
             split = bins.map((b) => [...b.list.values()]);
             counts = new Map([...need.values()].map((v) => [`${v.base}||${v.hankSize}`, v.need]));
         }
+        // Nothing to put in the pans (no sales mix / no sizes to fill with, or
+        // fill is off for a color with no sized demand): don't emit an empty
+        // pair that would still take a rack — report it instead.
+        if (!split.some((pan) => pan.some((y) => y.n > 0))) {
+            unplanned.push(colorway);
+            return;
+        }
         // Extra skeins beyond what sales called for (pan notes).
         const extraLeft = new Map<string, number>();
         counts!.forEach((c, k) => {
@@ -885,11 +1003,12 @@ export function buildRestockPans(
                 notes: [
                     extra.length ? `Topped up to fill the pan (extra stock): ${extra.join(', ')}` : '',
                     deferred.length ? `Not this batch (one pair per color): ${deferred.join(', ')}` : '',
+                    otherCombo.length ? `Not this batch (only ${opts.combos!.map(comboName).join(' + ')} this batch): ${otherCombo.join(', ')}` : '',
                 ].filter(Boolean).join(' · '),
             });
         }
     });
-    return { pans, topUps };
+    return { pans, topUps, unplanned };
 }
 
 /**
@@ -1034,8 +1153,8 @@ export function planRestock(input: RestockPlanInput) {
             : { colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest });
     const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
     const asEmpty = (c: string) => ({ colorway: c, recipeId: findRecipeByName(recipes, c)?.id, base: '', hankSize: 0, qty: 0 });
-    // Color Lab tests: a pair per sketch — one Nova Fingering pan, one Luna DK
-    // pan, each 5 minis + 50s or fulls (whichever that base sells more of).
+    // Color Lab tests: a pair per sketch (LAB_TEST_PANS — Nova Fingering 20g +
+    // Luna DK 50g only).
     const labByName = new Map<string, any>();
     for (const k of input.labTests || []) {
         const name = String(k.customName || k.colorId || 'Color Lab test');
@@ -1053,63 +1172,102 @@ export function planRestock(input: RestockPlanInput) {
     chosen.forEach((c) => take(`${c.base}||${c.hankSize}`, c.qty));
     take(`${trayYarn.base}||${trayYarn.hankSize}`, Math.min(gradientDyes.length, Math.ceil(new Set(base.map((c) => c.colorway)).size / 8)) * 10);
 
-    const build = (list: typeof base) => {
-        const built = buildRestockPans(list, recipes, {
-            capacity: PAN_GRAMS,
-            fill: input.fill,
-            mix: (cw) => salesMix(cw, input.inWindow, input.units),
-            globalMix: salesMix('', input.inWindow, input.units),
-            sizesFor: (b) => (ctx.catalog.find((x) => x.myName === b)?.sizes || []).map((z) => Number(z.amount)).filter((n) => n > 0),
-            isSpecialty: (b) => isSpecialtyBase(b, ctx.catalog),
-            stock: free,
-        });
-        const pans = [...built.pans, ...labPans];
-        return { ...built, pans, batches: planBatches(pans, gradientDyes, trayYarn) };
+    const restockOpts: RestockOptions = {
+        capacity: PAN_GRAMS,
+        fill: input.fill,
+        mix: (cw) => salesMix(cw, input.inWindow, input.units),
+        globalMix: salesMix('', input.inWindow, input.units),
+        sizesFor: (b) => (ctx.catalog.find((x) => x.myName === b)?.sizes || []).map((z) => Number(z.amount)).filter((n) => n > 0),
+        isSpecialty: (b) => isSpecialtyBase(b, ctx.catalog),
+        stock: free,
     };
-    let result = build(base);
-    let extras: string[] = [];
-    if (input.fill && (result.batches.length || input.forceBatch)) {
-        // Free racks across ALL batches (an empty forced batch still gets its tray).
-        const isPan = (p: any) => p.type === 'pan' || p.type === 'colorLab';
-        const usedIn = (b: any[]) => Math.ceil(b.filter(isPan).length / 2) + b.filter((p) => p.type === 'gradientTray').length;
-        const freeRacks = result.batches.length
-            ? result.batches.reduce((t, b) => t + RACKS_PER_BATCH - usedIn(b), 0)
-            : RACKS_PER_BATCH - (gradientDyes.length ? 1 : 0);
-        if (freeRacks > 0) {
-            // Skip colorways already in this plan or in an upcoming session.
-            const taken = new Set([...base.map((c) => c.colorway), ...labByName.keys()]);
-            for (const sess of input.sessions || []) {
-                if (sess?.archived) continue;
-                for (const p of sess.pans || []) {
-                    const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
-                    if (r?.name || p.colorway) taken.add(r?.name || p.colorway);
-                }
+    const itemsOf = (list: typeof base, c: string) => list.filter((x) => x.colorway === c);
+    const candidates = (list: typeof base) =>
+        [...new Set(list.map((c) => c.colorway))].map((c) => batchCandidate(c, itemsOf(list, c), restockOpts));
+
+    // Next best sellers to fill free racks (fill on): best sellers with the
+    // FEWEST weeks of stock first — skeins on hand, in the Pipeline (incl.
+    // Ready for Labels) or planned all count, so a color waiting on labels
+    // goes to the back of the line. Skips colorways already in this plan or
+    // in an upcoming session.
+    let fillerNames: string[] = [];
+    if (input.fill) {
+        const taken = new Set([...base.map((c) => c.colorway), ...labByName.keys()]);
+        for (const sess of input.sessions || []) {
+            if (sess?.archived) continue;
+            for (const p of sess.pans || []) {
+                const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
+                if (r?.name || p.colorway) taken.add(r?.name || p.colorway);
             }
-            // Best sellers with the FEWEST weeks of stock first — skeins on
-            // hand, in the Pipeline (incl. Ready for Labels) or planned all
-            // count, so a color waiting on labels goes to the back of the line.
-            const weeks = Math.max(1, (input.windowDays || 90) / 7);
-            const sold = new Map(byColorway(input.inWindow).map((a) => [a.colorway!, a.units]));
-            const have = new Map<string, number>();
-            const addHave = (m?: Map<string, number>) => m?.forEach((q, k) => {
-                const cw = k.split('||')[0];
-                have.set(cw, (have.get(cw) || 0) + q);
-            });
-            addHave(input.supply?.onHand);
-            addHave(input.supply?.coming);
-            const cover = (c: string) => {
-                const perWeek = (sold.get(c) || 0) / weeks;
-                return perWeek > 0 ? (have.get(c) || 0) / perWeek : Infinity;
-            };
-            const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
-            extras = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
-                .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c && !isRetired(r)))
-                .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0))
-                .slice(0, freeRacks);
-            if (extras.length) result = build([...base, ...extras.map(asEmpty)]);
         }
+        const weeks = Math.max(1, (input.windowDays || 90) / 7);
+        const sold = new Map(byColorway(input.inWindow).map((a) => [a.colorway!, a.units]));
+        const have = new Map<string, number>();
+        const addHave = (m?: Map<string, number>) => m?.forEach((q, k) => {
+            const cw = k.split('||')[0];
+            have.set(cw, (have.get(cw) || 0) + q);
+        });
+        addHave(input.supply?.onHand);
+        addHave(input.supply?.coming);
+        const cover = (c: string) => {
+            const perWeek = (sold.get(c) || 0) / weeks;
+            return perWeek > 0 ? (have.get(c) || 0) / perWeek : Infinity;
+        };
+        const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
+        fillerNames = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
+            .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c && !isRetired(r)))
+            .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0));
     }
-    return { ...result, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
+
+    // Which colorways share a batch (≤ MAX_COMBOS_PER_BATCH combos each), then
+    // each batch's pans built on just its combos, in dye order (light → dark).
+    const labCombos = [...new Set(labPans.flatMap((p) => p.yarns.map((y: any) => comboOf(y.base, y.hankSize))))];
+    const allCombos = ctx.catalog
+        .filter((b) => b.myName && !isSpecialtyBase(b.myName, ctx.catalog))
+        .flatMap((b) => restockOpts.sizesFor!(b.myName!).filter((h) => h > MICRO_GRAMS).map((h) => comboOf(b.myName!, h)));
+    const feasibleCache = new Map<string, boolean>();
+    const feasible = (combos: string[]) => {
+        const key = [...combos].sort().join('|');
+        if (!feasibleCache.has(key)) {
+            const opts = combos.map((k) => { const [b, h] = k.split('||'); return { key: k, base: b, hankSize: Number(h), share: 1, need: 0 }; });
+            feasibleCache.set(key, !!solvePairCounts(opts, 2, PAN_GRAMS));
+        }
+        return feasibleCache.get(key)!;
+    };
+    const priorShare = new Map((restockOpts.globalMix || []).map((m) => [comboOf(m.base, m.hankSize), m.share]));
+    const { slots, noCombo } = assignBatches(
+        candidates(base),
+        candidates(fillerNames.map(asEmpty)),
+        [...labByName.keys()],
+        labCombos,
+        gradientDyes.length,
+        !!input.forceBatch,
+        { allCombos, feasible, prior: (k) => priorShare.get(k) || 0 }
+    );
+    const fillerSet = new Set(fillerNames);
+    const pans: any[] = [];
+    const unplanned: string[] = [...noCombo];
+    const extras: string[] = [];
+    let topUps = 0;
+    const stamp = Date.now();
+    let seq = 0;
+    const dyes = [...gradientDyes];
+    const batches = slots.map((slot, bi) => {
+        const list = slot.colorways.flatMap((c) => (fillerSet.has(c) ? [asEmpty(c)] : itemsOf(base, c)));
+        const built = buildRestockPans(list, recipes, { ...restockOpts, combos: slot.combos });
+        topUps += built.topUps;
+        built.unplanned.forEach((c) => { if (!fillerSet.has(c)) unplanned.push(c); });
+        extras.push(...slot.colorways.filter((c) => fillerSet.has(c) && built.pans.some((p) => p.colorway === c)));
+        const load = [
+            ...built.pans.map((p) => ({ ...p, id: stamp + seq++ / 1000 })),
+            ...labPans.filter((p) => slot.labs.includes(p.colorway)),
+        ];
+        pans.push(...load);
+        return { slot, load: sortPansLightToDark(load, recipes, input.inventory) };
+    }).filter((b) => b.load.length)
+        // Gradient trays go last in the oven order, one per batch while dyes need one.
+        .map((b, bi) => (b.slot.tray && dyes.length ? [...b.load, gradientTray(dyes.shift()!, trayYarn, bi)] : b.load));
+    return { pans, topUps, unplanned, batches, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
 }
 
 
@@ -1177,15 +1335,15 @@ export function labTestCandidates(sketches: any[], sessions: any[], recipes: Rec
 
 
 /**
- * The studio's Color Lab test pair (fixed recipe): each pan mixes both test
- * bases — minis of one, the larger size of the other — so every test shows the
- * color on Nova Fingering AND Luna DK in both pans.
- *   Pan 1: 5 × Nova Fingering 20g + 4 × Luna DK 50g
- *   Pan 2: 5 × Luna DK 20g + 2 × Nova Fingering 100g
+ * The studio's Color Lab test pair (fixed recipe): just two combos, so a test
+ * batch stays within MAX_COMBOS_PER_BATCH — and still shows the color on Nova
+ * Fingering AND Luna DK.
+ *   Pan 1: 10 × Nova Fingering 20g + 2 × Luna DK 50g
+ *   Pan 2: 6 × Luna DK 50g
  */
 export const LAB_TEST_PANS: { base: string; hankSize: number; quantity: number }[][] = [
-    [{ base: 'Nova Fingering', hankSize: 20, quantity: 5 }, { base: 'Luna DK', hankSize: 50, quantity: 4 }],
-    [{ base: 'Luna DK', hankSize: 20, quantity: 5 }, { base: 'Nova Fingering', hankSize: 100, quantity: 2 }],
+    [{ base: 'Nova Fingering', hankSize: 20, quantity: 10 }, { base: 'Luna DK', hankSize: 50, quantity: 2 }],
+    [{ base: 'Luna DK', hankSize: 50, quantity: 6 }],
 ];
 
 /** A Color Lab test pair for a sketch (see LAB_TEST_PANS). */

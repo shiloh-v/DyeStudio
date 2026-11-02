@@ -138,8 +138,11 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
     const editRecipe = (recipe) => {
+        // Deep copy: the form edits ingredient/solution rows in place, and a
+        // shallow copy would change the saved recipe too (visible after Cancel,
+        // and written by the next unrelated save).
+        let recipeData = structuredClone(recipe);
         // Convert legacy single photo to photos array
-        let recipeData = { ...recipe };
         if (!recipeData.photos || !Array.isArray(recipeData.photos)) {
             recipeData.photos = [];
             if (recipeData.photo) {
@@ -741,174 +744,9 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
 
             {/* Recipe List */}
             <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {filteredRecipes.map(recipe => {
-                    const [expanded, setExpanded] = React.useState(false);
-                    const [photoIndex, setPhotoIndex] = React.useState(0);
-                    
-                    // Build photos array from legacy or new format
-                    const photos = recipe.photos && recipe.photos.length > 0 
-                        ? recipe.photos 
-                        : recipe.photo 
-                            ? [{ id: 1, data: recipe.photo, label: 'Photo' }]
-                            : [];
-                    const currentIdx = Math.min(photoIndex, photos.length - 1);
-                    const dyeCost = recipeDyeCost(recipe, inventory);
-
-                    return (
-                    <div key={recipe.id} className="bg-white rounded-lg card-shadow p-4">
-                        <div className="flex justify-between items-start mb-3">
-                            <div className="flex-1">
-                                {recipe.recipeId && (
-                                    <p className="text-xs font-semibold text-teal-600 mb-1">{recipe.recipeId}</p>
-                                )}
-                                <h3 className="text-lg font-semibold text-gray-900">
-                                    {recipe.name}
-                                    {recipe.retired && <span className="ml-2 align-middle text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-medium">Retired</span>}
-                                </h3>
-                                {recipe.aliases?.length > 0 && <p className="text-xs text-gray-500">formerly {recipe.aliases.join(', ')}</p>}
-                                {demand && (demand.allTime.get(recipe.name) || 0) > 0 && (
-                                    <div className="flex gap-2 items-center mt-1 flex-wrap text-xs">
-                                        <span className="bg-teal-50 text-teal-700 rounded px-1.5 py-0.5 font-medium" title={`Shopify sales: ${demand.recentUnits.get(recipe.name) || 0} skeins in the last ${demand.label}, ${demand.allTime.get(recipe.name)} all time`}>
-                                            🛍️ {demand.rank.has(recipe.name) ? `#${demand.rank.get(recipe.name)} · ` : ''}{demand.recentUnits.get(recipe.name) || 0} sold · {demand.label}
-                                        </span>
-                                        {demand.low.has(recipe.name) && (
-                                            <span className={`rounded px-1.5 py-0.5 font-medium ${demand.low.get(recipe.name) < 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`} title="On the Demand tab's Dye next list">
-                                                🧪 Dye soon · {demand.low.get(recipe.name).toFixed(1)} wk left
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-                                <div className="flex gap-2 items-center mt-1 flex-wrap">
-                                    <p className="text-xs text-teal-600 font-medium">{recipe.yarnWeight}g</p>
-                                    <span className="text-gray-400">•</span>
-                                    <p className="text-xs text-gray-600 capitalize">{recipe.colorType}</p>
-                                    {dyeCost > 0 && (
-                                        <>
-                                            <span className="text-gray-400">•</span>
-                                            <p className="text-xs text-green-700 font-medium" title={`Estimated dye cost to make this recipe at ${recipe.yarnWeight}g`}>
-                                                ~${dyeCost.toFixed(2)} dye
-                                            </p>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex gap-1 flex-shrink-0">
-                                <button
-                                    onClick={() => editRecipe(recipe)}
-                                    className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded text-sm"
-                                >
-                                    ✏️
-                                </button>
-                                <button
-                                    onClick={() => deleteRecipe(recipe.id)}
-                                    className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-sm"
-                                >
-                                    🗑️
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Photo Gallery */}
-                        {photos.length > 0 && (
-                            <div className="mb-3">
-                                <div className="relative">
-                                    <img 
-                                        src={photos[currentIdx].data} 
-                                        alt={photos[currentIdx].label || recipe.name} 
-                                        className="rounded-lg w-full" 
-                                        style={{maxHeight: '200px', objectFit: 'cover'}} 
-                                    />
-                                    {photos.length > 1 && (
-                                        <React.Fragment>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setPhotoIndex(currentIdx > 0 ? currentIdx - 1 : photos.length - 1); }}
-                                                className="absolute left-1 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-opacity-70"
-                                            >◀</button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); setPhotoIndex(currentIdx < photos.length - 1 ? currentIdx + 1 : 0); }}
-                                                className="absolute right-1 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-opacity-70"
-                                            >▶</button>
-                                        </React.Fragment>
-                                    )}
-                                </div>
-                                <div className="flex items-center justify-center gap-1 mt-1.5">
-                                    {photos.length > 1 && photos.map((p, i) => (
-                                        <button
-                                            key={p.id || i}
-                                            onClick={() => setPhotoIndex(i)}
-                                            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentIdx ? 'bg-teal-600' : 'bg-gray-300 hover:bg-gray-400'}`}
-                                        />
-                                    ))}
-                                </div>
-                                {photos[currentIdx].label && photos[currentIdx].label !== 'Photo' && (
-                                    <p className="text-xs text-center text-gray-500 mt-0.5">{photos[currentIdx].label}</p>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Collapsible Ingredients & Instructions */}
-                        <button
-                            onClick={() => setExpanded(!expanded)}
-                            className="w-full text-left text-sm text-teal-600 hover:text-teal-700 font-medium mt-2 mb-2"
-                        >
-                            {expanded ? '▼' : '▶'} {expanded ? 'Hide' : 'Show'} Details
-                        </button>
-
-                        {expanded && (
-                            <div className="space-y-3 text-xs">
-                                {recipe.colorType === 'variegated' && recipe.colorSolutions ? (
-                                    <div>
-                                        <h4 className="font-medium text-gray-700 mb-1">Color Solutions:</h4>
-                                        {recipe.colorSolutions.map((solution, idx) => (
-                                            <div key={idx} className="mb-2 pl-2 border-l-2 border-teal-300">
-                                                <div className="font-medium text-teal-700">{solution.name || `Solution ${idx + 1}`}</div>
-                                                <div className="text-gray-600">Target: {solution.targetMl}ml</div>
-                                                <ul className="space-y-1 mt-1">
-                                                    {solution.dyes.map((dye, dIdx) => (
-                                                        <li key={dIdx} className="text-gray-600">
-                                                            {dye.name}: {dye.amount}{dye.unit}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ))}
-                                        {recipe.totalMl && <div className="text-gray-600 mt-2">Total: {recipe.totalMl}ml</div>}
-                                    </div>
-                                ) : recipe.ingredients && (
-                                    <div>
-                                        <h4 className="font-medium text-gray-700 mb-1">Ingredients:</h4>
-                                        <ul className="space-y-1">
-                                            {recipe.ingredients.map((ing, idx) => (
-                                                <li key={idx} className="text-gray-600">
-                                                    {ing.name}: {ing.amount}{ing.unit}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-
-                                {recipe.instructions && (
-                                    <div>
-                                        <h4 className="font-medium text-gray-700 mb-1">Instructions:</h4>
-                                        <p className="text-gray-600 whitespace-pre-line">{recipe.instructions}</p>
-                                    </div>
-                                )}
-
-                                {recipe.notes && (
-                                    <div>
-                                        <h4 className="font-medium text-gray-700 mb-1">Notes:</h4>
-                                        <p className="text-gray-600">{recipe.notes}</p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <p className="text-xs text-gray-400 pt-2">
-                            Created: {new Date(recipe.created).toLocaleDateString()}
-                        </p>
-                    </div>
-                    );
-                })}
+                {filteredRecipes.map(recipe => (
+                    <RecipeCard key={recipe.id} recipe={recipe} inventory={inventory} demand={demand} onEdit={editRecipe} onDelete={deleteRecipe} />
+                ))}
             </div>
 
             {filteredRecipes.length === 0 && (
@@ -918,6 +756,177 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
                 </div>
             )}
         </div>
+    );
+}
+
+// One recipe card. Its own component so each card's expand/photo state is a
+// real hook keyed by recipe id (hooks inside .map() crash when the list changes).
+function RecipeCard({ recipe, inventory, demand, onEdit, onDelete }) {
+    const [expanded, setExpanded] = useState(false);
+    const [photoIndex, setPhotoIndex] = useState(0);
+    
+    // Build photos array from legacy or new format
+    const photos = recipe.photos && recipe.photos.length > 0 
+        ? recipe.photos 
+        : recipe.photo 
+            ? [{ id: 1, data: recipe.photo, label: 'Photo' }]
+            : [];
+    const currentIdx = Math.min(photoIndex, photos.length - 1);
+    const dyeCost = recipeDyeCost(recipe, inventory);
+
+    return (
+    <div className="bg-white rounded-lg card-shadow p-4">
+        <div className="flex justify-between items-start mb-3">
+            <div className="flex-1">
+                {recipe.recipeId && (
+                    <p className="text-xs font-semibold text-teal-600 mb-1">{recipe.recipeId}</p>
+                )}
+                <h3 className="text-lg font-semibold text-gray-900">
+                    {recipe.name}
+                    {recipe.retired && <span className="ml-2 align-middle text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 font-medium">Retired</span>}
+                </h3>
+                {recipe.aliases?.length > 0 && <p className="text-xs text-gray-500">formerly {recipe.aliases.join(', ')}</p>}
+                {demand && (demand.allTime.get(recipe.name) || 0) > 0 && (
+                    <div className="flex gap-2 items-center mt-1 flex-wrap text-xs">
+                        <span className="bg-teal-50 text-teal-700 rounded px-1.5 py-0.5 font-medium" title={`Shopify sales: ${demand.recentUnits.get(recipe.name) || 0} skeins in the last ${demand.label}, ${demand.allTime.get(recipe.name)} all time`}>
+                            🛍️ {demand.rank.has(recipe.name) ? `#${demand.rank.get(recipe.name)} · ` : ''}{demand.recentUnits.get(recipe.name) || 0} sold · {demand.label}
+                        </span>
+                        {demand.low.has(recipe.name) && (
+                            <span className={`rounded px-1.5 py-0.5 font-medium ${demand.low.get(recipe.name) < 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`} title="On the Demand tab's Dye next list">
+                                🧪 Dye soon · {demand.low.get(recipe.name).toFixed(1)} wk left
+                            </span>
+                        )}
+                    </div>
+                )}
+                <div className="flex gap-2 items-center mt-1 flex-wrap">
+                    <p className="text-xs text-teal-600 font-medium">{recipe.yarnWeight}g</p>
+                    <span className="text-gray-400">•</span>
+                    <p className="text-xs text-gray-600 capitalize">{recipe.colorType}</p>
+                    {dyeCost > 0 && (
+                        <>
+                            <span className="text-gray-400">•</span>
+                            <p className="text-xs text-green-700 font-medium" title={`Estimated dye cost to make this recipe at ${recipe.yarnWeight}g`}>
+                                ~${dyeCost.toFixed(2)} dye
+                            </p>
+                        </>
+                    )}
+                </div>
+            </div>
+            <div className="flex gap-1 flex-shrink-0">
+                <button
+                    onClick={() => onEdit(recipe)}
+                    className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded text-sm"
+                >
+                    ✏️
+                </button>
+                <button
+                    onClick={() => onDelete(recipe.id)}
+                    className="text-red-600 hover:bg-red-50 px-2 py-1 rounded text-sm"
+                >
+                    🗑️
+                </button>
+            </div>
+        </div>
+
+        {/* Photo Gallery */}
+        {photos.length > 0 && (
+            <div className="mb-3">
+                <div className="relative">
+                    <img 
+                        src={photos[currentIdx].data} 
+                        alt={photos[currentIdx].label || recipe.name} 
+                        className="rounded-lg w-full" 
+                        style={{maxHeight: '200px', objectFit: 'cover'}} 
+                    />
+                    {photos.length > 1 && (
+                        <React.Fragment>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setPhotoIndex(currentIdx > 0 ? currentIdx - 1 : photos.length - 1); }}
+                                className="absolute left-1 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-opacity-70"
+                            >◀</button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setPhotoIndex(currentIdx < photos.length - 1 ? currentIdx + 1 : 0); }}
+                                className="absolute right-1 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-opacity-70"
+                            >▶</button>
+                        </React.Fragment>
+                    )}
+                </div>
+                <div className="flex items-center justify-center gap-1 mt-1.5">
+                    {photos.length > 1 && photos.map((p, i) => (
+                        <button
+                            key={p.id || i}
+                            onClick={() => setPhotoIndex(i)}
+                            className={`w-1.5 h-1.5 rounded-full transition-colors ${i === currentIdx ? 'bg-teal-600' : 'bg-gray-300 hover:bg-gray-400'}`}
+                        />
+                    ))}
+                </div>
+                {photos[currentIdx].label && photos[currentIdx].label !== 'Photo' && (
+                    <p className="text-xs text-center text-gray-500 mt-0.5">{photos[currentIdx].label}</p>
+                )}
+            </div>
+        )}
+
+        {/* Collapsible Ingredients & Instructions */}
+        <button
+            onClick={() => setExpanded(!expanded)}
+            className="w-full text-left text-sm text-teal-600 hover:text-teal-700 font-medium mt-2 mb-2"
+        >
+            {expanded ? '▼' : '▶'} {expanded ? 'Hide' : 'Show'} Details
+        </button>
+
+        {expanded && (
+            <div className="space-y-3 text-xs">
+                {recipe.colorType === 'variegated' && recipe.colorSolutions ? (
+                    <div>
+                        <h4 className="font-medium text-gray-700 mb-1">Color Solutions:</h4>
+                        {recipe.colorSolutions.map((solution, idx) => (
+                            <div key={idx} className="mb-2 pl-2 border-l-2 border-teal-300">
+                                <div className="font-medium text-teal-700">{solution.name || `Solution ${idx + 1}`}</div>
+                                <div className="text-gray-600">Target: {solution.targetMl}ml</div>
+                                <ul className="space-y-1 mt-1">
+                                    {solution.dyes.map((dye, dIdx) => (
+                                        <li key={dIdx} className="text-gray-600">
+                                            {dye.name}: {dye.amount}{dye.unit}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                        {recipe.totalMl && <div className="text-gray-600 mt-2">Total: {recipe.totalMl}ml</div>}
+                    </div>
+                ) : recipe.ingredients && (
+                    <div>
+                        <h4 className="font-medium text-gray-700 mb-1">Ingredients:</h4>
+                        <ul className="space-y-1">
+                            {recipe.ingredients.map((ing, idx) => (
+                                <li key={idx} className="text-gray-600">
+                                    {ing.name}: {ing.amount}{ing.unit}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
+                {recipe.instructions && (
+                    <div>
+                        <h4 className="font-medium text-gray-700 mb-1">Instructions:</h4>
+                        <p className="text-gray-600 whitespace-pre-line">{recipe.instructions}</p>
+                    </div>
+                )}
+
+                {recipe.notes && (
+                    <div>
+                        <h4 className="font-medium text-gray-700 mb-1">Notes:</h4>
+                        <p className="text-gray-600">{recipe.notes}</p>
+                    </div>
+                )}
+            </div>
+        )}
+
+        <p className="text-xs text-gray-400 pt-2">
+            Created: {new Date(recipe.created).toLocaleDateString()}
+        </p>
+    </div>
     );
 }
 

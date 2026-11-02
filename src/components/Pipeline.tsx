@@ -55,9 +55,65 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
 
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
+    // Take ball bands and labels out of inventory for batches being stocked.
+    // Only for a batch's FIRST stocking: soldDate is stamped then and never
+    // cleared, so a batch moved back to Ready and re-stocked isn't charged
+    // twice. Works on copies, so state isn't changed before the save.
+    const deductBandsAndLabels = (batchesToStock) => {
+        const fresh = batchesToStock.filter(b => !b.soldDate && b.yarnDetails?.length > 0);
+        if (fresh.length === 0) return;
+        const updatedInventory = inventory.map(item => ({ ...item }));
+        let totalSkeins = 0;
+        fresh.forEach(batch => {
+            batch.yarnDetails.forEach(yarn => {
+                const quantity = parseInt(yarn.quantity || 0) || 0;
+                totalSkeins += quantity;
+                // Ball band that matches this yarn base AND hank size
+                const ballBand = findBallBand(updatedInventory, yarn.base, parseFloat(yarn.hankSize));
+                if (ballBand) {
+                    ballBand.quantity = Math.max(0, parseFloat(ballBand.quantity) - quantity);
+                }
+            });
+        });
+        const labelItem = findLabelItem(updatedInventory);
+        if (labelItem && totalSkeins > 0) {
+            labelItem.quantity = Math.max(0, parseFloat(labelItem.quantity) - totalSkeins);
+        }
+        saveInventory(updatedInventory);
+    };
+
+    // Notes check before the end of the flow: batch notes (observations from
+    // dyeing/drying) have to be used — e.g. carried into the recipe — before a
+    // batch is stocked. Batches already marked "Notes used" pass straight
+    // through; the rest are listed and must be confirmed. Resolves false to
+    // abort the stocking.
+    const hasUnusedNotes = (b) => !!(b.batchNotes || '').trim() && !b.notesUsedAt;
+    const confirmNotesUsed = async (batchesToStock) => {
+        const pending = batchesToStock.filter(hasUnusedNotes);
+        if (pending.length === 0) return true;
+        const list = pending
+            .map(b => `• ${currentColorName(b, recipes)}${b.batchId ? ` (${b.batchId})` : ''}:\n   ${b.batchNotes.trim()}`)
+            .join('\n\n');
+        return confirmDialog({
+            title: 'Use the batch notes first',
+            message: `${pending.length === 1 ? 'This batch has notes' : `${pending.length} batches have notes`} that haven't been marked used:\n\n${list}\n\nHave you used these notes (e.g. updated the recipe)?`,
+            confirmText: 'Notes used — continue',
+            cancelText: 'Not yet',
+        });
+    };
+    // Stamp the notes check on a batch being stocked (it passed confirmNotesUsed).
+    const withNotesUsed = (b, at) => hasUnusedNotes(b) ? { ...b, notesUsedAt: at } : b;
+
+    const markNotesUsed = (id) => {
+        const at = new Date().toISOString();
+        saveBatches(batches.map(b => b.id === id ? { ...b, notesUsedAt: at } : b));
+    };
+
     const updateStatus = async (id, newStatus, oldStatus) => {
         const batch = batches.find(b => b.id === id);
-        
+
+        if (newStatus === 'stocked' && batch && !(await confirmNotesUsed([batch]))) return;
+
         // If stocking, prompt for the expected list price so we can keep projected
         // profit/margin (this is finished inventory, not a realized sale).
         if (newStatus === 'stocked' && batch) {
@@ -90,51 +146,25 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             const pricePerSkein = batch.skeins > 0 ? price / batch.skeins : 0;
             
             // Update batch with stock/pricing info
+            const now = new Date().toISOString();
             const updatedBatch = {
-                ...batch,
+                ...withNotesUsed(batch, now),
                 status: 'stocked',
                 salePrice: price,
                 pricePerSkein: pricePerSkein,
                 profit: profit,
                 profitMargin: price > 0 ? ((profit / price) * 100) : 0,
                 soldDate: DateUtils.getTodayEST(),
-                lastMovedAt: new Date().toISOString(),
+                lastMovedAt: now,
             };
 
-            saveBatches(batches.map(b => b.id === id ? updatedBatch : b));
+            if (!(await saveBatches(batches.map(b => b.id === id ? updatedBatch : b)))) return;
 
             // Show projected profit summary
             toast(`Stocked! List $${price.toFixed(2)} · Cost $${cost.toFixed(2)} · Projected profit $${profit.toFixed(2)} (${updatedBatch.profitMargin.toFixed(1)}%)`, 'success');
-            
+
             // Deduct ball bands and labels if coming from ready
-            if (oldStatus === 'ready' && batch.yarnDetails && batch.yarnDetails.length > 0) {
-                const updatedInventory = [...inventory];
-                
-                // Calculate total skeins
-                const totalSkeins = batch.yarnDetails.reduce((sum, yarn) => 
-                    sum + parseInt(yarn.quantity || 0), 0
-                );
-                
-                batch.yarnDetails.forEach(yarn => {
-                    const quantity = parseInt(yarn.quantity || 0);
-                    const hankSize = parseFloat(yarn.hankSize);
-                    const yarnBase = yarn.base;
-                    
-                    // Find ball band that matches this yarn base AND hank size
-                    const ballBand = findBallBand(updatedInventory, yarnBase, hankSize);
-                    if (ballBand) {
-                        ballBand.quantity = Math.max(0, parseFloat(ballBand.quantity) - quantity);
-                    }
-                });
-                
-                // Deduct labels (total skeins)
-                const labelItem = findLabelItem(updatedInventory);
-                if (labelItem) {
-                    labelItem.quantity = Math.max(0, parseFloat(labelItem.quantity) - totalSkeins);
-                }
-                
-                saveInventory(updatedInventory);
-            }
+            if (oldStatus === 'ready') deductBandsAndLabels([batch]);
             return;
         }
         
@@ -161,6 +191,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
         
         // Special handling for moving to stocked (capture a list price for projections)
         if (toStatus === 'stocked') {
+            if (!(await confirmNotesUsed(batchesToMove))) return;
+
             const totalBatches = batchesToMove.length;
             const totalSkeins = batchesToMove.reduce((sum, b) => sum + (b.skeins || 0), 0);
             const totalCost = batchesToMove.reduce((sum, b) => sum + (b.totalCost || 0), 0);
@@ -216,7 +248,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 const batchMargin = batchPrice > 0 ? ((batchProfit / batchPrice) * 100) : 0;
 
                 return {
-                    ...b,
+                    ...withNotesUsed(b, movedAt),
                     status: 'stocked',
                     salePrice: batchPrice,
                     pricePerSkein: pricePerSkein,
@@ -227,43 +259,11 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                 };
             });
             
-            saveBatches(updatedBatches);
-            
+            if (!(await saveBatches(updatedBatches))) return;
+
             // Deduct ball bands and labels if coming from ready
-            if (fromStatus === 'ready') {
-                const updatedInventory = [...inventory];
-                let totalLabelsUsed = 0;
-                
-                batchesToMove.forEach(batch => {
-                    if (batch.yarnDetails && batch.yarnDetails.length > 0) {
-                        batch.yarnDetails.forEach(yarn => {
-                            const quantity = parseInt(yarn.quantity || 0);
-                            totalLabelsUsed += quantity;
-                            const hankSize = parseFloat(yarn.hankSize);
-                            const yarnBase = yarn.base;
-                            
-                            // Deduct ball bands
-                            const ballBand = updatedInventory.find(item => 
-                                item.category === 'ball band' && 
-                                item.forYarnBase === yarnBase &&
-                                parseFloat(item.hankSize) === hankSize
-                            );
-                            if (ballBand) {
-                                ballBand.quantity = Math.max(0, parseFloat(ballBand.quantity) - quantity);
-                            }
-                        });
-                    }
-                });
-                
-                // Deduct labels (total for all batches)
-                const labelItem = findLabelItem(updatedInventory);
-                if (labelItem && totalLabelsUsed > 0) {
-                    labelItem.quantity = Math.max(0, parseFloat(labelItem.quantity) - totalLabelsUsed);
-                }
-                
-                saveInventory(updatedInventory);
-            }
-            
+            if (fromStatus === 'ready') deductBandsAndLabels(batchesToMove);
+
             toast(`${totalBatches} batches stocked! List $${price.toFixed(2)} · Cost $${totalCost.toFixed(2)} · Projected profit $${profit.toFixed(2)} (${profitMargin.toFixed(1)}%)`, 'success');
             return;
         }
@@ -544,8 +544,9 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                                     const currentNotes = batch.batchNotes || '';
                                                     const newNotes = await promptDialog({ title: 'Batch notes', message: 'Observations during dyeing/drying:', defaultValue: currentNotes });
                                                     if (newNotes !== null && newNotes !== currentNotes) {
+                                                        // Edited notes haven't been used yet — reset the check.
                                                         saveBatches(batches.map(b =>
-                                                            b.id === batch.id ? { ...b, batchNotes: newNotes } : b
+                                                            b.id === batch.id ? { ...b, batchNotes: newNotes, notesUsedAt: null } : b
                                                         ));
                                                     }
                                                 }}
@@ -554,6 +555,20 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                             >
                                                 {batch.batchNotes ? '📝 Edit Notes' : '📝 Add Notes'}
                                             </button>
+                                            {hasUnusedNotes(batch) && !isStocked(batch) && (
+                                                <button
+                                                    onClick={() => markNotesUsed(batch.id)}
+                                                    className="text-xs px-2 py-1 ml-1 bg-amber-50 border border-amber-300 rounded hover:bg-amber-100 text-amber-800"
+                                                    title="Mark these notes as used (e.g. carried into the recipe) — required before stocking"
+                                                >
+                                                    ✓ Notes used
+                                                </button>
+                                            )}
+                                            {batch.batchNotes && batch.notesUsedAt && (
+                                                <span className="text-xs text-green-700 ml-2" title={`Marked used ${new Date(batch.notesUsedAt).toLocaleString()}`}>
+                                                    ✓ Notes used
+                                                </span>
+                                            )}
                                             {batch.batchNotes && (
                                                 <div className="text-xs text-blue-700 mt-1 pl-2 border-l-2 border-blue-300">
                                                     {batch.batchNotes}

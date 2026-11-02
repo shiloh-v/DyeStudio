@@ -74,32 +74,35 @@ export function YarnDyeManager() {
         loadAllData();
     }, []);
 
+    const [loadError, setLoadError] = useState('');
+
     const loadAllData = async () => {
         setLoading(true);
+        setLoadError('');
         try {
-            console.log('Loading data from Supabase...');
-            const recipesData = await StorageManager.get('recipes');
-            const inventoryData = await StorageManager.get('inventory');
-            const batchesData = await StorageManager.get('batches');
-            const salesData = await StorageManager.get('sales');
-            const dyeSessionsData = await StorageManager.get('dye_sessions');
-            const kitsData = await StorageManager.get('kits');
-            const colorSketchesData = await StorageManager.get('color_sketches');
-            const gradientsData = await StorageManager.get('gradients');
-            const settingsData = await StorageManager.get('settings');
-            
-            console.log('Loaded recipes:', recipesData);
-            console.log('Loaded inventory:', inventoryData);
-            console.log('Loaded batches:', batchesData);
-            
-            setRecipes(recipesData || []);
-            setInventory(inventoryData || []);
-            setBatches(batchesData || []);
-            setSales(salesData || []);
-            setDyeSessions(dyeSessionsData || []);
-            setKits(kitsData || []);
-            setColorSketches(colorSketchesData || []);
-            setGradients(gradientsData || []);
+            // Load in parallel. Any failure aborts the whole load: the app is
+            // not shown (so nothing can be saved) until every table loads.
+            const [recipesData, inventoryData, batchesData, salesData, dyeSessionsData, kitsData, colorSketchesData, gradientsData, settingsData] = await Promise.all([
+                StorageManager.get('recipes'),
+                StorageManager.get('inventory'),
+                StorageManager.get('batches'),
+                StorageManager.get('sales'),
+                StorageManager.get('dye_sessions'),
+                StorageManager.get('kits'),
+                StorageManager.get('color_sketches'),
+                StorageManager.get('gradients'),
+                StorageManager.get('settings'),
+            ]);
+
+            setRecipes(recipesData);
+            setInventory(inventoryData);
+            setBatches(batchesData);
+            setSales(salesData);
+            setDyeSessions(dyeSessionsData);
+            setKits(kitsData);
+            setColorSketches(colorSketchesData);
+            setGradients(gradientsData);
+            // null only when no settings row exists yet (a brand-new account).
             setSettings(settingsData || {
                 colorTypes: ['tonal', 'variegated', 'speckled'],
                 inventoryCategories: ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'other'],
@@ -116,102 +119,79 @@ export function YarnDyeManager() {
                     { grams: 10, name: 'Micro skein' }
                 ]
             });
-            console.log('Data loaded successfully!');
         } catch (error) {
             console.error('Error loading data:', error);
+            setLoadError(error?.message || String(error));
         }
         setLoading(false);
     };
 
-    const saveRecipes = async (newRecipes) => {
-        setRecipes(newRecipes);
-        await StorageManager.set('recipes', newRecipes);
+    // Optimistic save: show the change at once, and if the database write
+    // fails, put the previous value back (unless something newer replaced it)
+    // and say so — the UI never shows data that would vanish on reload.
+    const persist = async (key, label, setState, prev, next) => {
+        setState(next);
+        const ok = await StorageManager.set(key, next);
+        if (!ok) {
+            setState((cur) => (cur === next ? prev : cur));
+            toast(`Couldn't save ${label} — your last change was undone. Check your connection and try again.`, 'error');
+        }
+        return ok;
     };
+
+    const saveRecipes = (newRecipes) => persist('recipes', 'recipes', setRecipes, recipes, newRecipes);
 
     const saveInventory = async (newInventory) => {
         // Safety check - don't save if inventory is empty and we previously had items
         if ((!newInventory || newInventory.length === 0) && inventory.length > 0) {
             console.warn('Prevented saving empty inventory - this might be an error');
             if (!(await confirmDialog({ title: 'Clear all inventory?', message: 'You are about to clear all inventory. Are you sure?', confirmText: 'Clear', danger: true }))) {
-                return;
+                return false;
             }
         }
-        setInventory(newInventory);
-        await StorageManager.set('inventory', newInventory);
+        return persist('inventory', 'inventory', setInventory, inventory, newInventory);
     };
 
-    const saveBatches = async (newBatches) => {
-        if (newBatches.length === 0 && batches.length > 0) {
-            console.warn('Attempting to save empty batches when batches exist - this will be blocked by StorageManager');
-        }
-        setBatches(newBatches);
-        const ok = await StorageManager.set('batches', newBatches);
-        // Roll back the optimistic update so the UI never shows batches that
-        // aren't in the database (they'd vanish on reload).
-        if (!ok) setBatches(batches);
-        return ok;
-    };
+    const saveBatches = (newBatches) => persist('batches', 'batches', setBatches, batches, newBatches);
 
-    const saveSales = async (newSales) => {
-        setSales(newSales);
-        const ok = await StorageManager.set('sales', newSales);
-        if (!ok) setSales(sales);
-        return ok;
-    };
+    const saveSales = (newSales) => persist('sales', 'sales', setSales, sales, newSales);
 
-    // Apply a restored backup: update in-memory state, persist every collection
-    // to the database (StorageManager handles the upsert/delete), then reload.
+    // Apply a restored backup. Only collections present in the backup are
+    // written (parseBackup drops missing ones), then the app reloads from the
+    // database so the screen shows exactly what was saved.
     const applyRestore = async (data) => {
-        setRecipes(data.recipes || []);
-        setInventory(data.inventory || []);
-        setBatches(data.batches || []);
-        setSales(data.sales || []);
-        setDyeSessions(data.dyeSessions || []);
-        setKits(data.kits || []);
-        setColorSketches(data.colorSketches || []);
-        setGradients(data.gradients || []);
-        if (data.settings) setSettings(data.settings);
+        const jobs: Array<[string, Promise<boolean>]> = [
+            ['Recipes', 'recipes'], ['Inventory', 'inventory'], ['Batches', 'batches'], ['Sales', 'sales'],
+            ['Dye Sessions', 'dyeSessions'], ['Kits', 'kits'], ['Color Sketches', 'colorSketches'], ['Gradients', 'gradients'],
+        ]
+            .filter(([, k]) => Array.isArray(data[k]))
+            .map(([label, k]) => [label, StorageManager.set(({ dyeSessions: 'dye_sessions', colorSketches: 'color_sketches' }[k] || k) as any, data[k])]);
+        if (data.settings) jobs.push(['Settings', StorageManager.set('settings', data.settings)]);
 
-        await Promise.all([
-            StorageManager.set('recipes', data.recipes || []),
-            StorageManager.set('inventory', data.inventory || []),
-            StorageManager.set('batches', data.batches || []),
-            StorageManager.set('sales', data.sales || []),
-            StorageManager.set('dye_sessions', data.dyeSessions || []),
-            StorageManager.set('kits', data.kits || []),
-            StorageManager.set('color_sketches', data.colorSketches || []),
-            StorageManager.set('gradients', data.gradients || []),
-            StorageManager.set('settings', data.settings || settings),
-        ]);
-
+        const results = await Promise.all(jobs.map(([, p]) => p));
+        const failed = jobs.filter((_, i) => !results[i]).map(([label]) => label);
+        if (failed.length) {
+            await confirmDialog({
+                title: 'Restore partly failed',
+                message: `These didn't restore: ${failed.join(', ')}.\n\nEverything else was restored. The app will reload to show what's saved now — your pre-restore copy is in your downloads.`,
+                confirmText: 'Reload',
+            });
+            window.location.reload();
+            return;
+        }
         toast('Backup restored! Reloading…', 'success');
         setTimeout(() => window.location.reload(), 600);
     };
 
-    const saveDyeSessions = async (newSessions) => {
-        setDyeSessions(newSessions);
-        await StorageManager.set('dye_sessions', newSessions);
-    };
+    const saveDyeSessions = (newSessions) => persist('dye_sessions', 'dye sessions', setDyeSessions, dyeSessions, newSessions);
 
-    const saveKits = async (newKits) => {
-        setKits(newKits);
-        await StorageManager.set('kits', newKits);
-    };
+    const saveKits = (newKits) => persist('kits', 'kits', setKits, kits, newKits);
 
-    const saveColorSketches = async (newSketches) => {
-        setColorSketches(newSketches);
-        await StorageManager.set('color_sketches', newSketches);
-    };
+    const saveColorSketches = (newSketches) => persist('color_sketches', 'Color Lab sketches', setColorSketches, colorSketches, newSketches);
 
-    const saveGradients = async (newGradients) => {
-        setGradients(newGradients);
-        await StorageManager.set('gradients', newGradients);
-    };
+    const saveGradients = (newGradients) => persist('gradients', 'gradients', setGradients, gradients, newGradients);
 
-    const saveSettings = async (newSettings) => {
-        setSettings(newSettings);
-        await StorageManager.set('settings', newSettings);
-    };
+    const saveSettings = (newSettings) => persist('settings', 'settings', setSettings, settings, newSettings);
 
     if (loading) {
         return (
@@ -219,6 +199,23 @@ export function YarnDyeManager() {
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
                     <p className="text-gray-600">Loading your studio...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div className="min-h-screen flex items-center justify-center px-4">
+                <div className="bg-white rounded-lg card-shadow p-6 max-w-md text-center">
+                    <div className="text-4xl mb-2">⚠️</div>
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">Couldn't load your studio</h2>
+                    <p className="text-gray-600 mb-1">Nothing was changed. This is usually a dropped connection.</p>
+                    <p className="text-xs text-gray-400 mb-4 break-words">{loadError}</p>
+                    <div className="flex gap-2 justify-center">
+                        <button onClick={loadAllData} className="bg-teal-600 text-white px-5 py-3 rounded-lg font-medium hover:bg-teal-700">Try again</button>
+                        <button onClick={() => { supabase.auth.signOut(); }} className="px-5 py-3 rounded-lg font-medium text-gray-600 hover:bg-gray-100">Sign out</button>
+                    </div>
                 </div>
             </div>
         );

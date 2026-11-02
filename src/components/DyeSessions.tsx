@@ -7,6 +7,7 @@ import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
 import { labelItems } from '../lib/roleMatch';
+import { sortPansLightToDark } from '../lib/darkness';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -143,6 +144,12 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                 return { ...prev, pans: arrayMove(prev.pans, oldIndex, newIndex) };
             });
         }
+    };
+
+    // Dye order: lightest colorway first, darkest last (trays at the end).
+    const sortLightToDark = () => {
+        setFormData(prev => ({ ...prev, pans: sortPansLightToDark(prev.pans, recipes, inventory, colorSketches) }));
+        toast('Pans sorted lightest → darkest.', 'success');
     };
 
     // Calculate oven capacity (pans count as 1, gradient trays count as 2, dye square trays count as 4)
@@ -1475,9 +1482,21 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                         {/* Pans in Session */}
                         {formData.pans.length > 0 && (
                             <div>
-                                <h4 className="font-semibold text-gray-900 mb-3">
-                                    Pans/Trays in This Session ({formData.pans.length} items, {calculateOvenLoad(formData.pans)}/18 spaces)
-                                </h4>
+                                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                    <h4 className="font-semibold text-gray-900">
+                                        Pans/Trays in This Session ({formData.pans.length} items, {calculateOvenLoad(formData.pans)}/18 spaces)
+                                    </h4>
+                                    {formData.pans.length > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={sortLightToDark}
+                                            className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium"
+                                            title="Dye order: lightest colorway first, darkest last (estimated from each recipe's dyes)"
+                                        >
+                                            ☀️→🌑 Sort light → dark
+                                        </button>
+                                    )}
+                                </div>
                                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePanDragEnd}>
                                 <SortableContext items={formData.pans.map(p => p.id!)} strategy={verticalListSortingStrategy}>
                                 <div className="space-y-2">
