@@ -697,6 +697,10 @@ export function gradientTrayYarn(sessions: any[], ctx: DemandContext): { base: s
 }
 
 export const LAB_TESTS_PER_BATCH = 2;
+/** Most variegated/speckled pans in one batch (3 colorway pairs) — they take the longest to dye. */
+export const MAX_TEXTURED_PANS_PER_BATCH = 6;
+/** Variegated or speckled (colorway recipe colorType / Color Lab sketch type). */
+export const isTexturedColor = (x: any) => /variegated|speckled/i.test(String(x?.colorType || x?.type || ''));
 /**
  * Most yarn combos (base + size, e.g. Nova Fingering 20g) one batch uses —
  * fewer kinds of skein to pull, soak and weigh. Gradient-tray micros don't count.
@@ -706,7 +710,7 @@ const comboOf = (base: string, hankSize: number) => `${base}||${hankSize}`;
 export const comboName = (k: string) => { const [b, h] = k.split('||'); return `${b} ${h}g`; };
 
 /** One colorway as the batch planner sees it: combo → weight (sales need first, then its sales mix). */
-export interface BatchCandidate { colorway: string; weights: Map<string, number>; needBased: boolean }
+export interface BatchCandidate { colorway: string; weights: Map<string, number>; needBased: boolean; textured?: boolean }
 export interface BatchSlot { combos: string[]; colorways: string[]; labs: string[]; tray: boolean; cap: number }
 
 const topCombo = (c: BatchCandidate) => [...c.weights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -720,6 +724,7 @@ const fitsCombos = (c: BatchCandidate, combos: string[]) =>
     c.needBased ? combos.includes(topCombo(c)!) : coverage(c, combos) > 0;
 
 export interface AssignOptions {
+    texturedLabs?: Set<string>;                // Color Lab tests that are variegated/speckled
     allCombos?: string[];                     // every default-base combo (to complete a batch's pair)
     feasible?: (combos: string[]) => boolean; // can these combos alone fill a 2 × 300g pair?
     prior?: (combo: string) => number;        // shop-wide share (tie-break for a combo nobody here needs)
@@ -734,6 +739,8 @@ export interface AssignOptions {
  * join, then fills up in urgency order. `fillers` (next best sellers) only take
  * free racks in batches that already exist — or open one when there are none
  * and `forceBatch`. Batches get a gradient tray (1 rack) while `trays` lasts.
+ * At most MAX_TEXTURED_PANS_PER_BATCH variegated/speckled pans per batch
+ * (colorways and lab tests); more wait for a later batch.
  */
 export function assignBatches(
     colorways: BatchCandidate[],
@@ -757,6 +764,9 @@ export function assignBatches(
         return s;
     };
     const used = (s: BatchSlot) => s.colorways.length + s.labs.length;
+    // Variegated/speckled pans already in a batch (2 per colorway or lab test).
+    const texturedIn = new Map<BatchSlot, number>();
+    const texturedPans = (s: BatchSlot) => (texturedIn.get(s) || 0) + 2 * s.labs.filter((l) => o.texturedLabs?.has(l)).length;
     // Fill a batch's free racks from `pool` (in urgency order), adding combos
     // up to MAX_COMBOS_PER_BATCH: whichever let the most of the pool join.
     const fillSlot = (s: BatchSlot, pool: BatchCandidate[]) => {
@@ -764,7 +774,15 @@ export function assignBatches(
         if (room <= 0) return [];
         const pick = (combos: string[]) => {
             const out: BatchCandidate[] = [];
-            for (const c of pool) { if (out.length >= room) break; if (fitsCombos(c, combos)) out.push(c); }
+            let textured = texturedPans(s);
+            for (const c of pool) {
+                if (out.length >= room) break;
+                if (!fitsCombos(c, combos)) continue;
+                // A textured color past the batch's limit waits for a later batch.
+                if (c.textured && textured + 2 > MAX_TEXTURED_PANS_PER_BATCH) continue;
+                if (c.textured) textured += 2;
+                out.push(c);
+            }
             return out;
         };
         const extra = [...new Set([...pool.flatMap((c) => [...c.weights.keys()]), ...(o.allCombos || [])])].filter((k) => !s.combos.includes(k));
@@ -785,6 +803,7 @@ export function assignBatches(
         }
         s.combos = best!.combos;
         s.colorways.push(...best!.got.map((c) => c.colorway));
+        texturedIn.set(s, (texturedIn.get(s) || 0) + 2 * best!.got.filter((c) => c.textured).length);
         return best!.got;
     };
     while (rest.length || labsLeft.length) {
@@ -1132,9 +1151,10 @@ export function planRestock(input: RestockPlanInput) {
         return (r?.name || p.colorway) === c;
     }));
     const adjust: { colorway: string; sessionName: string; date: string; base: string; hankSize: number; qty: number; soldOut?: boolean }[] = [];
-    const retiredNames = new Set(recipes.filter(isRetired).map((r) => r.name));
+    // Retired colors are never planned — under their current or any old name.
+    const retired = (c: string) => isRetired(findRecipeByName(recipes, c));
     const chosen = input.suggestions
-        .filter((s) => s.colorway && !removed.has(s.colorway) && !retiredNames.has(s.colorway))
+        .filter((s) => s.colorway && !removed.has(s.colorway) && !retired(s.colorway))
         .filter((s) => {
             const sess = sessionFor(s.colorway!);
             if (!sess) return true;
@@ -1151,7 +1171,7 @@ export function planRestock(input: RestockPlanInput) {
         .map((s) => isSpecialtyBase(s.base!, ctx.catalog)
             ? { colorway: s.colorway!, recipeId: s.recipeId, base: '', hankSize: 0, qty: 0 }
             : { colorway: s.colorway!, recipeId: s.recipeId, base: s.base!, hankSize: s.hankSize!, qty: s.suggest });
-    const manual = (input.added || []).filter((c) => !removed.has(c) && !chosen.some((x) => x.colorway === c));
+    const manual = (input.added || []).filter((c) => !removed.has(c) && !retired(c) && !chosen.some((x) => x.colorway === c));
     const asEmpty = (c: string) => ({ colorway: c, recipeId: findRecipeByName(recipes, c)?.id, base: '', hankSize: 0, qty: 0 });
     // Color Lab tests: a pair per sketch (LAB_TEST_PANS — Nova Fingering 20g +
     // Luna DK 50g only).
@@ -1183,7 +1203,10 @@ export function planRestock(input: RestockPlanInput) {
     };
     const itemsOf = (list: typeof base, c: string) => list.filter((x) => x.colorway === c);
     const candidates = (list: typeof base) =>
-        [...new Set(list.map((c) => c.colorway))].map((c) => batchCandidate(c, itemsOf(list, c), restockOpts));
+        [...new Set(list.map((c) => c.colorway))].map((c) => ({
+            ...batchCandidate(c, itemsOf(list, c), restockOpts),
+            textured: isTexturedColor(findRecipeByName(recipes, c)),
+        }));
 
     // Next best sellers to fill free racks (fill on): best sellers with the
     // FEWEST weeks of stock first — skeins on hand, in the Pipeline (incl.
@@ -1215,7 +1238,7 @@ export function planRestock(input: RestockPlanInput) {
         };
         const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
         fillerNames = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
-            .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c && !isRetired(r)))
+            .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c) && !retired(c))
             .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0));
     }
 
@@ -1242,7 +1265,10 @@ export function planRestock(input: RestockPlanInput) {
         labCombos,
         gradientDyes.length,
         !!input.forceBatch,
-        { allCombos, feasible, prior: (k) => priorShare.get(k) || 0 }
+        {
+            allCombos, feasible, prior: (k) => priorShare.get(k) || 0,
+            texturedLabs: new Set([...labByName.entries()].filter(([, k]) => isTexturedColor(k)).map(([n]) => n)),
+        }
     );
     const fillerSet = new Set(fillerNames);
     const pans: any[] = [];

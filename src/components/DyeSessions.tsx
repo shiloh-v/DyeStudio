@@ -1,5 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
-import { findRecipeByName, liveRecipe, currentColorName } from '../lib/recipeMatch';
+import { findRecipeByName, liveRecipe, currentColorName, isRetired } from '../lib/recipeMatch';
 import { DateUtils, byPlannedDate } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
@@ -8,6 +8,7 @@ import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, y
 import { findDyeItem } from '../lib/dyeMatch';
 import { labelItems } from '../lib/roleMatch';
 import { sortPansLightToDark } from '../lib/darkness';
+import { isTexturedColor, MAX_TEXTURED_PANS_PER_BATCH, LAB_TESTS_PER_BATCH } from '../lib/demand';
 import type { Pan } from '../types';
 import {
     DndContext,
@@ -144,6 +145,27 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                 return { ...prev, pans: arrayMove(prev.pans, oldIndex, newIndex) };
             });
         }
+    };
+
+    // Retired colors are never dyed: a kit's retired colors are skipped (with a note).
+    const activeKitColors = (colors) => {
+        const skipped = colors.filter(c => isRetired(findRecipeByName(recipes, c.colorwayName)));
+        if (skipped.length) toast(`Skipped retired color${skipped.length === 1 ? '' : 's'}: ${skipped.map(c => c.colorwayName).join(', ')}`, 'info', 6000);
+        return colors.filter(c => !skipped.includes(c));
+    };
+
+    // Batch limits (same as the Demand plan): variegated/speckled pans, and
+    // Color Lab experiments (one per sketch, however many pans it has).
+    const batchLimitWarnings = (pans) => {
+        const textured = pans.filter(p =>
+            (p.type === 'pan' && isTexturedColor(liveRecipe(p, recipes))) ||
+            (p.type === 'colorLab' && isTexturedColor(p.colorSketch || colorSketches.find(k => String(k.id) === String(p.colorSketchId))))
+        ).length;
+        const labs = new Set(pans.filter(p => p.type === 'colorLab').map(p => String(p.colorSketchId || p.colorway || p.id))).size;
+        return [
+            textured > MAX_TEXTURED_PANS_PER_BATCH && `${textured} variegated/speckled pans (max ${MAX_TEXTURED_PANS_PER_BATCH} per batch)`,
+            labs > LAB_TESTS_PER_BATCH && `${labs} Color Lab experiments (max ${LAB_TESTS_PER_BATCH} per batch)`,
+        ].filter(Boolean);
     };
 
     // Dye order: lightest colorway first, darkest last (trays at the end).
@@ -541,7 +563,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
             const kitTotalWeight = validYarns.reduce(
                 (sum, y) => sum + (parseFloat(String(y.hankSize)) || 0) * (parseInt(String(y.quantity)) || 0), 0
             );
-            const newPans = selectedColors.map(color => {
+            const newPans = activeKitColors(selectedColors).map(color => {
                 const recipe = findRecipeByName(recipes, color.colorwayName);
                 return {
                     id: Date.now() + Math.random(),
@@ -767,6 +789,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <option value="">Select recipe...</option>
                                                 {Object.entries(
                                                     [...recipes]
+                                                        .filter(r => !isRetired(r) || String(r.id) === String(currentPan.recipeId))
                                                         .sort((a, b) => a.name.localeCompare(b.name))
                                                         .reduce<Record<string, any[]>>((acc, r) => {
                                                             const type = r.colorType || 'other';
@@ -1279,7 +1302,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 );
 
                                                 // Create individual pans for each selected colorway, each with the shared yarn list
-                                                const newPans = selectedColors.map(color => {
+                                                const newPans = activeKitColors(selectedColors).map(color => {
                                                     const recipe = findRecipeByName(recipes, color.colorwayName);
                                                     return {
                                                         id: Date.now() + Math.random(),
@@ -1486,6 +1509,11 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     <h4 className="font-semibold text-gray-900">
                                         Pans/Trays in This Session ({formData.pans.length} items, {calculateOvenLoad(formData.pans)}/18 spaces)
                                     </h4>
+                                    {batchLimitWarnings(formData.pans).length > 0 && (
+                                        <div className="w-full text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2 order-last">
+                                            ⚠️ Over the batch limit: {batchLimitWarnings(formData.pans).join(' · ')}. Move some to another session.
+                                        </div>
+                                    )}
                                     {formData.pans.length > 1 && (
                                         <button
                                             type="button"
