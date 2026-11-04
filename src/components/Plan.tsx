@@ -391,7 +391,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
             {plan.adjust.length > 0 && (
                 <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
                     <div className="font-semibold text-amber-900 mb-1">⏭ Already scheduled — dye more in a later batch</div>
-                    <p className="text-amber-900 mb-2">These colors already have their pair in an upcoming session (one pair per color per batch), so these base/sizes wait for a later batch. Quantities are at least your minimums. They aren't in the yarn order yet.</p>
+                    <p className="text-amber-900 mb-2">These base/sizes are already in an upcoming session (one pair per color per batch), so more of them waits for a later batch. The colors' other base/sizes are planned in new batches above. Quantities are at least your minimums. They aren't in the yarn order yet.</p>
                     <ul className="list-none m-0 p-0 space-y-1">
                         {(Object.entries(plan.adjust.reduce((m: Record<string, any[]>, a) => {
                             const k = `${a.sessionName}|${a.date}`;
