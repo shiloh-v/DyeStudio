@@ -500,7 +500,7 @@ export interface Suggestion extends Agg {
     soldOut?: boolean;   // no stock, but sold over the past year (recent sales hidden by the stockout)
     lastSale?: string;   // YYYY-MM-DD of the last sale (sold-out rows)
     yearUnits?: number;  // units sold in the past 12 months (sold-out rows)
-    belowMin?: boolean;  // added only by the per-combo minimum (no sales need)
+    belowMin?: number;   // added only by the per-combo minimum (no sales need): that minimum
 }
 
 // A sold-out color/base needs at least this many sales in 12 months to count.
@@ -555,8 +555,9 @@ export function dyeNext(
 
 /**
  * Stock-everything floor: every active colorway on every default-base size
- * (no specialty bases, no 10g micros) keeps at least `min` skeins (on hand +
- * coming), whether or not it sells. Raises existing dye-next rows to the floor
+ * (no specialty bases, no 10g micros) keeps at least a minimum of skeins (on
+ * hand + coming), whether or not it sells. The minimum is the size's own
+ * `minStock` (Yarn Bases) when set, else `defaultMin`. Raises existing dye-next rows to the floor
  * and adds rows for combos with no sales need; floor-only rows (nothing sold)
  * sort last, after everything sales says is running low.
  */
@@ -565,17 +566,21 @@ export function withComboMinimum(
     recipes: Recipe[],
     catalog: YarnBase[],
     supply: Supply,
-    min: number
+    defaultMin: number
 ): Suggestion[] {
-    if (!(min > 0)) return suggestions;
-    const byKey = new Map(suggestions.map((s) => [s.key, s]));
+    const minOf = (z: { minStock?: any }) =>
+        String(z.minStock ?? '').trim() === '' ? defaultMin : Math.max(0, Number(z.minStock) || 0);
     const combos = catalog
         .filter((b) => b.myName && !isSpecialtyBase(b.myName, catalog))
-        .flatMap((b) => (b.sizes || []).map((z) => Number(z.amount)).filter((h) => h > MICRO_GRAMS).map((h) => ({ base: b.myName, hankSize: h })));
+        .flatMap((b) => (b.sizes || [])
+            .map((z) => ({ base: b.myName, hankSize: Number(z.amount), min: minOf(z) }))
+            .filter((c) => c.hankSize > MICRO_GRAMS && c.min > 0));
+    if (!combos.length) return suggestions;
+    const byKey = new Map(suggestions.map((s) => [s.key, s]));
     const out: Suggestion[] = [];
     for (const r of recipes) {
         if (!r?.name || isRetired(r)) continue;
-        for (const { base, hankSize } of combos) {
+        for (const { base, hankSize, min } of combos) {
             const key = comboKey(r.name, base, hankSize);
             const onHand = supply.onHand.get(key) || 0;
             const coming = supply.coming.get(key) || 0;
@@ -588,7 +593,7 @@ export function withComboMinimum(
             if (short <= 0) continue;
             out.push({
                 key, label: `${r.name} · ${comboLabel(base, hankSize)}`, colorway: r.name, recipeId: Number(r.id), base, hankSize,
-                units: 0, revenue: 0, orders: 0, perWeek: 0, onHand, coming, weeksLeft: Infinity, suggest: short, belowMin: true,
+                units: 0, revenue: 0, orders: 0, perWeek: 0, onHand, coming, weeksLeft: Infinity, suggest: short, belowMin: min,
             });
         }
     }

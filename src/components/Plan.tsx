@@ -146,7 +146,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                     className="w-16 border border-gray-300 rounded px-2 py-1" />
                                 weeks of stock
                             </label>
-                            <label className="text-sm text-gray-600 flex items-center gap-2" title="Every active color on every default-base size (no specialty bases or micros), even ones that don't sell. 0 = off.">
+                            <label className="text-sm text-gray-600 flex items-center gap-2" title="Every active color on every default-base size (no specialty bases or micros), even ones that don't sell. A size with its own minimum in Yarn Bases uses that instead. 0 = only those sizes.">
                                 and at least
                                 <input type="number" min={0} max={20} value={comboMin}
                                     onChange={(e) => setComboMin(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
@@ -191,8 +191,8 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                                             <span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span>
                                                             {s.belowMin && (
                                                                 <span className="ml-2 text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 whitespace-nowrap"
-                                                                    title={`No sales need: added to keep at least ${comboMin} of every combo.`}>
-                                                                    Min {comboMin}
+                                                                    title={`No sales need: added to keep at least ${s.belowMin} of this base/size.`}>
+                                                                    Min {s.belowMin}
                                                                 </span>
                                                             )}
                                                             {s.soldOut && (

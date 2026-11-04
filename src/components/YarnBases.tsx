@@ -4,7 +4,7 @@ import { toast } from '../lib/toast';
 import { useFormGuard } from '../lib/useFormGuard';
 import { sizeName } from '../lib/sizes';
 import { perSkeinPrice, sizeLength } from '../lib/yarnBaseCalc';
-import { isSpecialtyBase } from '../lib/demand';
+import { isSpecialtyBase, MICRO_GRAMS } from '../lib/demand';
 
 const YARN_WEIGHTS = [
     'Lace', 'Light Fingering', 'Fingering', 'Sport', 'DK',
@@ -26,7 +26,7 @@ const emptyForm = () => ({
     weightUnit: 'g',
     lengthUnit: 'yd',
     lengthPer100: '',
-    sizes: [{ amount: '', sku: '', packSize: '', packPrice: '', length: '' }],
+    sizes: [{ amount: '', sku: '', packSize: '', packPrice: '', length: '', minStock: '' }],
     notes: '',
 });
 
@@ -64,6 +64,7 @@ export function YarnBases({ settings, saveSettings }) {
                 packSize: String(s.packSize).trim() === '' ? '' : parseFloat(String(s.packSize)),
                 packPrice: String(s.packPrice).trim() === '' ? '' : parseFloat(String(s.packPrice)),
                 length: String(s.length).trim() === '' ? '' : parseFloat(String(s.length)),
+                minStock: String(s.minStock ?? '').trim() === '' ? '' : Math.max(0, parseInt(String(s.minStock)) || 0),
             }));
         const aliases = String(formData.aliases || '')
             .split(',')
@@ -84,7 +85,7 @@ export function YarnBases({ settings, saveSettings }) {
             ...emptyForm(),
             ...b,
             aliases: (b.aliases || []).join(', '),
-            sizes: b.sizes && b.sizes.length ? b.sizes : [{ amount: '', sku: '', packSize: '', packPrice: '', length: '' }],
+            sizes: b.sizes && b.sizes.length ? b.sizes : [{ amount: '', sku: '', packSize: '', packPrice: '', length: '', minStock: '' }],
         });
         setEditingId(b.id);
         setShowForm(true);
@@ -96,7 +97,7 @@ export function YarnBases({ settings, saveSettings }) {
         }
     };
 
-    const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { amount: '', sku: '', packSize: '', packPrice: '', length: '' }] });
+    const addSize = () => setFormData({ ...formData, sizes: [...(formData.sizes || []), { amount: '', sku: '', packSize: '', packPrice: '', length: '', minStock: '' }] });
     const updateSize = (i, field, val) => {
         const next = [...(formData.sizes || [])];
         next[i] = { ...next[i], [field]: val };
@@ -228,6 +229,8 @@ export function YarnBases({ settings, saveSettings }) {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Sizes it comes in</label>
                                 <div className="space-y-2">
                                     {(formData.sizes || []).map((s, idx) => {
+                                        // Specialty bases are never auto-planned, so no minimum.
+                                        const plannable = !(typeof formData.specialty === 'boolean' ? formData.specialty : isSpecialtyBase(formData.myName, []));
                                         const len = sizeLength(formData, s);
                                         const nm = formData.weightUnit === 'g' ? sizeName(s.amount, settings) : null;
                                         const each = perSkeinPrice(s);
@@ -251,6 +254,12 @@ export function YarnBases({ settings, saveSettings }) {
                                                         <span className="text-sm text-gray-500 w-5">{formData.lengthUnit}</span>
                                                     </div>
                                                     <input type="text" value={s.sku || ''} onChange={(e) => updateSize(idx, 'sku', e.target.value)} className="w-20 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="SKU" />
+                                                    {plannable && !(formData.weightUnit === 'g' && Number(s.amount) > 0 && Number(s.amount) <= MICRO_GRAMS) && (
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-sm text-gray-500">keep</span>
+                                                            <input type="number" min={0} value={s.minStock ?? ''} onChange={(e) => updateSize(idx, 'minStock', e.target.value)} className="w-14 px-2 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500" placeholder="min" title="Batch planning keeps at least this many of every color in this size. Blank = the Plan tab's default." />
+                                                        </div>
+                                                    )}
                                                     {(formData.sizes || []).length > 1 && (
                                                         <button type="button" onClick={() => removeSize(idx)} className="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-auto">✕</button>
                                                     )}
@@ -344,6 +353,7 @@ export function YarnBases({ settings, saveSettings }) {
                                                 {nm ? ` · ${nm}` : ''}
                                                 {len ? ` · ${len.value}${lu}` : ''}
                                                 {each != null ? ` · $${each.toFixed(2)}/skein` : ''}
+                                                {String(s.minStock ?? '').trim() !== '' ? ` · keep ${s.minStock}` : ''}
                                             </span>
                                         );
                                     })}
