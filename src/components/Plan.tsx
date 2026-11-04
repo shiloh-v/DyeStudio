@@ -15,6 +15,9 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
     const [targetWeeks, setTargetWeeks] = useState<number>(() => demandPrefs.targetWeeks());
     useEffect(() => { demandPrefs.set('demand_window', windowIdx); }, [windowIdx]);
     useEffect(() => { demandPrefs.set('demand_target_weeks', targetWeeks); }, [targetWeeks]);
+    // Floor for every color × default-base size, sales or not (0 = off).
+    const [comboMin, setComboMin] = useState<number>(() => demandPrefs.comboMin());
+    useEffect(() => { demandPrefs.set('demand_combo_min', comboMin); }, [comboMin]);
     // Edits to the auto-built restock plan (shared with Today/Inventory via prefs).
     const [edits, setEdits] = useState<PlanEdits>(() => demandPrefs.planEdits());
     useEffect(() => { demandPrefs.set('demand_plan_edits', edits); }, [edits]);
@@ -26,8 +29,8 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
     useEffect(() => { demandPrefs.set('demand_batches_per_month', pace); }, [pace]);
 
     const D = useMemo(
-        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches, planEdits: edits, yarnMonths, batchesPerMonth: pace, windowIdx, targetWeeks, today }),
-        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches, edits, yarnMonths, pace, windowIdx, targetWeeks, today]
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches, planEdits: edits, yarnMonths, batchesPerMonth: pace, windowIdx, targetWeeks, comboMin, today }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches, edits, yarnMonths, pace, windowIdx, targetWeeks, comboMin, today]
     );
     const { supply, suggestions, yarnOrder, toBuy, yarnOrderCost } = D;
     const snapshot = settings?.shopifyInventory || null;
@@ -143,6 +146,13 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                     className="w-16 border border-gray-300 rounded px-2 py-1" />
                                 weeks of stock
                             </label>
+                            <label className="text-sm text-gray-600 flex items-center gap-2" title="Every active color on every default-base size (no specialty bases or micros), even ones that don't sell. 0 = off.">
+                                and at least
+                                <input type="number" min={0} max={20} value={comboMin}
+                                    onChange={(e) => setComboMin(Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+                                    className="w-16 border border-gray-300 rounded px-2 py-1" />
+                                of every combo
+                            </label>
                         </div>
                         <p className="text-sm text-gray-500 mb-4">
                             Based on the last {win.label.toLowerCase()} of sales; <strong>sold-out</strong> colors use their 12-month pace, since a sold-out color can't show recent sales. These feed the batch plan below.{' '}
@@ -179,6 +189,12 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                                     <tr key={s.key} className="border-b border-gray-100">
                                                         <td className="py-2 pr-4">
                                                             <span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span>
+                                                            {s.belowMin && (
+                                                                <span className="ml-2 text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 whitespace-nowrap"
+                                                                    title={`No sales need: added to keep at least ${comboMin} of every combo.`}>
+                                                                    Min {comboMin}
+                                                                </span>
+                                                            )}
                                                             {s.soldOut && (
                                                                 <span className="ml-2 text-xs bg-red-50 text-red-700 rounded px-1.5 py-0.5 whitespace-nowrap"
                                                                     title={`No stock left. Sold ${s.yearUnits} in the past 12 months${s.lastSale ? `, last on ${DateUtils.formatDate(s.lastSale)}` : ''} — recent sales are low because it's sold out, so this uses the 12-month pace.`}>
@@ -190,7 +206,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.onHand}{supply.source === 'estimate' && <span className="text-gray-400"> est.</span>}</td>
                                                         <td className="py-2 pr-4 text-right tabular-nums">{s.coming || '—'}</td>
                                                         <td className={`py-2 pr-4 text-right tabular-nums ${urgent ? 'text-red-600 font-semibold' : ''}`}>
-                                                            {urgent ? '⚠ ' : ''}{s.weeksLeft.toFixed(1)}
+                                                            {urgent ? '⚠ ' : ''}{Number.isFinite(s.weeksLeft) ? s.weeksLeft.toFixed(1) : '—'}
                                                         </td>
                                                         <td className={`py-2 text-right tabular-nums ${edits.removed.includes(s.colorway!) ? 'text-gray-400 line-through' : ''}`} title={edits.removed.includes(s.colorway!) ? 'Removed from the plan' : undefined}>{s.suggest}</td>
                                                     </tr>
@@ -199,6 +215,9 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                         </tbody>
                                     </table>
                                 </div>
+                                {suggestions.length > 30 && (
+                                    <p className="text-xs text-gray-500 mt-2">+ {suggestions.length - 30} more (all of them feed the batch plan).</p>
+                                )}
                             </>
                         )}
                     </div>

@@ -8,7 +8,7 @@ import { isCountable, isOwnBrand, lineRevenue, type SaleLine } from './shopify';
 import {
     makeContext, allUnits, windowUnits, byCombo, byColorway, computeSupply, dyeNext, costLookup,
     plannedSkeins, yarnToOrder, daysAgo, planRestock, dyeCadence, projectedBatchYarn, salesMix,
-    labTestCandidates, gradientTrayYarn, comboKey, isSpecialtyBase, type Unit,
+    labTestCandidates, gradientTrayYarn, comboKey, isSpecialtyBase, withComboMinimum, type Unit,
 } from './demand';
 
 export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
@@ -31,12 +31,14 @@ export interface PlanEdits {
 export const demandPrefs = {
     windowIdx: (): number => read('demand_window', 1),
     targetWeeks: (): number => read('demand_target_weeks', 8),
+    // Keep at least this many of every color × default-base size (0 = off).
+    comboMin: (): number => read('demand_combo_min', 0),
     // Changes made to the auto-built restock plan (Demand tab).
     planEdits: (): PlanEdits => ({ removed: [], added: [], fill: true, labTests: [], forceBatch: false, ...read('demand_plan_edits', {}) }),
     // Yarn to order covers this many months of dyeing at this pace (null = from history).
     yarnMonths: (): number => read('demand_yarn_months', 2),
     batchesPerMonth: (): number | null => read('demand_batches_per_month', null),
-    set: (k: 'demand_window' | 'demand_target_weeks' | 'demand_plan_edits' | 'demand_yarn_months' | 'demand_batches_per_month', v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
+    set: (k: 'demand_window' | 'demand_target_weeks' | 'demand_combo_min' | 'demand_plan_edits' | 'demand_yarn_months' | 'demand_batches_per_month', v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } },
 };
 
 /** Revenue / skeins / orders for our lines in (today-days-offset, today-offset]. */
@@ -66,6 +68,7 @@ export interface DemandInput {
     batchesPerMonth?: number | null;
     windowIdx?: number;
     targetWeeks?: number;
+    comboMin?: number;
     today?: string;
 }
 
@@ -73,6 +76,7 @@ export function demandSummary(input: DemandInput) {
     const today = input.today || DateUtils.getTodayEST();
     const win = DEMAND_WINDOWS[input.windowIdx ?? demandPrefs.windowIdx()] || DEMAND_WINDOWS[1];
     const targetWeeks = input.targetWeeks ?? demandPrefs.targetWeeks();
+    const comboMin = input.comboMin ?? demandPrefs.comboMin();
     const ctx = makeContext(input.recipes, input.kits, input.settings);
 
     const lines = (input.sales || []).filter((s) => s.lineKey && isOwnBrand(s.vendor, s.productTitle || s.lineName));
@@ -93,8 +97,11 @@ export function demandSummary(input: DemandInput) {
     }
     // Retired colors keep their sales history but are never suggested.
     const retired = new Set((input.recipes || []).filter((r: any) => r?.retired).map((r: any) => r.name));
-    const allSuggestions = dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale)
-        .filter((s) => !retired.has(s.colorway!));
+    const allSuggestions = withComboMinimum(
+        dyeNext(byCombo(inWindow), windowDays, supply, targetWeeks, byCombo(windowUnits(units, today, 365)), lastSale)
+            .filter((s) => !retired.has(s.colorway!)),
+        input.recipes || [], ctx.catalog, supply, comboMin
+    );
     // Specialty bases (Solis, Stardust, Nova DK…) are never dyed automatically,
     // so they're not listed in Dye next. Their demand still feeds the plan:
     // the color gets planned on default bases.
@@ -153,7 +160,7 @@ export function demandSummary(input: DemandInput) {
     const toBuy = yarnOrder.filter((r) => r.short > 0);
 
     return {
-        today, win, targetWeeks, ctx, lines, units, firstDate, lastDate, windowDays, inWindow,
+        today, win, targetWeeks, comboMin, ctx, lines, units, firstDate, lastDate, windowDays, inWindow,
         planned, supply, suggestions, specialtyLow, plan, edits, yarnOrder, toBuy,
         horizon: { months, pace, historyPace, horizonBatches, upcomingSessions, planBatches: planInHorizon, planBeyond, projectedBatches },
         labCandidates: labTestCandidates(input.colorSketches || [], input.dyeSessions || [], input.recipes),
