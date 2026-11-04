@@ -79,10 +79,11 @@ export function OnHand({ sales, batches, recipes, kits, settings, inventory, dye
 
             {/* Totals */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <Kpi label="Skeins on hand" value={S.skeins.toLocaleString()} sub={`${S.colorways} colorway${S.colorways === 1 ? '' : 's'}`} />
+                <Kpi label="Skeins on hand" value={S.skeins.toLocaleString()}
+                    sub={`${S.colorways} colorway${S.colorways === 1 ? '' : 's'}${S.oneOffSkeins ? ` + ${S.oneOffSkeins} one-offs` : ''}`} />
                 <Kpi label="Stock value" value={money0(S.value)} accent="text-green-600"
                     sub={S.unpriced ? `${S.unpriced} skein${S.unpriced === 1 ? '' : 's'} not priced yet` : 'at recent selling prices'} />
-                <Kpi label="Cost tied up" value={money0(S.cost)} accent="text-blue-600" sub={S.value > 0 ? `${Math.round(((S.value - S.cost) / S.value) * 100)}% margin when sold` : ''} />
+                <Kpi label="Cost tied up" value={money0(S.cost)} accent="text-blue-600" sub={S.colorwayValue > 0 ? `${Math.round(((S.colorwayValue - S.cost) / S.colorwayValue) * 100)}% margin when sold` : ''} />
                 <Kpi label="Running out" value={String(S.lowSoon)} accent={S.lowSoon ? 'text-red-600' : 'text-gray-900'}
                     sub={`under 4 weeks · ${S.soldOut} sold out`} />
             </div>
@@ -145,6 +146,26 @@ export function OnHand({ sales, batches, recipes, kits, settings, inventory, dye
                     </div>
                 )}
             </div>
+            {S.oneOffs.length > 0 && (
+                <div className="bg-white rounded-lg card-shadow p-4">
+                    <div className="flex flex-wrap justify-between items-baseline gap-2 mb-2">
+                        <h3 className="text-lg font-semibold">✨ Studio one-offs</h3>
+                        <span className="text-sm text-gray-600 tabular-nums">{S.oneOffSkeins} skeins · {money0(S.oneOffValue)}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-2">Improv, Seconds and Misfit skeins. They're counted in the totals above but never planned for dyeing. Priced at what each listing sold for over the past year.</p>
+                    <ul className="divide-y divide-gray-200 text-sm">
+                        {S.oneOffs.map((o) => (
+                            <li key={o.name} className="flex justify-between gap-3 py-1.5">
+                                <span>{o.name}</span>
+                                <span className="tabular-nums text-gray-600 whitespace-nowrap">
+                                    {o.onHand} × {o.price ? money(o.price) : '—'}{o.value ? <span className="text-green-600"> = {money0(o.value)}</span> : ''}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
             <p className="text-xs text-gray-500 -mt-3">
                 Price is the average a skein of that colorway, base and size sold for on Shopify over the past year (or the same base and size across colorways), after discounts. "Lasts" uses the sales pace from your Demand window.
             </p>

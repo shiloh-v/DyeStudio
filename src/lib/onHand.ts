@@ -4,8 +4,15 @@
 // which summed every batch ever stocked and never subtracted sales.
 
 import type { DemandSummary } from './demandSummary';
-import { byBase, byCombo, comboKey, resolveName, windowUnits, SOLD_OUT_MIN_YEAR_UNITS, type Unit } from './demand';
-import { isOwnBrand, type InventorySnapshot } from './shopify';
+import { byBase, byCombo, comboKey, daysAgo, normText, resolveName, windowUnits, SOLD_OUT_MIN_YEAR_UNITS, type Unit } from './demand';
+import { isCountable, isOwnBrand, lineRevenue, type InventorySnapshot } from './shopify';
+
+// Studio one-offs: one-of-a-kind skeins sold under a single listing per base.
+// They're real stock with real value, but never part of dye planning.
+const ONE_OFF = /\bstudio\s+(improv|seconds?|misfits?)\b/i;
+export const isOneOff = (name: string) => ONE_OFF.test(name || '');
+
+export interface OneOffRow { name: string; onHand: number; price: number; value: number }
 
 export interface OnHandRow {
     key: string;
@@ -77,13 +84,32 @@ export function onHandSummary(D: DemandSummary, snapshot?: InventorySnapshot | n
     // missing from the counts (Studio Improv-style "ignore" items and kits are
     // left out on purpose and aren't listed here).
     const unmatched: { name: string; available: number }[] = [];
+    // One-offs are priced at what that same listing sold for over the past year.
+    const oneOffs: OneOffRow[] = [];
     if (supply.source === 'shopify') {
+        const yearAgo = daysAgo(today, 365);
+        const listingPrice = new Map<string, { rev: number; qty: number }>();
+        for (const l of D.lines) {
+            if (!isCountable(l) || l.orderDate <= yearAgo || !isOneOff(l.lineName)) continue;
+            const v = listingPrice.get(normText(l.lineName)) || { rev: 0, qty: 0 };
+            v.rev += lineRevenue(l); v.qty += Number(l.quantity) || 0;
+            listingPrice.set(normText(l.lineName), v);
+        }
         for (const row of snapshot?.rows || []) {
             if (row.available <= 0 || !isOwnBrand(row.vendor, row.name)) continue;
+            if (isOneOff(row.name)) {
+                const p = listingPrice.get(normText(row.name));
+                const price = p && p.qty ? p.rev / p.qty : 0;
+                oneOffs.push({ name: row.name.replace(/^celestial dyeworks\s*-\s*/i, ''), onHand: row.available, price, value: row.available * price });
+                continue;
+            }
             const r = resolveName(row.name, D.ctx);
             if (r.kind === 'unknown' || (r.kind === 'colorway' && !r.colorway)) unmatched.push({ name: row.name, available: row.available });
         }
+        oneOffs.sort((a, b) => a.name.localeCompare(b.name));
     }
+    const oneOffSkeins = oneOffs.reduce((s, r) => s + r.onHand, 0);
+    const oneOffValue = oneOffs.reduce((s, r) => s + r.value, 0);
 
     const inStock = rows.filter((r) => r.onHand > 0);
     return {
@@ -92,10 +118,15 @@ export function onHandSummary(D: DemandSummary, snapshot?: InventorySnapshot | n
         snapshotDate: supply.source === 'shopify' ? snapshot?.importedAt : undefined,
         unmatched,
         hasSales: units.length > 0,
-        skeins: inStock.reduce((s, r) => s + r.onHand, 0),
-        value: inStock.reduce((s, r) => s + r.value, 0),
+        // Totals include one-offs; cost doesn't (they have no batch cost).
+        skeins: inStock.reduce((s, r) => s + r.onHand, 0) + oneOffSkeins,
+        value: inStock.reduce((s, r) => s + r.value, 0) + oneOffValue,
+        colorwayValue: inStock.reduce((s, r) => s + r.value, 0),
         cost: inStock.reduce((s, r) => s + r.cost, 0),
-        unpriced: inStock.filter((r) => !r.price).reduce((s, r) => s + r.onHand, 0),
+        unpriced: inStock.filter((r) => !r.price).reduce((s, r) => s + r.onHand, 0) + oneOffs.filter((r) => !r.price).reduce((s, r) => s + r.onHand, 0),
+        oneOffs,
+        oneOffSkeins,
+        oneOffValue,
         colorways: new Set(inStock.map((r) => r.colorway)).size,
         soldOut: rows.filter((r) => r.soldOut).length,
         // Sells out within 4 weeks at the current pace.
