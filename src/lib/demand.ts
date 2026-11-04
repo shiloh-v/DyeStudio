@@ -1354,7 +1354,7 @@ export function planRestock(input: RestockPlanInput) {
     const stamp = Date.now();
     let seq = 0;
     const dyes = [...gradientDyes];
-    const batches = slots.map((slot, bi) => {
+    const built = slots.map((slot, bi) => {
         const list = slot.colorways.flatMap((c) => (fillerSet.has(c) ? [asEmpty(c)] : itemsOf(base, c)));
         const built = buildRestockPans(list, recipes, { ...restockOpts, combos: slot.combos });
         topUps += built.topUps;
@@ -1366,10 +1366,43 @@ export function planRestock(input: RestockPlanInput) {
         ];
         pans.push(...load);
         return { slot, load: sortPansLightToDark(load, recipes, input.inventory) };
-    }).filter((b) => b.load.length)
-        // Gradient trays go last in the oven order, one per batch while dyes need one.
-        .map((b, bi) => (b.slot.tray && dyes.length ? [...b.load, gradientTray(dyes.shift()!, trayYarn, bi)] : b.load));
-    return { pans, topUps, unplanned, batches, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
+    }).filter((b) => b.load.length);
+    // Dye what's on the shelf first: batches your undyed yarn already covers
+    // (after what planned sessions use) go first, in urgency order; the rest
+    // follow in urgency order. Each batch records what it's short of.
+    const onShelf = undyedStock(input.inventory, ctx);
+    input.plannedByBaseSize.forEach((q, k) => onShelf.set(k, (onShelf.get(k) || 0) - q));
+    const yarnOf = (b: typeof built[number]) => {
+        const m = new Map<string, number>();
+        const add = (base: string, h: number, q: number) => { const k = `${base}||${h}`; m.set(k, (m.get(k) || 0) + q); };
+        b.load.forEach((p: any) => (p.yarns || []).forEach((y: any) => add(y.base, Number(y.hankSize), Number(y.quantity) || 0)));
+        if (b.slot.tray) add(trayYarn.base, trayYarn.hankSize, 10);
+        return m;
+    };
+    const fits = (need: Map<string, number>) => [...need].every(([k, q]) => (onShelf.get(k) || 0) >= q);
+    const ordered: typeof built = [];
+    for (let rest = [...built]; rest.length;) {
+        const i = rest.findIndex((b) => fits(yarnOf(b)));
+        if (i < 0) { ordered.push(...rest); break; }
+        const [b] = rest.splice(i, 1);
+        yarnOf(b).forEach((q, k) => onShelf.set(k, (onShelf.get(k) || 0) - q));
+        ordered.push(b);
+    }
+    // What each batch, in this order, still needs from Yarn to order.
+    const shelf = undyedStock(input.inventory, ctx);
+    input.plannedByBaseSize.forEach((q, k) => shelf.set(k, (shelf.get(k) || 0) - q));
+    const yarnShort = ordered.map((b) => {
+        const short: { base: string; hankSize: number; qty: number }[] = [];
+        yarnOf(b).forEach((q, k) => {
+            const have = Math.max(0, shelf.get(k) || 0);
+            if (q > have) { const [base, h] = k.split('||'); short.push({ base, hankSize: Number(h), qty: q - have }); }
+            shelf.set(k, have - Math.min(q, have));
+        });
+        return short;
+    });
+    // Gradient trays go last in the oven order, one per batch while dyes need one.
+    const batches = ordered.map((b, bi) => (b.slot.tray && dyes.length ? [...b.load, gradientTray(dyes.shift()!, trayYarn, bi)] : b.load));
+    return { pans, topUps, unplanned, batches, yarnShort, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
 }
 
 
