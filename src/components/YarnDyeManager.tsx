@@ -26,13 +26,13 @@ const Demand = named(() => import('./Demand'), 'Demand');
 
 // Top-level nav. Groups list their sub-tabs; the first one opens by default.
 // Tab ids are the URL paths, so keep them stable (bookmarks, cross-tab links).
-type NavItem = { id: string; label: string; group?: [string, string][] };
+type NavItem = { id: string; icon: string; label: string; group?: [string, string][] };
 const NAV: NavItem[] = [
-    { id: 'dashboard', label: '📊 Dashboard' },
-    { id: 'dye', label: '▶️ Dye', group: [['queue', '▶️ Queue'], ['sessions', '📋 Sessions'], ['calendar', '📅 Calendar']] },
-    { id: 'pipeline', label: '🔄 Pipeline' },
-    { id: 'colorways', label: '🧶 Colorways', group: [['recipes', '📝 Recipes'], ['gradients', '🌈 Gradients'], ['kits', '🎁 Kits'], ['colorlab', '🎨 Color Lab']] },
-    { id: 'shop', label: '📈 Sales', group: [['demand', '📈 Demand'], ['sales', '🏷️ Stock']] },
+    { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+    { id: 'dye', icon: '▶️', label: 'Dye', group: [['queue', '▶️ Queue'], ['sessions', '📋 Sessions'], ['calendar', '📅 Calendar']] },
+    { id: 'pipeline', icon: '🔄', label: 'Pipeline' },
+    { id: 'colorways', icon: '🧶', label: 'Colorways', group: [['recipes', '📝 Recipes'], ['gradients', '🌈 Gradients'], ['kits', '🎁 Kits'], ['colorlab', '🎨 Color Lab']] },
+    { id: 'shop', icon: '📈', label: 'Sales', group: [['demand', '📈 Demand'], ['sales', '🏷️ Stock']] },
 ];
 // Reference pages you rarely need, tucked under the More menu.
 const MORE: [string, string][] = [
@@ -247,19 +247,22 @@ export function YarnDyeManager() {
             <nav className="bg-white shadow-sm border-b sticky top-0 z-20">
                 <div className="container mx-auto px-4 flex items-center gap-2">
                     <span className="hidden lg:block font-bold text-teal-700 whitespace-nowrap mr-2">🧶 Celestial Dyeworks</span>
-                    <div className="flex-1 min-w-0 flex space-x-1 overflow-x-auto">
+                    <div className="flex-1 min-w-0 flex space-x-1 overflow-x-auto [scrollbar-width:none]">
                         {NAV.map(tab => {
                             const ids = tab.group ? tab.group.map(([id]) => id) : [tab.id];
+                            const active = ids.includes(activeTab);
                             return (
                                 <button
                                     key={tab.id}
                                     // A group opens on its first sub-tab (or stays put if already in it)
                                     onClick={() => { if (!ids.includes(activeTab)) setActiveTab(ids[0]); }}
-                                    className={`px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
-                                        ids.includes(activeTab) ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                                    title={tab.label}
+                                    className={`px-2 sm:px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                                        active ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                                 >
-                                    {tab.label}
+                                    {/* Phones show just the icon for tabs you're not on, so all five fit */}
+                                    {tab.icon}<span className={active ? ' ml-1.5' : 'hidden sm:inline ml-1.5'}>{tab.label}</span>
                                 </button>
                             );
                         })}
@@ -268,11 +271,11 @@ export function YarnDyeManager() {
                     <div className="relative shrink-0">
                         <button
                             onClick={() => setMoreOpen(!moreOpen)}
-                            className={`px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                            className={`px-2 sm:px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
                                 activeMore ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                             }`}
                         >
-                            {activeMore ? activeMore[1] : '⋯ More'} ▾
+                            {activeMore ? activeMore[1] : <>⋯<span className="hidden sm:inline"> More</span></>} ▾
                         </button>
                         {moreOpen && (
                             <>
@@ -304,12 +307,12 @@ export function YarnDyeManager() {
                 {/* Sub-tabs for the active group */}
                 {activeGroup && (
                     <div className="container mx-auto px-4 border-t border-gray-100">
-                        <div className="flex space-x-1 py-1 overflow-x-auto">
+                        <div className="flex space-x-1 py-1 overflow-x-auto [scrollbar-width:none]">
                             {activeGroup.group.map(([id, label]) => (
                                 <button
                                     key={id}
                                     onClick={() => setActiveTab(id)}
-                                    className={`px-4 py-2 text-sm whitespace-nowrap transition-colors ${
+                                    className={`px-3 sm:px-4 py-2 text-sm whitespace-nowrap transition-colors ${
                                         activeTab === id
                                             ? 'subtab-active'
                                             : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg'
