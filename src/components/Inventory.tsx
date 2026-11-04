@@ -359,11 +359,11 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
                 <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
                 <button
                     onClick={() => showForm ? closeForm() : setShowForm(true)}
-                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ Add Item'}
                 </button>
@@ -974,7 +974,7 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                             >
                                 {editingId ? 'Update Item' : 'Add Item'}
                             </button>
@@ -998,12 +998,12 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
                     <table className="w-full">
                         <thead className="bg-gray-50 border-b">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
+                                <th className="hidden sm:table-cell px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
+                                <th className="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -1011,7 +1011,7 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
                                 const isLowStock = isItemLowStock(item);
                                 return (
                                     <tr key={item.id} className={isLowStock ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                                        <td className="px-6 py-4">
+                                        <td className="px-3 sm:px-6 py-4">
                                             <div className="flex items-center gap-2">
                                                 {item.category === 'dye' && item.color && (
                                                     <div 
@@ -1061,8 +1061,8 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm capitalize">{item.category}</td>
-                                        <td className="px-6 py-4">
+                                        <td className="hidden sm:table-cell px-6 py-4 text-sm capitalize">{item.category}</td>
+                                        <td className="px-3 sm:px-6 py-4">
                                             <QuantityCell item={item} isLowStock={isLowStock} onAdjust={adjustQuantity} onCommit={commitQuantity} />
                                             {isLowStock && (
                                                 <div className="text-xs text-red-600 mt-1">
@@ -1070,7 +1070,7 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-sm">
+                                        <td className="hidden sm:table-cell px-6 py-4 text-sm">
                                             {item.cost ? (() => {
                                                 const cost = parseFloat(item.cost);
                                                 const unit = item.unit || 'g';
@@ -1136,8 +1136,8 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
                                                 return `$${cost.toFixed(4)}/${unit}`;
                                             })() : '-'}
                                         </td>
-                                        <td className="px-6 py-4 text-sm">{item.supplier || '-'}</td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="hidden sm:table-cell px-6 py-4 text-sm">{item.supplier || '-'}</td>
+                                        <td className="px-3 sm:px-6 py-4 text-right">
                                             <button
                                                 onClick={() => editItem(item)}
                                                 className="text-blue-600 hover:text-blue-800 mr-3"

@@ -109,7 +109,7 @@ export function YarnBases({ settings, saveSettings }) {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Yarn Bases</h2>
                     <p className="text-sm text-gray-600 mt-1">
@@ -118,7 +118,7 @@ export function YarnBases({ settings, saveSettings }) {
                 </div>
                 <button
                     onClick={() => (showForm ? closeForm() : setShowForm(true))}
-                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ New Base'}
                 </button>
@@ -285,7 +285,7 @@ export function YarnBases({ settings, saveSettings }) {
                             </div>
 
                             <div className="flex gap-3 pt-2">
-                                <button type="submit" className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                                <button type="submit" className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap">
                                     {editingId ? 'Update Base' : 'Save Base'}
                                 </button>
                                 <button type="button" onClick={closeForm} className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium">

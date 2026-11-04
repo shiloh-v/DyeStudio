@@ -41,14 +41,14 @@ export function Calendar({ dyeSessions, setActiveTab }) {
     
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
                 <h2 className="text-2xl font-bold text-gray-900">📅 Dye Session Calendar</h2>
                 <div className="flex gap-3">
                     <button
                         onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
                         className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
                     >
-                        ← Previous
+                        ←<span className="hidden sm:inline"> Previous</span>
                     </button>
                     <button
                         onClick={() => setCurrentDate(new Date())}
@@ -60,28 +60,28 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                         onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
                         className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
                     >
-                        Next →
+                        <span className="hidden sm:inline">Next </span>→
                     </button>
                 </div>
             </div>
             
-            <div className="bg-gray-50 rounded-lg card-shadow border border-gray-200 p-6">
+            <div className="bg-gray-50 rounded-lg card-shadow border border-gray-200 p-2 sm:p-6">
                 <h3 className="text-xl font-semibold mb-4 text-center">{monthNames[month]} {year}</h3>
                 
                 {/* Day headers */}
-                <div className="grid grid-cols-7 gap-2 mb-2" style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)'}}>
+                <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2" style={{display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))'}}>
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                        <div key={day} className="text-center font-semibold text-gray-600 text-sm py-2">
+                        <div key={day} className="text-center font-semibold text-gray-600 text-xs sm:text-sm py-2">
                             {day}
                         </div>
                     ))}
                 </div>
                 
                 {/* Calendar grid */}
-                <div className="grid grid-cols-7 gap-2" style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gridAutoRows: '128px'}}>
+                <div className="grid grid-cols-7 gap-1 sm:gap-2" style={{display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))'}}>
                     {days.map((date, idx) => {
                         if (!date) {
-                            return <div key={`empty-${idx}`} className="h-32"></div>;
+                            return <div key={`empty-${idx}`} className="h-20 sm:h-32"></div>;
                         }
                         
                         const isCurrentMonth = date.getMonth() === month;
@@ -153,12 +153,11 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                         return (
                             <div
                                 key={idx}
-                                className={`p-2 border rounded-lg overflow-y-auto ${
+                                className={`h-20 sm:h-32 p-1 sm:p-2 border rounded-lg overflow-y-auto ${
                                     isCurrentMonth ? 'bg-white' : 'bg-gray-50'
                                 } ${isToday ? 'border-teal-500 border-2' : 'border-gray-200'}`}
-                                style={{height: '128px'}}
                             >
-                                <div className={`text-sm font-medium ${
+                                <div className={`text-xs sm:text-sm font-medium ${
                                     isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
                                 } ${isToday ? 'text-teal-600 font-bold' : ''}`}>
                                     {date.getDate()}
@@ -169,11 +168,11 @@ export function Calendar({ dyeSessions, setActiveTab }) {
                                             <div
                                                 key={cidx}
                                                 onClick={() => setActiveTab('sessions')}
-                                                className={`text-xs px-1 py-0.5 rounded cursor-pointer hover:opacity-80 ${info.color}`}
+                                                className={`text-xs px-0.5 sm:px-1 py-0.5 rounded cursor-pointer hover:opacity-80 text-center sm:text-left ${info.color}`}
                                                 title={`${info.session}: ${cycleLabels[info.type]} Day${info.archived ? ' (Archived)' : ''}`}
                                             >
-                                                <div className="font-medium truncate">{cycleLabels[info.type]}</div>
-                                                <div className="truncate text-xs opacity-75">
+                                                <div className="font-medium truncate"><span className="sm:hidden">{cycleLabels[info.type].split(' ')[0]}</span><span className="hidden sm:inline">{cycleLabels[info.type]}</span></div>
+                                                <div className="hidden sm:block truncate text-xs opacity-75">
                                                     {info.session}{info.archived ? ' (Archived)' : ''}
                                                 </div>
                                             </div>

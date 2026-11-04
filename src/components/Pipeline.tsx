@@ -292,11 +292,11 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
                 <h2 className="text-2xl font-bold text-gray-900">Production Pipeline</h2>
                 <button
                     onClick={() => showForm ? closeForm() : setShowForm(true)}
-                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ New Batch'}
                 </button>
@@ -403,7 +403,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                             >
                                 Start Batch
                             </button>

@@ -198,11 +198,11 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                     <table className="w-full text-sm">
                                         <thead>
                                             <tr className="text-left text-gray-500 border-b">
-                                                <th className="py-2 pr-4">Colorway · base</th>
-                                                <th className="py-2 pr-4 text-right">Sold / wk</th>
-                                                <th className="py-2 pr-4 text-right">On hand</th>
-                                                <th className="py-2 pr-4 text-right" title="In the Pipeline (dyeing/drying/ready) or in a planned dye session">Coming</th>
-                                                <th className="py-2 pr-4 text-right">Weeks left</th>
+                                                <th className="py-2 pr-2 sm:pr-4">Colorway · base</th>
+                                                <th className="hidden sm:table-cell py-2 pr-2 sm:pr-4 text-right">Sold / wk</th>
+                                                <th className="py-2 pr-2 sm:pr-4 text-right">On hand</th>
+                                                <th className="hidden sm:table-cell py-2 pr-2 sm:pr-4 text-right" title="In the Pipeline (dyeing/drying/ready) or in a planned dye session">Coming</th>
+                                                <th className="py-2 pr-2 sm:pr-4 text-right whitespace-nowrap">Weeks left</th>
                                                 <th className="py-2 text-right">Dye</th>
                                             </tr>
                                         </thead>
@@ -211,7 +211,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                                 const urgent = s.weeksLeft < 2;
                                                 return (
                                                     <tr key={s.key} className="border-b border-gray-100">
-                                                        <td className="py-2 pr-4">
+                                                        <td className="py-2 pr-2 sm:pr-4">
                                                             <span className="font-medium text-gray-900">{s.colorway}</span> <span className="text-gray-500">· {comboLabel(s.base!, s.hankSize!)}</span>
                                                             {s.belowMin && (
                                                                 <span className="ml-2 text-xs bg-gray-100 text-gray-600 rounded px-1.5 py-0.5 whitespace-nowrap"
@@ -226,10 +226,10 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                                                                 </span>
                                                             )}
                                                         </td>
-                                                        <td className="py-2 pr-4 text-right tabular-nums">{s.perWeek.toFixed(1)}</td>
-                                                        <td className="py-2 pr-4 text-right tabular-nums">{s.onHand}{supply.source === 'estimate' && <span className="text-gray-400"> est.</span>}</td>
-                                                        <td className="py-2 pr-4 text-right tabular-nums">{s.coming || '—'}</td>
-                                                        <td className={`py-2 pr-4 text-right tabular-nums ${urgent ? 'text-red-600 font-semibold' : ''}`}>
+                                                        <td className="hidden sm:table-cell py-2 pr-2 sm:pr-4 text-right tabular-nums">{s.perWeek.toFixed(1)}</td>
+                                                        <td className="py-2 pr-2 sm:pr-4 text-right tabular-nums">{s.onHand}{supply.source === 'estimate' && <span className="text-gray-400"> est.</span>}</td>
+                                                        <td className="hidden sm:table-cell py-2 pr-2 sm:pr-4 text-right tabular-nums">{s.coming || '—'}</td>
+                                                        <td className={`py-2 pr-2 sm:pr-4 text-right tabular-nums ${urgent ? 'text-red-600 font-semibold' : ''}`}>
                                                             {urgent ? '⚠ ' : ''}{Number.isFinite(s.weeksLeft) ? s.weeksLeft.toFixed(1) : '—'}
                                                         </td>
                                                         <td className={`py-2 text-right tabular-nums ${edits.removed.includes(s.colorway!) ? 'text-gray-400 line-through' : ''}`} title={edits.removed.includes(s.colorway!) ? 'Removed from the plan' : undefined}>{s.suggest}</td>
@@ -296,9 +296,9 @@ function YarnToOrder({ rows, toBuy, total, horizon, yarnMonths, setYarnMonths, p
         <tr className="border-b border-gray-100">
             <td className="py-2 pr-4"><span className="font-medium text-gray-900">{label(r)}</span>{r.sku && <span className="text-xs text-gray-500"> · SKU {r.sku}</span>}</td>
             <td className="py-2 pr-4 text-right tabular-nums">{r.forDyeNext || '—'}</td>
-            <td className="py-2 pr-4 text-right tabular-nums">{r.forPlanned || '—'}</td>
-            <td className="py-2 pr-4 text-right tabular-nums">{r.forProjected || '—'}</td>
-            <td className="py-2 pr-4 text-right tabular-nums">{r.keep || '—'}</td>
+            <td className="hidden sm:table-cell py-2 pr-4 text-right tabular-nums">{r.forPlanned || '—'}</td>
+            <td className="hidden sm:table-cell py-2 pr-4 text-right tabular-nums">{r.forProjected || '—'}</td>
+            <td className="hidden sm:table-cell py-2 pr-4 text-right tabular-nums">{r.keep || '—'}</td>
             <td className="py-2 pr-4 text-right tabular-nums">{r.have}</td>
             <td className="py-2 pr-4 text-right tabular-nums font-semibold">{r.short ? `${r.packs} × ${r.packSize}` : '✓'}</td>
             <td className="py-2 text-right tabular-nums">{r.short && r.packPrice != null ? money(r.cost) : r.short ? '—' : ''}</td>
@@ -309,9 +309,9 @@ function YarnToOrder({ rows, toBuy, total, horizon, yarnMonths, setYarnMonths, p
             <tr className="text-left text-gray-500 border-b">
                 <th className="py-2 pr-4">Base · size</th>
                 <th className="py-2 pr-4 text-right" title="Skeins the batch plan below needs (pans + gradient trays)">This plan</th>
-                <th className="py-2 pr-4 text-right" title="Skeins your already-planned dye sessions need">Sessions</th>
-                <th className="py-2 pr-4 text-right" title="Typical batches projected for the rest of the stock-up period, in your overall sales mix">Projected</th>
-                <th className="py-2 pr-4 text-right" title="Low-stock minimum set on the Inventory item">Keep</th>
+                <th className="hidden sm:table-cell py-2 pr-4 text-right" title="Skeins your already-planned dye sessions need">Sessions</th>
+                <th className="hidden sm:table-cell py-2 pr-4 text-right" title="Typical batches projected for the rest of the stock-up period, in your overall sales mix">Projected</th>
+                <th className="hidden sm:table-cell py-2 pr-4 text-right" title="Low-stock minimum set on the Inventory item">Keep</th>
                 <th className="py-2 pr-4 text-right" title="Undyed skeins in Inventory">Have</th>
                 <th className="py-2 pr-4 text-right">Order (packs)</th>
                 <th className="py-2 text-right">Cost</th>
@@ -453,7 +453,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                         const combos = [...new Set(groups.flat().flatMap((p) => (p.yarns || []).map((y: any) => `${y.base} ${y.hankSize}g`)))];
                         return (
                             <div key={bi} className="border border-gray-200 rounded-lg">
-                                <div className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-t-lg text-sm">
+                                <div className="flex flex-wrap justify-between items-center gap-2 px-3 sm:px-4 py-2 bg-gray-50 rounded-t-lg text-sm">
                                     <span>
                                         <span className="font-semibold text-gray-800">Batch {bi + 1}{combos.length > 0 && <span className="font-normal text-gray-500"> · {combos.join(' + ')}</span>}</span>
                                         {(plan.yarnShort?.[bi] || []).length === 0

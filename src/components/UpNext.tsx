@@ -833,7 +833,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
                 <h2 className="text-2xl font-bold text-gray-900">Queue - Current Dye Session</h2>
             </div>
 
@@ -847,8 +847,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                 <>
                     {/* Session Selector and Finish Button */}
                     <div className="bg-white rounded-lg card-shadow p-4">
-                        <div className="flex gap-4 items-end">
-                            <div className="flex-1">
+                        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-end">
+                            <div className="flex-1 min-w-0">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Active Session</label>
                                 <select
                                     value={selectedSessionId}
