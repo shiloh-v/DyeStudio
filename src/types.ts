@@ -204,6 +204,7 @@ export interface YarnBaseSize {
   packSize?: Num;   // how many skeins come in a pack (defaults to 1)
   packPrice?: Num;  // price for the whole pack; per-skein price = packPrice / packSize
   length?: Num;     // optional override of the derived length (in the base's lengthUnit)
+  minStock?: Num;   // keep at least this many of every color in this size (blank = the Plan tab's default)
 }
 
 // A yarn base in the catalog — base-level specs entered once, plus the sizes it
