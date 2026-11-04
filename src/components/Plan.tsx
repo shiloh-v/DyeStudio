@@ -482,6 +482,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                                                         {g[0].colorway} <span className="text-gray-500 font-normal">· {g.length} pans</span>
                                                         {fromBestSellers && <span className="ml-2 text-xs bg-teal-50 text-teal-700 rounded px-1.5 py-0.5">fills the batch</span>}
                                                         {manual && <span className="ml-2 text-xs bg-blue-50 text-blue-700 rounded px-1.5 py-0.5">added</span>}
+                                                        {plan.repeats?.[bi]?.includes(g[0].colorway) && <span className="ml-2 text-xs bg-purple-50 text-purple-700 rounded px-1.5 py-0.5" title="This color's other batch doesn't dye this base/size, so it gets a second pair here.">2nd pair</span>}
                                                         {lab && <span className="ml-2 text-xs bg-amber-50 text-amber-800 rounded px-1.5 py-0.5">🎨 Color Lab test</span>}
                                                     </div>
                                                     <div className="text-gray-600 break-words">{sumYarns(g)}</div>

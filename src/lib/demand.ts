@@ -1365,8 +1365,62 @@ export function planRestock(input: RestockPlanInput) {
             ...labPans.filter((p) => slot.labs.includes(p.colorway)),
         ];
         pans.push(...load);
-        return { slot, load: sortPansLightToDark(load, recipes, input.inventory) };
+        return { slot, load: sortPansLightToDark(load, recipes, input.inventory), repeats: [] as string[] };
     }).filter((b) => b.load.length);
+    // Racks still free: a second pair of a color already planned, for a
+    // base/size it needs that none of its pans dye (urgency order). A batch
+    // dyeing fewer than MAX_COMBOS_PER_BATCH combos may add the one that lets
+    // the most in.
+    const combosOf = (load: any[]) => [...new Set(load.flatMap((p: any) => (p.yarns || []).map((y: any) => comboOf(y.base, Number(y.hankSize)))))];
+    const dyedBy = new Map<string, Set<string>>();
+    built.forEach((b) => b.load.forEach((p: any) => {
+        if (p.type !== 'pan') return;
+        const m = dyedBy.get(p.colorway) || new Set<string>();
+        (p.yarns || []).forEach((y: any) => m.add(comboOf(y.base, Number(y.hankSize))));
+        dyedBy.set(p.colorway, m);
+    }));
+    const unmet = (c: string) => itemsOf(base, c)
+        .filter((x) => x.qty > 0 && x.base && x.hankSize && !dyedBy.get(c)?.has(comboOf(x.base, x.hankSize)));
+    const texturedName = (c: string) => isTexturedColor(findRecipeByName(recipes, c)) || isTexturedColor(labByName.get(c));
+    const order = [...new Set(base.map((c) => c.colorway))];
+    for (const b of built) {
+        const inBatch = new Set(b.load.map((p: any) => p.colorway).filter(Boolean));
+        const room = b.slot.cap - inBatch.size;
+        if (room <= 0) continue;
+        const have = combosOf(b.load);
+        const eligible = (combos: string[]) => {
+            const out: string[] = [];
+            let textured = 2 * [...inBatch].filter(texturedName).length;
+            for (const c of order) {
+                if (out.length >= room) break;
+                if (inBatch.has(c) || !dyedBy.has(c)) continue;
+                if (!unmet(c).some((x) => combos.includes(comboOf(x.base, x.hankSize)))) continue;
+                if (texturedName(c)) { if (textured + 2 > MAX_TEXTURED_PANS_PER_BATCH) continue; textured += 2; }
+                out.push(c);
+            }
+            return out;
+        };
+        let best = { combos: have, got: eligible(have) };
+        if (have.length < MAX_COMBOS_PER_BATCH) {
+            for (const k of new Set(order.flatMap((c) => unmet(c).map((x) => comboOf(x.base, x.hankSize))))) {
+                if (have.includes(k) || !feasible([...have, k])) continue;
+                const got = eligible([...have, k]);
+                if (got.length > best.got.length) best = { combos: [...have, k], got };
+            }
+        }
+        if (!best.got.length) continue;
+        const add = buildRestockPans(best.got.flatMap((c) => unmet(c)), recipes, { ...restockOpts, combos: best.combos });
+        topUps += add.topUps;
+        const extra = add.pans.map((p) => ({ ...p, id: stamp + seq++ / 1000 }));
+        if (!extra.length) continue;
+        extra.forEach((p: any) => {
+            const m = dyedBy.get(p.colorway)!;
+            (p.yarns || []).forEach((y: any) => m.add(comboOf(y.base, Number(y.hankSize))));
+        });
+        pans.push(...extra);
+        b.repeats.push(...new Set(extra.map((p: any) => p.colorway)));
+        b.load = sortPansLightToDark([...b.load, ...extra], recipes, input.inventory);
+    }
     // Dye what's on the shelf first: batches your undyed yarn already covers
     // (after what planned sessions use) go first, in urgency order; the rest
     // follow in urgency order. Each batch records what it's short of.
@@ -1402,7 +1456,8 @@ export function planRestock(input: RestockPlanInput) {
     });
     // Gradient trays go last in the oven order, one per batch while dyes need one.
     const batches = ordered.map((b, bi) => (b.slot.tray && dyes.length ? [...b.load, gradientTray(dyes.shift()!, trayYarn, bi)] : b.load));
-    return { pans, topUps, unplanned, batches, yarnShort, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
+    const repeats = ordered.map((b) => b.repeats);
+    return { pans, topUps, unplanned, batches, yarnShort, repeats, extras, manual, gradientDyes, labTests: [...labByName.keys()], adjust };
 }
 
 
