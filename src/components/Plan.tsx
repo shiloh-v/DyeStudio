@@ -393,7 +393,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                 </label>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, at most 2 yarn combos (base + size, e.g. Nova Fingering 20g + Luna DK 50g) per batch, plus a gradient tray while dyes still need one. Pans are listed in dye order, lightest to darkest. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
+                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, at most 2 yarn combos (base + size, e.g. Nova Fingering 20g + Luna DK 50g) per batch, plus a gradient tray while dyes still need one. Batches your undyed yarn already covers come first. Pans are listed in dye order, lightest to darkest. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
             </p>
             {plan.unplanned?.length > 0 && (
                 <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
@@ -454,7 +454,12 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                         return (
                             <div key={bi} className="border border-gray-200 rounded-lg">
                                 <div className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-t-lg text-sm">
-                                    <span className="font-semibold text-gray-800">Batch {bi + 1}{combos.length > 0 && <span className="font-normal text-gray-500"> · {combos.join(' + ')}</span>}</span>
+                                    <span>
+                                        <span className="font-semibold text-gray-800">Batch {bi + 1}{combos.length > 0 && <span className="font-normal text-gray-500"> · {combos.join(' + ')}</span>}</span>
+                                        {(plan.yarnShort?.[bi] || []).length === 0
+                                            ? <span className="ml-2 text-xs bg-green-50 text-green-700 rounded px-1.5 py-0.5 whitespace-nowrap" title="Your undyed yarn in Inventory covers this batch (after what planned sessions use).">✓ yarn on hand</span>
+                                            : <span className="ml-2 text-xs bg-amber-50 text-amber-800 rounded px-1.5 py-0.5" title="Not enough undyed yarn in Inventory yet (after planned sessions and earlier batches). See Yarn to order.">Need {plan.yarnShort[bi].map((y) => `${y.qty}× ${y.base} ${y.hankSize}g`).join(', ')}</span>}
+                                    </span>
                                     <span className="flex items-center gap-3">
                                         <span className="text-gray-500">{racks} of 9 racks</span>
                                         <button disabled={saving} onClick={() => onCreate(bi)}
