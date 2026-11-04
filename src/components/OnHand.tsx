@@ -53,14 +53,14 @@ export function OnHand({ sales, batches, recipes, kits, settings, inventory, dye
             {S.source === 'shopify' ? (
                 <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-lg px-4 py-3">
                     📦 Counts are from your Shopify stock levels{S.snapshotDate ? <>, uploaded {DateUtils.formatDate(S.snapshotDate.slice(0, 10))}</> : ''}.{' '}
-                    <button onClick={() => setActiveTab('demand')} className="underline">Upload newer ones on Demand →</button>
+                    <button onClick={() => setActiveTab('demand')} className="underline">Upload newer ones in Shop → Sales →</button>
                 </div>
             ) : (
                 <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg px-4 py-3">
                     {S.hasSales
                         ? <>⚠️ These counts are <strong>estimates</strong>: skeins you've stocked minus Shopify sales since. </>
                         : <>⚠️ No Shopify sales are imported yet, so this counts <strong>every skein ever stocked</strong>. </>}
-                    For exact counts, <button onClick={() => setActiveTab('demand')} className="underline">upload your Shopify stock levels on Demand →</button>
+                    For exact counts, <button onClick={() => setActiveTab('demand')} className="underline">upload your Shopify stock levels in Shop → Sales →</button>
                 </div>
             )}
 

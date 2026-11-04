@@ -7,7 +7,7 @@ import { toast } from '../lib/toast';
 
 // Code-split each tab — its JS loads on demand instead of in the initial bundle.
 const named = (p, name) => lazy(() => p().then((m) => ({ default: m[name] })));
-const Dashboard = named(() => import('./Dashboard'), 'Dashboard');
+const Today = named(() => import('./Today'), 'Today');
 const Calendar = named(() => import('./Calendar'), 'Calendar');
 const Recipes = named(() => import('./Recipes'), 'Recipes');
 const ColorLab = named(() => import('./ColorLab'), 'ColorLab');
@@ -23,16 +23,17 @@ const BackupRestore = named(() => import('./BackupRestore'), 'BackupRestore');
 const YarnBases = named(() => import('./YarnBases'), 'YarnBases');
 const DyeCatalog = named(() => import('./DyeCatalog'), 'DyeCatalog');
 const Demand = named(() => import('./Demand'), 'Demand');
+const Plan = named(() => import('./Plan'), 'Plan');
 
 // Top-level nav. Groups list their sub-tabs; the first one opens by default.
 // Tab ids are the URL paths, so keep them stable (bookmarks, cross-tab links).
 type NavItem = { id: string; icon: string; label: string; group?: [string, string][] };
 const NAV: NavItem[] = [
-    { id: 'dashboard', icon: '📊', label: 'Dashboard' },
-    { id: 'dye', icon: '▶️', label: 'Dye', group: [['queue', '▶️ Queue'], ['sessions', '📋 Sessions'], ['calendar', '📅 Calendar']] },
+    { id: 'dashboard', icon: '🏠', label: 'Today' },
+    { id: 'dye', icon: '▶️', label: 'Dye', group: [['queue', '▶️ Queue'], ['plan', '🧪 Plan'], ['sessions', '📋 Sessions'], ['calendar', '📅 Calendar']] },
     { id: 'pipeline', icon: '🔄', label: 'Pipeline' },
     { id: 'colorways', icon: '🧶', label: 'Colorways', group: [['recipes', '📝 Recipes'], ['gradients', '🌈 Gradients'], ['kits', '🎁 Kits'], ['colorlab', '🎨 Color Lab']] },
-    { id: 'shop', icon: '📈', label: 'Sales', group: [['demand', '📈 Demand'], ['sales', '📦 On hand']] },
+    { id: 'shop', icon: '🛍️', label: 'Shop', group: [['demand', '📈 Sales'], ['sales', '📦 On hand']] },
 ];
 // Reference pages you rarely need, tucked under the More menu.
 const MORE: [string, string][] = [
@@ -334,11 +335,11 @@ export function YarnDyeManager() {
                     </div>
                 }>
                 {activeTab === 'dashboard' && (
-                    <Dashboard 
-                        recipes={recipes} 
-                        inventory={inventory} 
-                        batches={batches} 
-                        sales={sales} 
+                    <Today
+                        recipes={recipes}
+                        inventory={inventory}
+                        batches={batches}
+                        sales={sales}
                         kits={kits}
                         settings={settings}
                         dyeSessions={dyeSessions}
@@ -419,6 +420,21 @@ export function YarnDyeManager() {
                         settings={settings}
                         inventory={inventory}
                         dyeSessions={dyeSessions}
+                        gradients={gradients}
+                        colorSketches={colorSketches}
+                        setActiveTab={setActiveTab}
+                    />
+                )}
+                {activeTab === 'plan' && (
+                    <Plan
+                        sales={sales}
+                        batches={batches}
+                        recipes={recipes}
+                        kits={kits}
+                        settings={settings}
+                        inventory={inventory}
+                        dyeSessions={dyeSessions}
+                        saveDyeSessions={saveDyeSessions}
                         gradients={gradients}
                         colorSketches={colorSketches}
                         setActiveTab={setActiveTab}
