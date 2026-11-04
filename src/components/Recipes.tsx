@@ -11,7 +11,7 @@ import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [], batches = [], kits = [], dyeSessions = [], gradients = [] }) {
-    // Shopify sales per colorway (window set on the Demand tab) for card badges + sorting.
+    // Shopify sales per colorway (window set on Plan / Sales) for card badges + sorting.
     const demand = useMemo(() => {
         const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients });
         if (!D.lines.length) return null;
@@ -792,7 +792,7 @@ function RecipeCard({ recipe, inventory, demand, onEdit, onDelete }) {
                             🛍️ {demand.rank.has(recipe.name) ? `#${demand.rank.get(recipe.name)} · ` : ''}{demand.recentUnits.get(recipe.name) || 0} sold · {demand.label}
                         </span>
                         {demand.low.has(recipe.name) && (
-                            <span className={`rounded px-1.5 py-0.5 font-medium ${demand.low.get(recipe.name) < 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`} title="On the Demand tab's Dye next list">
+                            <span className={`rounded px-1.5 py-0.5 font-medium ${demand.low.get(recipe.name) < 2 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`} title="On the Dye next list (Dye → Plan)">
                                 🧪 Dye soon · {demand.low.get(recipe.name).toFixed(1)} wk left
                             </span>
                         )}

@@ -65,7 +65,7 @@ function QuantityCell({ item, isLowStock, onAdjust, onCommit }: any) {
 }
 
 export function Inventory({ inventory, saveInventory, settings, sales = [], batches = [], recipes = [], kits = [], dyeSessions = [], gradients = [], colorSketches = [], setActiveTab = (_t: string) => {} }) {
-    // Undyed yarn to buy, from Shopify demand + planned sessions (see Demand tab).
+    // Undyed yarn to buy, from Shopify demand + planned sessions (see Dye → Plan).
     const yarnOrder = useMemo(() => {
         const D = demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches });
         return D.lines.length ? { rows: D.toBuy, cost: D.yarnOrderCost } : null;
@@ -371,12 +371,12 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
 
             {/* Yarn to order (Shopify demand) */}
             {yarnOrder && yarnOrder.rows.length > 0 && !showForm && (
-                <button onClick={() => setActiveTab('demand')} className="w-full text-left bg-teal-50 border-l-4 border-teal-500 p-4 rounded hover:bg-teal-100">
+                <button onClick={() => setActiveTab('plan')} className="w-full text-left bg-teal-50 border-l-4 border-teal-500 p-4 rounded hover:bg-teal-100">
                     <p className="font-semibold text-teal-800">🧶 Yarn to order, based on Shopify demand{yarnOrder.cost > 0 ? ` (≈ $${Math.round(yarnOrder.cost)})` : ''}</p>
                     <p className="text-sm text-teal-800 mt-1">
                         {yarnOrder.rows.map((r) => `${r.base} ${r.hankSize}g × ${r.packs} pack${r.packs === 1 ? '' : 's'}`).join(' · ')}
                     </p>
-                    <p className="text-xs text-teal-700 mt-1 underline">See the breakdown on the Demand tab →</p>
+                    <p className="text-xs text-teal-700 mt-1 underline">See the breakdown on Dye → Plan →</p>
                 </button>
             )}
 
