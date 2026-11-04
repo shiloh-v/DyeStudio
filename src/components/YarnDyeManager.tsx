@@ -16,7 +16,7 @@ const DyeSessions = named(() => import('./DyeSessions'), 'DyeSessions');
 const UpNext = named(() => import('./UpNext'), 'UpNext');
 const Inventory = named(() => import('./Inventory'), 'Inventory');
 const Pipeline = named(() => import('./Pipeline'), 'Pipeline');
-const Sales = named(() => import('./Sales'), 'Sales');
+const OnHand = named(() => import('./OnHand'), 'OnHand');
 const Gradients = named(() => import('./Gradients'), 'Gradients');
 const Settings = named(() => import('./Settings'), 'Settings');
 const BackupRestore = named(() => import('./BackupRestore'), 'BackupRestore');
@@ -32,7 +32,7 @@ const NAV: NavItem[] = [
     { id: 'dye', icon: '▶️', label: 'Dye', group: [['queue', '▶️ Queue'], ['sessions', '📋 Sessions'], ['calendar', '📅 Calendar']] },
     { id: 'pipeline', icon: '🔄', label: 'Pipeline' },
     { id: 'colorways', icon: '🧶', label: 'Colorways', group: [['recipes', '📝 Recipes'], ['gradients', '🌈 Gradients'], ['kits', '🎁 Kits'], ['colorlab', '🎨 Color Lab']] },
-    { id: 'shop', icon: '📈', label: 'Sales', group: [['demand', '📈 Demand'], ['sales', '🏷️ Stock']] },
+    { id: 'shop', icon: '📈', label: 'Sales', group: [['demand', '📈 Demand'], ['sales', '📦 On hand']] },
 ];
 // Reference pages you rarely need, tucked under the More menu.
 const MORE: [string, string][] = [
@@ -411,12 +411,17 @@ export function YarnDyeManager() {
                     />
                 )}
                 {activeTab === 'sales' && (
-                    <Sales 
-                        sales={sales} 
-                        saveSales={saveSales} 
+                    <OnHand
+                        sales={sales}
                         batches={batches}
-                        saveBatches={saveBatches}
                         recipes={recipes}
+                        kits={kits}
+                        settings={settings}
+                        inventory={inventory}
+                        dyeSessions={dyeSessions}
+                        gradients={gradients}
+                        colorSketches={colorSketches}
+                        setActiveTab={setActiveTab}
                     />
                 )}
                 {activeTab === 'demand' && (
