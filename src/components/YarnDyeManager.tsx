@@ -24,9 +24,26 @@ const YarnBases = named(() => import('./YarnBases'), 'YarnBases');
 const DyeCatalog = named(() => import('./DyeCatalog'), 'DyeCatalog');
 const Demand = named(() => import('./Demand'), 'Demand');
 
+// Top-level nav. Groups list their sub-tabs; the first one opens by default.
+// Tab ids are the URL paths, so keep them stable (bookmarks, cross-tab links).
+type NavItem = { id: string; icon: string; label: string; group?: [string, string][] };
+const NAV: NavItem[] = [
+    { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+    { id: 'dye', icon: '▶️', label: 'Dye', group: [['queue', '▶️ Queue'], ['sessions', '📋 Sessions'], ['calendar', '📅 Calendar']] },
+    { id: 'pipeline', icon: '🔄', label: 'Pipeline' },
+    { id: 'colorways', icon: '🧶', label: 'Colorways', group: [['recipes', '📝 Recipes'], ['gradients', '🌈 Gradients'], ['kits', '🎁 Kits'], ['colorlab', '🎨 Color Lab']] },
+    { id: 'shop', icon: '📈', label: 'Sales', group: [['demand', '📈 Demand'], ['sales', '🏷️ Stock']] },
+];
+// Reference pages you rarely need, tucked under the More menu.
+const MORE: [string, string][] = [
+    ['bases', '🧵 Yarn Bases'],
+    ['dyes', '🎨 Dyes'],
+    ['inventory', '📦 Inventory'],
+    ['settings', '⚙️ Settings'],
+];
 const VALID_TABS = [
-    'dashboard', 'calendar', 'recipes', 'gradients', 'kits', 'colorlab',
-    'sessions', 'queue', 'bases', 'dyes', 'inventory', 'pipeline', 'sales', 'demand', 'settings',
+    ...NAV.flatMap((t) => (t.group ? t.group.map(([id]) => id) : [t.id])),
+    ...MORE.map(([id]) => id),
 ];
 
 export function YarnDyeManager() {
@@ -37,6 +54,9 @@ export function YarnDyeManager() {
     const rawTab = location.pathname.slice(1);
     const activeTab = VALID_TABS.includes(rawTab) ? rawTab : 'dashboard';
     const setActiveTab = (tab) => navigate('/' + tab);
+    const activeGroup = NAV.find((t) => t.group?.some(([id]) => id === activeTab));
+    const activeMore = MORE.find(([id]) => id === activeTab);
+    const [moreOpen, setMoreOpen] = useState(false);
     const [recipes, setRecipes] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [batches, setBatches] = useState([]);
@@ -223,114 +243,82 @@ export function YarnDyeManager() {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <header className="gradient-bg text-white shadow-lg">
-                <div className="container mx-auto px-4 py-6">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-3xl font-bold">🧶 Celestial Dyeworks Studio Manager</h1>
-                            <p className="text-teal-100 mt-1">Professional dyeing business management</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => { supabase.auth.signOut(); }}
-                                className="bg-white text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors font-medium border border-teal-200"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </header>
-
-            {/* Navigation */}
-            <nav className="bg-white shadow-sm border-b sticky top-0 z-10">
-                <div className="container mx-auto px-4">
-                    <div className="flex space-x-1 overflow-x-auto">
-                        {[
-                            { id: 'dashboard', label: '📊 Dashboard' },
-                            { id: 'calendar', label: '📅 Calendar' },
-                            { id: 'colorways', label: '🧶 Colorways', group: ['recipes', 'gradients', 'kits'] },
-                            { id: 'studio', label: '🧪 Studio', group: ['colorlab', 'sessions', 'queue'] },
-                            { id: 'bases', label: '🧵 Yarn Bases' },
-                            { id: 'dyes', label: '🎨 Dyes' },
-                            { id: 'inventory', label: '📦 Inventory' },
-                            { id: 'pipeline', label: '🔄 Pipeline' },
-                            { id: 'sales', label: '🏷️ Stock' },
-                            { id: 'demand', label: '📈 Demand' },
-                            { id: 'settings', label: '⚙️ Settings' }
-                        ].map(tab => {
-                            const isGroupActive = tab.group 
-                                ? tab.group.includes(activeTab) 
-                                : activeTab === tab.id;
+            {/* Navigation — the dye-day loop up front; reference pages under More */}
+            <nav className="bg-white shadow-sm border-b sticky top-0 z-20">
+                <div className="container mx-auto px-4 flex items-center gap-2">
+                    <span className="hidden lg:block font-bold text-teal-700 whitespace-nowrap mr-2">🧶 Celestial Dyeworks</span>
+                    <div className="flex-1 min-w-0 flex space-x-1 overflow-x-auto [scrollbar-width:none]">
+                        {NAV.map(tab => {
+                            const ids = tab.group ? tab.group.map(([id]) => id) : [tab.id];
+                            const active = ids.includes(activeTab);
                             return (
                                 <button
                                     key={tab.id}
-                                    onClick={() => {
-                                        if (tab.group) {
-                                            // If clicking a group tab, go to first sub-tab (or stay if already in group)
-                                            if (!tab.group.includes(activeTab)) {
-                                                setActiveTab(tab.group[0]);
-                                            }
-                                        } else {
-                                            setActiveTab(tab.id);
-                                        }
-                                    }}
-                                    className={`px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
-                                        isGroupActive
-                                            ? 'bg-teal-600 text-white'
-                                            : 'text-gray-600 hover:bg-gray-100'
+                                    // A group opens on its first sub-tab (or stays put if already in it)
+                                    onClick={() => { if (!ids.includes(activeTab)) setActiveTab(ids[0]); }}
+                                    title={tab.label}
+                                    className={`px-2 sm:px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                                        active ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                                     }`}
                                 >
-                                    {tab.label}
+                                    {/* Phones show just the icon for tabs you're not on, so all five fit */}
+                                    {tab.icon}<span className={active ? ' ml-1.5' : 'hidden sm:inline ml-1.5'}>{tab.label}</span>
                                 </button>
                             );
                         })}
                     </div>
-                </div>
-                {/* Sub-tabs for Colorways */}
-                {['recipes', 'gradients', 'kits'].includes(activeTab) && (
-                    <div className="container mx-auto px-4 border-t border-gray-100">
-                        <div className="flex space-x-1 py-1">
-                            {[
-                                { id: 'recipes', label: '📝 Recipes' },
-                                { id: 'gradients', label: '🌈 Gradients' },
-                                { id: 'kits', label: '🎁 Kits' }
-                            ].map(sub => (
-                                <button
-                                    key={sub.id}
-                                    onClick={() => setActiveTab(sub.id)}
-                                    className={`px-4 py-2 text-sm whitespace-nowrap transition-colors ${
-                                        activeTab === sub.id 
-                                            ? 'subtab-active' 
-                                            : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg'
-                                    }`}
-                                >
-                                    {sub.label}
-                                </button>
-                            ))}
-                        </div>
+                    {/* Kept outside the scrolling row so the menu isn't clipped */}
+                    <div className="relative shrink-0">
+                        <button
+                            onClick={() => setMoreOpen(!moreOpen)}
+                            className={`px-2 sm:px-4 py-2.5 my-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                                activeMore ? 'bg-teal-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                            {activeMore ? activeMore[1] : <>⋯<span className="hidden sm:inline"> More</span></>} ▾
+                        </button>
+                        {moreOpen && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setMoreOpen(false)} />
+                                <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg card-shadow border py-1 z-20">
+                                    {MORE.map(([id, label]) => (
+                                        <button
+                                            key={id}
+                                            onClick={() => { setActiveTab(id); setMoreOpen(false); }}
+                                            className={`block w-full text-left px-4 py-2 text-sm ${
+                                                activeTab === id ? 'subtab-active' : 'text-gray-700 hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                    <div className="border-t my-1" />
+                                    <button
+                                        onClick={() => { setMoreOpen(false); supabase.auth.signOut(); }}
+                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        ↪ Sign out
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
-                )}
-                {/* Sub-tabs for Studio */}
-                {['colorlab', 'sessions', 'queue'].includes(activeTab) && (
+                </div>
+                {/* Sub-tabs for the active group */}
+                {activeGroup && (
                     <div className="container mx-auto px-4 border-t border-gray-100">
-                        <div className="flex space-x-1 py-1">
-                            {[
-                                { id: 'colorlab', label: '🎨 Color Lab' },
-                                { id: 'sessions', label: '📋 Dye Sessions' },
-                                { id: 'queue', label: '▶️ Queue' }
-                            ].map(sub => (
+                        <div className="flex space-x-1 py-1 overflow-x-auto [scrollbar-width:none]">
+                            {activeGroup.group.map(([id, label]) => (
                                 <button
-                                    key={sub.id}
-                                    onClick={() => setActiveTab(sub.id)}
-                                    className={`px-4 py-2 text-sm whitespace-nowrap transition-colors ${
-                                        activeTab === sub.id 
-                                            ? 'subtab-active' 
+                                    key={id}
+                                    onClick={() => setActiveTab(id)}
+                                    className={`px-3 sm:px-4 py-2 text-sm whitespace-nowrap transition-colors ${
+                                        activeTab === id
+                                            ? 'subtab-active'
                                             : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-lg'
                                     }`}
                                 >
-                                    {sub.label}
+                                    {label}
                                 </button>
                             ))}
                         </div>
