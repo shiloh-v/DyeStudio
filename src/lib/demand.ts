@@ -788,7 +788,8 @@ export interface AssignOptions {
  * and picks the second combo that lets the most of the next urgent colorways
  * join, then fills up in urgency order. `fillers` (next best sellers) only take
  * free racks in batches that already exist — or open one when there are none
- * and `forceBatch`. Batches get a gradient tray (1 rack) while `trays` lasts.
+ * and `forceBatch` — first those that sell in the batch's combos, then any
+ * left, dyed on the batch's combos, so every batch ends up full. Batches get a gradient tray (1 rack) while `trays` lasts.
  * At most MAX_TEXTURED_PANS_PER_BATCH variegated/speckled pans per batch
  * (colorways and lab tests); more wait for a later batch.
  */
@@ -819,7 +820,9 @@ export function assignBatches(
     const texturedPans = (s: BatchSlot) => (texturedIn.get(s) || 0) + 2 * s.labs.filter((l) => o.texturedLabs?.has(l)).length;
     // Fill a batch's free racks from `pool` (in urgency order), adding combos
     // up to MAX_COMBOS_PER_BATCH: whichever let the most of the pool join.
-    const fillSlot = (s: BatchSlot, pool: BatchCandidate[]) => {
+    // `anyCombo`: take colors that don't sell in the batch's combos too (they
+    // get dyed on them), keeping the combos as they are.
+    const fillSlot = (s: BatchSlot, pool: BatchCandidate[], anyCombo = false) => {
         const room = s.cap - used(s);
         if (room <= 0) return [];
         const pick = (combos: string[]) => {
@@ -827,7 +830,7 @@ export function assignBatches(
             let textured = texturedPans(s);
             for (const c of pool) {
                 if (out.length >= room) break;
-                if (!fitsCombos(c, combos)) continue;
+                if (!anyCombo && !fitsCombos(c, combos)) continue;
                 // A textured color past the batch's limit waits for a later batch.
                 if (c.textured && textured + 2 > MAX_TEXTURED_PANS_PER_BATCH) continue;
                 if (c.textured) textured += 2;
@@ -838,8 +841,8 @@ export function assignBatches(
         const extra = [...new Set([...pool.flatMap((c) => [...c.weights.keys()]), ...(o.allCombos || [])])].filter((k) => !s.combos.includes(k));
         const free = MAX_COMBOS_PER_BATCH - s.combos.length;
         const adds: string[][] = [[]];
-        if (free >= 1) extra.forEach((k) => adds.push([k]));
-        if (free >= 2) extra.forEach((x, i) => extra.slice(i + 1).forEach((y) => adds.push([x, y])));
+        if (free >= 1 && !anyCombo) extra.forEach((k) => adds.push([k]));
+        if (free >= 2 && !anyCombo) extra.forEach((x, i) => extra.slice(i + 1).forEach((y) => adds.push([x, y])));
         let best: { combos: string[]; got: BatchCandidate[]; score: number } | null = null;
         for (const add of adds) {
             const combos = [...s.combos, ...add];
@@ -872,6 +875,12 @@ export function assignBatches(
     let pool = fillers.filter((f) => topCombo(f));
     for (const s of slots) {
         const got = fillSlot(s, pool);
+        pool = pool.filter((c) => !got.includes(c));
+    }
+    // Racks still free: fill them with the next best sellers anyway.
+    for (const s of slots) {
+        if (!s.combos.length) continue;
+        const got = fillSlot(s, pool, true);
         pool = pool.filter((c) => !got.includes(c));
     }
     return { slots: slots.filter((s) => used(s) > 0), noCombo };

@@ -60,8 +60,11 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
         setEdits(fresh);
     };
 
-    const createDraftSessions = async () => {
-        if (!plan.batches.length) return;
+    // Draft plan batches as Dye Sessions: all of them, or one (`only` = its index).
+    const [saving, setSaving] = useState(false);
+    const createDraftSessions = async (only?: number) => {
+        const picked = only == null ? plan.batches : plan.batches.slice(only, only + 1);
+        if (!picked.length || saving) return;
         const nums = (dyeSessions || [])
             .map((s) => s.sessionId || s.session_id)
             .filter((id) => id && String(id).startsWith('DS-'))
@@ -73,7 +76,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
             (plan.topUps ? ` Pans topped up to ${PAN_GRAMS}g in each color's sales mix (see pan notes).` : '') +
             (plan.extras.length ? ` Batch filled with next best sellers: ${plan.extras.join(', ')}.` : '') +
             (plan.labTests.length ? ` Color Lab tests: ${plan.labTests.join(', ')}.` : '');
-        const parts = plan.batches.length;
+        const parts = picked.length;
         // Studio naming: "YYYY Session N", continuing the year's numbering
         // (counts both "YYYY Session N" and older "YYYY Batch N" names).
         const year = today.slice(0, 4);
@@ -81,7 +84,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
             const m = String(s.name || '').match(/^(\d{4})\s+(?:Session|Batch)\s+(\d+)/i);
             return m && m[1] === year ? parseInt(m[2]) : 0;
         }));
-        const created = plan.batches.map((load, i) => {
+        const created = picked.map((load, i) => {
             const tray = load.find((p) => p.type === 'gradientTray');
             return {
                 id: Date.now() + i,
@@ -96,10 +99,31 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
         // The "needs review" flag needs its DB column (sql/dye-sessions-needs-review.sql).
         const { error: reviewColErr } = await supabase.from('dye_sessions').select('needsReview').limit(1);
         if (reviewColErr) toast('Heads up: run sql/dye-sessions-needs-review.sql in Supabase so drafts keep their "Needs review" flag.', 'info', 9000);
-        await saveDyeSessions([...(dyeSessions || []), ...created]);
-        resetPlan();
-        toast(`${parts} draft batch${parts === 1 ? '' : 'es'} created with no date yet. Review and date ${parts === 1 ? 'it' : 'them'} in Dye Sessions.`, 'success', 7000);
-        setActiveTab('sessions');
+        setSaving(true);
+        const ok = await saveDyeSessions([...(dyeSessions || []), ...created]);
+        setSaving(false);
+        if (!ok) return; // the save already said what failed; keep the plan as it was
+        if (only == null) {
+            resetPlan();
+            toast(`${parts} draft batch${parts === 1 ? '' : 'es'} created with no date yet. Review and date ${parts === 1 ? 'it' : 'them'} in Dye Sessions.`, 'success', 7000);
+            setActiveTab('sessions');
+            return;
+        }
+        // One batch: stay here for the rest. Its colors now count as scheduled,
+        // so the plan rebuilds without them; drop its added colors and Color
+        // Lab tests from the edits so they aren't planned a second time.
+        const load = picked[0];
+        const names = new Set(load.map((p: any) => p.colorway).filter(Boolean));
+        const labs = new Set(load.filter((p: any) => p.type === 'colorLab').map((p: any) => String(p.colorSketchId)));
+        const nextEdits = {
+            ...edits,
+            added: edits.added.filter((c) => !names.has(c)),
+            labTests: (edits.labTests || []).filter((id) => !labs.has(String(id))),
+            forceBatch: false,
+        };
+        demandPrefs.set('demand_plan_edits', nextEdits);
+        setEdits(nextEdits);
+        toast(`${created[0].name} added to Dye Sessions as a draft with no date yet. The plan below is rebuilt without it.`, 'success', 7000);
     };
 
     if (!D.lines.length) {
@@ -236,6 +260,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
                         setAddPick={setAddPick}
                         recipes={recipes}
                         onCreate={createDraftSessions}
+                        saving={saving}
                         labCandidates={D.labCandidates}
                         labIds={labIds}
                         addLabTest={addLabTest}
@@ -345,7 +370,7 @@ function YarnToOrder({ rows, toBuy, total, horizon, yarnMonths, setYarnMonths, p
 }
 
 /** The auto-built batch plan: batches → colorway pairs (+ gradient tray), editable before drafting. */
-function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, removeColorway, addColorway, addPick, setAddPick, recipes, onCreate, labCandidates, labIds, addLabTest, removeLabTest, planAnyway }) {
+function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, removeColorway, addColorway, addPick, setAddPick, recipes, onCreate, saving, labCandidates, labIds, addLabTest, removeLabTest, planAnyway }) {
     const [labPick, setLabPick] = useState('');
     const sumYarns = (pans: any[]) => {
         const m = new Map<string, number>();
@@ -430,7 +455,14 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                             <div key={bi} className="border border-gray-200 rounded-lg">
                                 <div className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-t-lg text-sm">
                                     <span className="font-semibold text-gray-800">Batch {bi + 1}{combos.length > 0 && <span className="font-normal text-gray-500"> · {combos.join(' + ')}</span>}</span>
-                                    <span className="text-gray-500">{racks} of 9 racks</span>
+                                    <span className="flex items-center gap-3">
+                                        <span className="text-gray-500">{racks} of 9 racks</span>
+                                        <button disabled={saving} onClick={() => onCreate(bi)}
+                                            className="text-teal-700 border border-teal-200 bg-white px-2 py-0.5 rounded hover:bg-teal-50 font-medium disabled:opacity-40"
+                                            title="Add just this batch to Dye Sessions as an undated draft">
+                                            + Add to Dye Sessions
+                                        </button>
+                                    </span>
                                 </div>
                                 <ul className="list-none m-0 p-0 divide-y divide-gray-100">
                                     {groups.map((g) => {
@@ -480,7 +512,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                 </select>
                 <button disabled={!labPick} onClick={() => { addLabTest(labPick); setLabPick(''); }} className="text-sm bg-white text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg hover:bg-amber-50 font-medium disabled:opacity-40">+ Test</button>
                 {edited && <button onClick={resetPlan} className="text-sm text-gray-500 hover:underline">Reset plan</button>}
-                <button disabled={!plan.batches.length} onClick={onCreate}
+                <button disabled={!plan.batches.length || saving} onClick={() => onCreate()}
                     className="ml-auto bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-40">
                     Create {plan.batches.length || ''} draft batch{plan.batches.length === 1 ? '' : 'es'}
                 </button>
