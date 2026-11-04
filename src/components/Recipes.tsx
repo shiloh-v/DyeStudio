@@ -267,14 +267,14 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-3">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-900">Dye Recipes</h2>
                     <p className="text-sm text-gray-600 mt-1">{recipes.length} recipe{recipes.length !== 1 ? 's' : ''} total</p>
                 </div>
                 <button
                     onClick={() => showForm ? closeForm() : setShowForm(true)}
-                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ New Recipe'}
                 </button>
@@ -725,7 +725,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                             >
                                 {editingId ? 'Update Recipe' : 'Save Recipe'}
                             </button>

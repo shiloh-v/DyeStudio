@@ -491,7 +491,7 @@ export function Gradients({ gradients, saveGradients, inventory }) {
                         </div>
 
                         <div className="flex gap-3 pt-4">
-                            <button type="submit" className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium">
+                            <button type="submit" className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap">
                                 {editingId ? 'Update Gradient' : 'Save Gradient'}
                             </button>
                             <button type="button" onClick={closeForm} className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors font-medium">

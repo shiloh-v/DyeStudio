@@ -641,8 +641,8 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <h2 className="text-2xl font-bold text-gray-900">Dye Sessions Planning</h2>
                     <button
                         onClick={() => setShowArchived(!showArchived)}
@@ -657,7 +657,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                 </div>
                 <button
                     onClick={() => showForm ? closeForm() : setShowForm(true)}
-                    className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                    className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ Plan Session'}
                 </button>
@@ -1789,7 +1789,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="submit"
-                                className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                                className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                             >
                                 {editingId ? 'Update Session' : 'Save Session'}
                             </button>
@@ -1813,9 +1813,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                     .sort(byPlannedDate) // by date, earliest first; undated drafts last
                     .map(session => (
                     <div key={session.id} className={`bg-white rounded-lg card-shadow p-6 ${session.archived ? 'opacity-75 border-2 border-gray-300' : ''}`}>
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2">
+                        <div className="flex flex-col sm:flex-row justify-between items-start gap-2 mb-4">
+                            <div className="flex-1 min-w-0 w-full">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <button
                                         onClick={() => setExpandedSessions({
                                             ...expandedSessions,
@@ -1836,14 +1836,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     )}
                                 </div>
                                 {session.sessionId && (
-                                    <p className="text-xs text-gray-500 ml-8">ID: {session.sessionId}</p>
+                                    <p className="text-xs text-gray-500 sm:ml-8">ID: {session.sessionId}</p>
                                 )}
-                                <p className="text-sm text-gray-500 ml-8">
+                                <p className="text-sm text-gray-500 sm:ml-8">
                                     {session.date
                                         ? session.date
                                         : <span className="bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 text-xs font-medium">📅 No date set</span>} • {session.pans.filter(p => p.type !== 'gradientTray' && p.type !== 'dyeSquareTray').length} pan(s) • {session.pans.filter(p => p.type === 'gradientTray' || p.type === 'dyeSquareTray').length} tray(s)
                                 </p>
-                                <p className="text-xs text-teal-600 mt-1 ml-8">
+                                <p className="text-xs text-teal-600 mt-1 sm:ml-8">
                                     Yarn bases needed: {(() => {
                                         const bases = {};
                                         session.pans.forEach(pan => {
@@ -1863,7 +1863,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         return Object.entries(bases).map(([base, qty]) => `${qty}x ${base}`).join(', ');
                                     })()}
                                 </p>
-                                <div className="text-xs text-blue-600 mt-1 ml-8">
+                                <div className="text-xs text-blue-600 mt-1 sm:ml-8">
                                     <div className="text-xs text-teal-600">
                                         {(() => {
                                             const stockSolutions = new Set();
@@ -2143,7 +2143,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     );
                                 })()}
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 order-first sm:order-none self-end sm:self-auto">
                                 <button
                                     onClick={() => {
                                         const updatedSessions = dyeSessions.map(s => 

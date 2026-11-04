@@ -328,7 +328,7 @@ export function YarnDyeManager() {
             </nav>
 
             {/* Main Content */}
-            <main className="container mx-auto px-4 py-8">
+            <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8">
                 <Suspense fallback={
                     <div className="text-center py-12">
                         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600 mx-auto"></div>

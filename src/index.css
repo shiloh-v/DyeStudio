@@ -51,6 +51,16 @@
 }
 
 /*
+ * Phones — trim the desktop-sized padding and page titles so content gets
+ * the width. Unlayered so it wins over the utilities it adjusts.
+ */
+@media (max-width: 639px) {
+    .card-shadow.p-6 { padding: 1rem; }
+    .card-shadow.p-8 { padding: 1.25rem; }
+    main h2.text-2xl { font-size: 1.375rem; line-height: 1.75rem; }
+}
+
+/*
  * Dark mode — remaps the app's existing utility classes under `.dark` so we
  * don't have to add dark: variants to all 16 components. Toggled by adding the
  * `dark` class to <html>.
