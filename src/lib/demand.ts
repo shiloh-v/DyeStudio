@@ -1306,9 +1306,16 @@ export function planRestock(input: RestockPlanInput) {
             return perWeek > 0 ? (have.get(c) || 0) / perWeek : Infinity;
         };
         const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
+        const ok = (c: string) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c) && !retired(c);
         fillerNames = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
-            .filter((c) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c) && !retired(c))
+            .filter(ok)
             .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0));
+        // Once the sellers run out, any other active color (least stock first)
+        // so the last batch still fills every rack.
+        const sellers = new Set(fillerNames);
+        fillerNames.push(...recipes.map((r) => r.name!)
+            .filter((c) => ok(c) && !sellers.has(c))
+            .sort((a, b) => (have.get(a) || 0) - (have.get(b) || 0) || a.localeCompare(b)));
     }
 
     // Which colorways share a batch (≤ MAX_COMBOS_PER_BATCH combos each), then
