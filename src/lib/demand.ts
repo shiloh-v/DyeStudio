@@ -1140,8 +1140,9 @@ export interface RestockPlanInput {
 export function planRestock(input: RestockPlanInput) {
     const { recipes, ctx } = input;
     const removed = input.removed || new Set<string>();
-    // Colorways already in an upcoming session: don't start new pairs for
-    // them — suggest adding the skeins to that session instead.
+    // A color + base/size already in an upcoming session: don't start a new
+    // pair for that combo — it waits for a later batch. Its other base/sizes
+    // still get planned in new batches.
     const upcoming = (input.sessions || [])
         .filter((s) => !s?.archived && (s.pans || []).length)
         // Dated sessions first (earliest), undated drafts last.
@@ -1150,17 +1151,26 @@ export function planRestock(input: RestockPlanInput) {
         const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
         return (r?.name || p.colorway) === c;
     }));
+    const sessionForCombo = (c: string, base: string, hankSize: number) => upcoming.find((s) => (s.pans || []).some((p: any) => {
+        const r = p.recipeId ? recipes.find((x) => String(x.id) === String(p.recipeId)) : undefined;
+        if ((r?.name || p.colorway) !== c) return false;
+        return (p.yarns || []).some((y: any) =>
+            canonicalYarnRef(y.base, ctx.catalog) === canonicalYarnRef(base, ctx.catalog)
+            && (Number(y.hankSize) || sizeFromText(String(y.base || ''), ctx.sizeMappings) || 0) === hankSize);
+    }));
     const adjust: { colorway: string; sessionName: string; date: string; base: string; hankSize: number; qty: number; soldOut?: boolean }[] = [];
     // Retired colors are never planned — under their current or any old name.
     const retired = (c: string) => isRetired(findRecipeByName(recipes, c));
     const chosen = input.suggestions
         .filter((s) => s.colorway && !removed.has(s.colorway) && !retired(s.colorway))
         .filter((s) => {
-            const sess = sessionFor(s.colorway!);
+            // Specialty demand is planned on default bases; a color already
+            // being dyed in a session covers that.
+            if (isSpecialtyBase(s.base!, ctx.catalog)) return !sessionFor(s.colorway!);
+            const sess = sessionForCombo(s.colorway!, s.base!, s.hankSize!);
             if (!sess) return true;
-            if (isSpecialtyBase(s.base!, ctx.catalog)) return false; // never auto-plan specialty yarn
-            // This color already has its pair in that session (one pair per
-            // color per batch), so this waits for a later batch — at least the
+            // This combo is already in that session (one pair per color per
+            // batch), so more of it waits for a later batch — at least the
             // size's minimum (SIZE_BOUNDS).
             const b = sizeBounds(s.hankSize!);
             adjust.push({ colorway: s.colorway!, sessionName: sess.name, date: sess.date, base: s.base!, hankSize: s.hankSize!, qty: Math.min(b.max, Math.max(b.min, s.suggest)), soldOut: s.soldOut });
