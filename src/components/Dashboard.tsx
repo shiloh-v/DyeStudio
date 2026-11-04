@@ -2,8 +2,9 @@ import { StatCard } from './StatCard';
 import { isStocked } from '../lib/batches';
 import { isLowStock, lowStockLabel } from '../lib/lowStock';
 import { useMemo } from 'react';
-import { demandSummary, periodStats } from '../lib/demandSummary';
+import { demandSummary, periodStats, type DemandSummary } from '../lib/demandSummary';
 import { byColorway, comboLabel, windowUnits } from '../lib/demand';
+import { onHandSummary } from '../lib/onHand';
 
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
@@ -11,12 +12,13 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
     const activeBatches = batches.filter(b => !isStocked(b)).length;
     const lowStock = inventory.filter(isLowStock).length;
 
-    // Projected value/profit from finished stock (not realized sales — those come from Shopify later)
-    const stocked = batches.filter(isStocked);
-    const totalRevenue = stocked.reduce((sum, b) => sum + (b.salePrice || 0), 0);
-    const totalProfit = stocked.reduce((sum, b) => sum + (b.profit || 0), 0);
-    const avgProfitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100) : 0;
-    
+    // One demand picture for the whole page: on-hand stock and the Shopify panel.
+    const D = useMemo(
+        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches }),
+        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches]
+    );
+    const S = useMemo(() => onHandSummary(D, settings?.shopifyInventory), [D, settings]);
+    const goOnHand = () => setActiveTab('sales');
 
     const statusCounts = batches.reduce((acc, batch) => {
         acc[batch.status] = (acc[batch.status] || 0) + 1;
@@ -42,32 +44,36 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
                     color="blue"
                 />
                 <StatCard 
-                    title="Low Stock Items" 
+                    title="Low Supplies" 
                     value={lowStock} 
                     icon="⚠️"
                     color={lowStock > 0 ? "red" : "green"}
+                    onClick={() => setActiveTab('inventory')}
                 />
                 <StatCard
-                    title="Projected Revenue"
-                    value={`$${totalRevenue.toFixed(2)}`}
+                    title={S.source === 'shopify' ? 'Skeins On Hand' : 'Skeins On Hand (est.)'}
+                    value={S.skeins.toLocaleString()}
+                    icon="📦"
+                    color="purple"
+                    onClick={goOnHand}
+                />
+                <StatCard
+                    title="Stock Value"
+                    value={money0(S.value)}
                     icon="🏷️"
                     color="green"
+                    onClick={goOnHand}
                 />
                 <StatCard
-                    title="Projected Profit"
-                    value={`$${totalProfit.toFixed(2)}`}
-                    icon="📈"
-                    color={totalProfit >= 0 ? "green" : "red"}
-                />
-                <StatCard
-                    title="Avg Margin"
-                    value={`${avgProfitMargin.toFixed(1)}%`}
-                    icon="📊"
-                    color={avgProfitMargin >= 30 ? "green" : avgProfitMargin >= 15 ? "yellow" : "red"}
+                    title="Running Out (< 4 wk)"
+                    value={S.lowSoon}
+                    icon="⏳"
+                    color={S.lowSoon > 0 ? "red" : "green"}
+                    onClick={goOnHand}
                 />
             </div>
 
-            <ShopifyPanel {...{ recipes, inventory, batches, sales, kits, settings, dyeSessions, gradients, colorSketches, setActiveTab }} />
+            <ShopifyPanel D={D} setActiveTab={setActiveTab} />
 
             {/* Pipeline Status */}
             <div className="bg-white rounded-lg card-shadow p-6">
@@ -95,7 +101,7 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
             {/* Low stock */}
             <div className="grid gap-6">
                 <div className="bg-white rounded-lg card-shadow p-6">
-                    <h3 className="text-lg font-semibold mb-4">Low Stock Alert</h3>
+                    <h3 className="text-lg font-semibold mb-4">Low Supplies</h3>
                     {lowStock > 0 ? (
                         <div className="space-y-2">
                             {inventory.filter(isLowStock).map((item, idx) => (
@@ -112,7 +118,7 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
                             ))}
                         </div>
                     ) : (
-                        <p className="text-gray-400 text-center py-8">All items well stocked ✓</p>
+                        <p className="text-gray-400 text-center py-8">All supplies well stocked ✓</p>
                     )}
                 </div>
             </div>
@@ -121,11 +127,7 @@ export function Dashboard({ recipes, inventory, batches, sales, kits, settings, 
 }
 
 /** Last 30 days of real Shopify sales + what to dye and order (from the Demand tab's model). */
-function ShopifyPanel({ recipes, inventory, batches, sales, kits, settings, dyeSessions, gradients, colorSketches, setActiveTab }) {
-    const D = useMemo(
-        () => demandSummary({ sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches }),
-        [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches]
-    );
+function ShopifyPanel({ D, setActiveTab }: { D: DemandSummary; setActiveTab: (tab: string) => void }) {
     const go = () => setActiveTab('demand');
 
     if (!D.lines.length) {
@@ -179,7 +181,7 @@ function ShopifyPanel({ recipes, inventory, batches, sales, kits, settings, dyeS
                     ) : <p className="text-gray-500">No sales in the last 30 days.</p>}
                 </div>
                 <div>
-                    <div className="font-semibold text-gray-800 mb-2">🧪 Running low</div>
+                    <div className="font-semibold text-gray-800 mb-2">🧪 Dye soon</div>
                     {urgent.length ? (
                         <ul className="space-y-1">
                             {urgent.map((s) => (
