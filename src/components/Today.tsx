@@ -7,6 +7,8 @@ import { byColorway, isResolved, normText, resolveName, windowUnits } from '../l
 import { isCountable } from '../lib/shopify';
 import { onHandSummary } from '../lib/onHand';
 import { currentColorName } from '../lib/recipeMatch';
+import { openPullList } from '../lib/pullList';
+import { toast } from '../lib/toast';
 
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? one : many}`;
@@ -151,6 +153,9 @@ export function Today({ recipes, inventory, batches, sales, kits, settings, dyeS
                                     Review &amp; date
                                 </button>
                             )}
+                            <button onClick={() => { if (!openPullList(next, recipes, colorSketches, settings?.yarnBases)) toast('Allow pop-ups to open the pull list', 'error'); }} className="px-4 py-3 rounded-lg font-medium text-teal-700 border border-teal-200 hover:bg-teal-50 whitespace-nowrap">
+                                🧶 Pull list
+                            </button>
                             <button onClick={openQueue} className="bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 font-semibold text-lg whitespace-nowrap">
                                 ▶ {inProgress ? 'Continue' : 'Start'} Queue
                             </button>

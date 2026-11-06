@@ -4,6 +4,7 @@ import { DateUtils, byPlannedDate } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
 import { confirmDialog, choiceDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
+import { openPullList } from '../lib/pullList';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
 import { labelItems } from '../lib/roleMatch';
@@ -2165,6 +2166,14 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                         ✓ Confirm
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => { if (!openPullList(session, recipes, colorSketches, settings?.yarnBases)) toast('Allow pop-ups to open the pull list', 'error'); }}
+                                    className="text-teal-700 hover:bg-teal-50 px-3 py-1 rounded"
+                                    title="Printable list of the yarn to pull and bundle for each pan"
+                                    aria-label="Yarn pull list"
+                                >
+                                    🧶
+                                </button>
                                 <button
                                     onClick={() => editSession(session)}
                                     className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded"
