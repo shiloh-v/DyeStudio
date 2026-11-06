@@ -8,6 +8,7 @@ import { yarnBaseRef } from '../lib/yarnMatch';
 import { isLowStock as isItemLowStock, lowStockLabel, DYE_LOW_STOCK_GRAMS } from '../lib/lowStock';
 import type { InventoryItem } from '../types';
 import { demandSummary } from '../lib/demandSummary';
+import { ReceiveShipment } from './ReceiveShipment';
 
 // Grams per unit, for converting on-hand amounts between units.
 const UNIT_TO_GRAM: Record<string, number> = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
@@ -71,6 +72,7 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
         return D.lines.length ? { rows: D.toBuy, cost: D.yarnOrderCost } : null;
     }, [sales, batches, recipes, kits, settings, inventory, dyeSessions, gradients, colorSketches]);
     const [showForm, setShowForm] = useState(false);
+    const [showReceive, setShowReceive] = useState(false);
     const [editingId, setEditingId] = useState(null);
     // "Fill from Yarn Base catalog" picker (UI only — fills existing fields).
     const yarnBases = settings?.yarnBases || [];
@@ -361,13 +363,25 @@ export function Inventory({ inventory, saveInventory, settings, sales = [], batc
         <div className="space-y-6">
             <div className="flex flex-wrap justify-between items-center gap-3">
                 <h2 className="text-2xl font-bold text-gray-900">Inventory Management</h2>
+                <div className="flex gap-2">
+                <button
+                    onClick={() => setShowReceive(true)}
+                    className="bg-white text-teal-700 border border-teal-600 px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors font-medium whitespace-nowrap"
+                >
+                    📦 Receive shipment
+                </button>
                 <button
                     onClick={() => showForm ? closeForm() : setShowForm(true)}
                     className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ Add Item'}
                 </button>
+                </div>
             </div>
+
+            {showReceive && (
+                <ReceiveShipment inventory={inventory} saveInventory={saveInventory} onClose={() => setShowReceive(false)} />
+            )}
 
             {/* Yarn to order (Shopify demand) */}
             {yarnOrder && yarnOrder.rows.length > 0 && !showForm && (
