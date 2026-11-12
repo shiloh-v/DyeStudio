@@ -9,6 +9,7 @@ import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } 
 import { findLabelItem } from '../lib/roleMatch';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 import { MissingPhotos, photosOf, SKEIN_PHOTO_LABELS } from './PanPhotos';
+import { openPackingSlip } from '../lib/packingSlip';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -16,6 +17,18 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
     const findYarnBaseItem = (inv, ref, hank?) => _findYarnBaseItem(inv, ref, hank, _yarnCatalog);
     const findBallBand = (inv, ref, hank?) => _findBallBand(inv, ref, hank, _yarnCatalog);
     const [showForm, setShowForm] = useState(false);
+    // Packing slip: tick the batches going out, then print one slip for them.
+    const [picking, setPicking] = useState(false);
+    const [picked, setPicked] = useState<Set<any>>(new Set());
+    const togglePicked = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    const stopPicking = () => { setPicking(false); setPicked(new Set()); };
+    const pickedBatches = batches.filter((b) => picked.has(b.id));
+    const pickedSkeins = pickedBatches.reduce((sum, b) => sum + (b.yarnDetails?.length
+        ? b.yarnDetails.reduce((s, y) => s + (parseInt(y.quantity) || 0), 0)
+        : parseInt(b.skeins) || 0), 0);
+    const printSlip = () => {
+        if (!openPackingSlip(pickedBatches, recipes, settings)) toast('Allow pop-ups to open the packing slip', 'error');
+    };
     const [formData, setFormData] = useState({
         recipeId: '',
         customColorway: '',
@@ -295,13 +308,44 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
         <div className="space-y-6">
             <div className="flex flex-wrap justify-between items-center gap-3">
                 <h2 className="text-2xl font-bold text-gray-900">Production Pipeline</h2>
+                <div className="flex flex-wrap gap-2">
+                {!picking && (
+                    <button
+                        onClick={() => setPicking(true)}
+                        className="bg-white border border-teal-600 text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 transition-colors font-medium whitespace-nowrap"
+                        title="Pick the batches you're delivering and print a packing slip to send with the yarn"
+                    >
+                        📦 Packing slip
+                    </button>
+                )}
                 <button
                     onClick={() => showForm ? closeForm() : setShowForm(true)}
                     className="bg-teal-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors font-medium whitespace-nowrap"
                 >
                     {showForm ? '✕ Cancel' : '+ New Batch'}
                 </button>
+                </div>
             </div>
+
+            {picking && (
+                <div className="sticky top-2 z-30 flex flex-wrap items-center gap-3 p-3 rounded-lg border border-teal-300 bg-teal-50 card-shadow">
+                    <div className="flex-1 min-w-[12rem] text-sm text-teal-900">
+                        {picked.size
+                            ? <><strong>{picked.size} batch{picked.size === 1 ? '' : 'es'}</strong> · {pickedSkeins} skein{pickedSkeins === 1 ? '' : 's'} on this slip</>
+                            : 'Tick the batches going out in this delivery.'}
+                    </div>
+                    <button
+                        onClick={printSlip}
+                        disabled={picked.size === 0}
+                        className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Print slip
+                    </button>
+                    <button onClick={stopPicking} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium">
+                        Done
+                    </button>
+                </div>
+            )}
 
             {/* Form */}
             {showForm && (
@@ -460,6 +504,22 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                 </span>
                             </div>
                             
+                            {picking && batchesInStatus.length > 0 && (() => {
+                                const allIn = batchesInStatus.every((b) => picked.has(b.id));
+                                return (
+                                    <button
+                                        onClick={() => setPicked((cur) => {
+                                            const n = new Set(cur);
+                                            batchesInStatus.forEach((b) => (allIn ? n.delete(b.id) : n.add(b.id)));
+                                            return n;
+                                        })}
+                                        className="mb-2 w-full text-xs px-2 py-1 border border-teal-300 rounded bg-teal-50 text-teal-800 hover:bg-teal-100"
+                                    >
+                                        {allIn ? 'Untick all here' : 'Tick all here'}
+                                    </button>
+                                );
+                            })()}
+
                             {/* Move All button */}
                             {batchesInStatus.length > 0 && (
                                 <div className="mb-3">
@@ -504,6 +564,15 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                             />
                                         )}
                                         
+                                        {picking && (
+                                            <input
+                                                type="checkbox"
+                                                checked={picked.has(batch.id)}
+                                                onChange={() => togglePicked(batch.id)}
+                                                className="mt-1 h-5 w-5 flex-shrink-0 accent-teal-600 cursor-pointer"
+                                                aria-label={`Add ${currentColorName(batch, recipes)} to the packing slip`}
+                                            />
+                                        )}
                                         <div className="flex-1">
                                             <div className="font-medium text-sm mb-1">{currentColorName(batch, recipes)}</div>
                                             {batch.batchId && (
