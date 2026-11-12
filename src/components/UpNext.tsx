@@ -8,7 +8,7 @@ import { findDyeItem } from '../lib/dyeMatch';
 import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage } from '../lib/chemicals';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
-import { PanPhotos, photosOf } from './PanPhotos';
+import { PanPhotos, photosOf, MissingPhotos } from './PanPhotos';
 import { panMainPhoto, panSource } from '../lib/panPhotos';
 
 // Notes box that types locally and saves after a short pause (and on blur), so
@@ -1187,6 +1187,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                         photos={photosOf(panSource(currentPan, recipes, colorSketches))}
                                         alt={currentColorName(currentPan, recipes, colorSketches)}
                                     />
+                                    {/* Only recipes have labeled photos (Color Lab sketches have one) */}
+                                    {currentPan.type !== 'colorLab' && currentPan.recipeId && currentRecipe && (
+                                        <MissingPhotos photos={photosOf(currentRecipe)} />
+                                    )}
 
                                     {panNav()}
                                 </div>
