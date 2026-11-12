@@ -8,6 +8,7 @@ import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
 import { findLabelItem } from '../lib/roleMatch';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
+import { MissingPhotos, photosOf, SKEIN_PHOTO_LABELS } from './PanPhotos';
 
 export function Pipeline({ batches, saveBatches, recipes, inventory, saveInventory, settings }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -527,6 +528,12 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                                                 </div>
                                             )}
                                             
+                                        {/* Skeins are dry now — time for the skein photos */}
+                                        {status === 'ready' && batch.recipeId && (() => {
+                                            const recipe = recipes.find(r => r.id === parseInt(batch.recipeId));
+                                            return recipe ? <MissingPhotos photos={photosOf(recipe)} required={SKEIN_PHOTO_LABELS} compact /> : null;
+                                        })()}
+
                                         {batch.notes && (
                                             <div className="text-xs text-gray-500 mb-2">📋 {batch.notes}</div>
                                         )}

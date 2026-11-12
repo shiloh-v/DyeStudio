@@ -125,17 +125,33 @@ function PhotoViewer({ photos, start, alt, onClose }: { photos: Photo[]; start: 
     );
 }
 
-// Photo types every color should have. Shown as a reminder on the dyeing
-// screen so they get taken while the pan is right there.
-export const REQUIRED_PHOTO_LABELS = ['Pan Photo', 'Skein Close-up'];
+// Photo types every color should have, split by when you can take them:
+// the pan photo on dye day, the skein shots once they're dry and ready for labels.
+export const PAN_PHOTO_LABELS = ['Pan Photo'];
+export const SKEIN_PHOTO_LABELS = ['Dry Skeins', 'Detail Shot', 'Skein Close-up'];
 
-export function MissingPhotos({ photos }: { photos: Photo[] }) {
+export function missingPhotoLabels(photos: Photo[], required: string[]): string[] {
     const have = new Set(photos.map(p => p.label));
-    const missing = REQUIRED_PHOTO_LABELS.filter(l => !have.has(l));
+    return required.filter(l => !have.has(l));
+}
+
+const joinList = (xs: string[]) =>
+    xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+
+// Reminder box. `compact` is the one-line version for Pipeline cards.
+export function MissingPhotos({ photos, required, compact = false }: { photos: Photo[]; required: string[]; compact?: boolean }) {
+    const missing = missingPhotoLabels(photos, required);
     if (missing.length === 0) return null;
+    if (compact) {
+        return (
+            <div className="text-xs mb-2 px-2 py-1 rounded border border-dashed border-amber-400 bg-amber-50 text-amber-900">
+                📷 Take: {joinList(missing)}
+            </div>
+        );
+    }
     return (
         <div className="mb-4 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50 px-3 py-2 text-amber-900">
-            <p className="font-semibold">📷 Remember to take: {missing.join(' and ')}</p>
+            <p className="font-semibold">📷 Remember to take: {joinList(missing)}</p>
             <p className="text-xs text-amber-800 mt-0.5">
                 Add {missing.length > 1 ? 'them' : 'it'} to this recipe in Recipes and set the photo label to match.
             </p>
