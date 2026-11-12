@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { StorageManager } from '../lib/storage';
 import { supabase } from '../lib/supabase';
@@ -98,37 +98,34 @@ export function YarnDyeManager() {
 
     const [loadError, setLoadError] = useState('');
 
-    const loadAllData = async () => {
-        setLoading(true);
-        setLoadError('');
-        try {
-            // Load in parallel. Any failure aborts the whole load: the app is
-            // not shown (so nothing can be saved) until every table loads.
-            const [recipesData, inventoryData, batchesData, salesData, dyeSessionsData, kitsData, colorSketchesData, gradientsData, settingsData, syncData] = await Promise.all([
-                StorageManager.get('recipes'),
-                StorageManager.get('inventory'),
-                StorageManager.get('batches'),
-                StorageManager.get('sales'),
-                StorageManager.get('dye_sessions'),
-                StorageManager.get('kits'),
-                StorageManager.get('color_sketches'),
-                StorageManager.get('gradients'),
-                StorageManager.get('settings'),
-                loadSyncStatus(), // never throws; null until Shopify sync is set up
-            ]);
-            setShopifySync(syncData);
+    // Read every collection. Any failure throws: a partial load must never be
+    // shown (or saved over).
+    const fetchAll = () => Promise.all([
+        StorageManager.get('recipes'),
+        StorageManager.get('inventory'),
+        StorageManager.get('batches'),
+        StorageManager.get('sales'),
+        StorageManager.get('dye_sessions'),
+        StorageManager.get('kits'),
+        StorageManager.get('color_sketches'),
+        StorageManager.get('gradients'),
+        StorageManager.get('settings'),
+        loadSyncStatus(), // never throws; null until Shopify sync is set up
+    ]);
 
-            setRecipes(recipesData);
-            setInventory(inventoryData);
-            setBatches(batchesData);
-            setSales(salesData);
-            setDyeSessions(dyeSessionsData);
-            setKits(kitsData);
-            setColorSketches(colorSketchesData);
-            setGradients(gradientsData);
-            // null only when no settings row exists yet (a brand-new account).
-            // Stock levels from the Shopify sync win when newer than the last CSV upload.
-            setSettings(withSyncedInventory(settingsData, syncData) || {
+    const applyData = ([recipesData, inventoryData, batchesData, salesData, dyeSessionsData, kitsData, colorSketchesData, gradientsData, settingsData, syncData]: Awaited<ReturnType<typeof fetchAll>>) => {
+        setShopifySync(syncData);
+        setRecipes(recipesData);
+        setInventory(inventoryData);
+        setBatches(batchesData);
+        setSales(salesData);
+        setDyeSessions(dyeSessionsData);
+        setKits(kitsData);
+        setColorSketches(colorSketchesData);
+        setGradients(gradientsData);
+        // null only when no settings row exists yet (a brand-new account).
+        // Stock levels from the Shopify sync win when newer than the last CSV upload.
+        setSettings(withSyncedInventory(settingsData, syncData) || {
                 colorTypes: ['tonal', 'variegated', 'speckled'],
                 inventoryCategories: ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'other'],
                 units: ['ml', 'g', 'oz', 'lb', 'tsp', 'tbsp'],
@@ -144,6 +141,14 @@ export function YarnDyeManager() {
                     { grams: 10, name: 'Micro skein' }
                 ]
             });
+        lastLoadedAt.current = Date.now();
+    };
+
+    const loadAllData = async () => {
+        setLoading(true);
+        setLoadError('');
+        try {
+            applyData(await fetchAll());
         } catch (error) {
             console.error('Error loading data:', error);
             setLoadError(error?.message || String(error));
@@ -151,12 +156,57 @@ export function YarnDyeManager() {
         setLoading(false);
     };
 
+    // Saves in progress, and a counter bumped by every save, so a background
+    // refresh never lands on top of (and undoes) a save made while it ran.
+    const savesInFlight = useRef(0);
+    const saveSeq = useRef(0);
+    const lastLoadedAt = useRef(0);
+    const refreshing = useRef(false);
+
+    // Coming back to a tab (or phone) that sat open: pull what other tabs and
+    // devices saved meanwhile, so this one doesn't keep editing an old copy.
+    const refreshFromDb = async () => {
+        if (refreshing.current || savesInFlight.current > 0) return;
+        if (Date.now() - lastLoadedAt.current < 15000) return;
+        refreshing.current = true;
+        const seq = saveSeq.current;
+        try {
+            const data = await fetchAll();
+            if (saveSeq.current === seq && savesInFlight.current === 0) applyData(data);
+        } catch (error) {
+            console.warn('Background refresh failed (keeping what is on screen):', error);
+        } finally {
+            refreshing.current = false;
+        }
+    };
+    const refreshRef = useRef(refreshFromDb);
+    refreshRef.current = refreshFromDb;
+    useEffect(() => {
+        const onVisible = () => { if (document.visibilityState === 'visible') refreshRef.current(); };
+        const onFocus = () => refreshRef.current();
+        document.addEventListener('visibilitychange', onVisible);
+        window.addEventListener('focus', onFocus);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisible);
+            window.removeEventListener('focus', onFocus);
+        };
+    }, []);
+
     // Optimistic save: show the change at once, and if the database write
     // fails, put the previous value back (unless something newer replaced it)
     // and say so — the UI never shows data that would vanish on reload.
+    // Only what changed between `prev` and `next` is written (see
+    // StorageManager.set), so saving can't revert other tabs' changes.
     const persist = async (key, label, setState, prev, next) => {
         setState(next);
-        const ok = await StorageManager.set(key, next);
+        savesInFlight.current++;
+        saveSeq.current++;
+        let ok = false;
+        try {
+            ok = await StorageManager.set(key, next, prev);
+        } finally {
+            savesInFlight.current--;
+        }
         if (!ok) {
             setState((cur) => (cur === next ? prev : cur));
             toast(`Couldn't save ${label} — your last change was undone. Check your connection and try again.`, 'error');

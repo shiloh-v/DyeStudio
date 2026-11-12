@@ -83,11 +83,12 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     // "...session: <name>" note every finished batch carries.
     const isMissingBatches = (s) => !!s.archived && batches.length > 0 && !sessionHasBatches(s, batches);
 
-    // Non-archived sessions with pans — PLUS the currently-selected session even
-    // if it was just finished, so you can keep adding notes after completing it,
-    // and any finished session that's missing its Pipeline batches.
+    // Unfinished sessions with pans, plus any finished session that's missing
+    // its Pipeline batches (so it can be sent). A finished session leaves the
+    // Queue — and the Active Session dropdown — right away; its notes are
+    // edited on its batches in Pipeline.
     const upcomingSessions = dyeSessions
-        .filter(s => (!isSessionFinished(s, batches) || s.id.toString() === selectedSessionId || isMissingBatches(s)) && s.pans.length > 0)
+        .filter(s => (!isSessionFinished(s, batches) || isMissingBatches(s)) && s.pans.length > 0)
         .sort(byPlannedDate);
 
     // Restore the saved session if it's still active; otherwise auto-select the
@@ -849,14 +850,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         );
         saveDyeSessions(updatedSessions);
 
-        // Keep the (now archived) session selected so you can still add notes to
-        // it — they route to the batches we just created. It drops out of the
-        // Queue once you switch to another session.
+        // The finished session drops out of the Queue; the effect above moves on
+        // to the next session.
         localStorage.removeItem('queue_done_' + selectedSession.id);
         setCurrentPanIndex(0);
         setFinishing(false);
 
-        toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted. You can still add notes here.', 'success');
+        toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted. Add any more notes on its batches in Pipeline.', 'success');
     };
 
     return (
