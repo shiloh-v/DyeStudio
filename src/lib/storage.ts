@@ -28,6 +28,24 @@ function clean(items: Row[], userId: string): Row[] {
 }
 
 /**
+ * Pans used to carry a full copy of their recipe's / sketch's photos (base64),
+ * which made dye_sessions ~10 MB — almost all photos — and every save re-sent
+ * all of it until the database started rejecting the request. Photos live on
+ * the recipe/sketch; screens look them up from there (see lib/panPhotos.ts).
+ */
+function stripPanPhotos(pan: Row): Row {
+  if (!pan || typeof pan !== 'object') return pan;
+  const out: Row = { ...pan };
+  for (const k of ['recipe', 'colorSketch']) {
+    if (out[k] && typeof out[k] === 'object') {
+      const { photo: _p, photos: _ps, ...rest } = out[k];
+      out[k] = rest;
+    }
+  }
+  return out;
+}
+
+/**
  * Per-collection camelCase -> snake_case conversion for the columns that are
  * actually stored snake_case in the DB. Everything else is passed through
  * unchanged. (Preserved verbatim from the original StorageManager.)
@@ -69,7 +87,11 @@ function toDbShape(key: CollectionKey, items: Row[]): Row[] {
   if (key === 'dye_sessions') {
     return items.map((item) => {
       const { sessionId, ...rest } = item;
-      return { ...rest, session_id: sessionId || null };
+      return {
+        ...rest,
+        pans: Array.isArray(rest.pans) ? rest.pans.map(stripPanPhotos) : rest.pans,
+        session_id: sessionId || null,
+      };
     });
   }
   if (key === 'kits') {
