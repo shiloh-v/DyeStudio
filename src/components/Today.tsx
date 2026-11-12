@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { DateUtils, byPlannedDate } from '../lib/dates';
-import { isStocked } from '../lib/batches';
+import { isStocked, isSessionFinished } from '../lib/batches';
 import { isLowStock } from '../lib/lowStock';
 import { demandSummary, periodStats } from '../lib/demandSummary';
 import { byColorway, isResolved, normText, resolveName, windowUnits } from '../lib/demand';
@@ -31,7 +31,7 @@ export function Today({ recipes, inventory, batches, sales, kits, settings, dyeS
 
     // ---------- Next session ----------
     // The one the Queue is partway through wins; otherwise the next dated session.
-    const live = (dyeSessions || []).filter((s) => !s.archived && (s.pans || []).length);
+    const live = (dyeSessions || []).filter((s) => !isSessionFinished(s, batches) && (s.pans || []).length);
     const savedId = localStorage.getItem('queue_session') || '';
     const doneCount = (id: any): number => { try { return JSON.parse(localStorage.getItem('queue_done_' + id) || '[]').length; } catch { return 0; } };
     const inProgress = live.find((s) => String(s.id) === savedId && doneCount(s.id) > 0);

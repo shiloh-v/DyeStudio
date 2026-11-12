@@ -10,6 +10,7 @@ import { panAcidUsage } from '../lib/chemicals';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 import { PanPhotos, photosOf, MissingPhotos, PAN_PHOTO_LABELS } from './PanPhotos';
 import { panMainPhoto, panSource } from '../lib/panPhotos';
+import { sessionHasBatches, isSessionFinished } from '../lib/batches';
 
 // Notes box that types locally and saves after a short pause (and on blur), so
 // a sentence is one save instead of one per keystroke.
@@ -80,14 +81,13 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     // A finished session whose batches never reached Pipeline (e.g. the batch
     // save failed). Older batches predate sourceSessionId, so also match the
     // "...session: <name>" note every finished batch carries.
-    const isMissingBatches = (s) => !!s.archived && batches.length > 0 && !batches.some(b =>
-        b.sourceSessionId === s.id || (b.notes || '').endsWith(`session: ${s.name}`));
+    const isMissingBatches = (s) => !!s.archived && batches.length > 0 && !sessionHasBatches(s, batches);
 
     // Non-archived sessions with pans — PLUS the currently-selected session even
     // if it was just finished, so you can keep adding notes after completing it,
     // and any finished session that's missing its Pipeline batches.
     const upcomingSessions = dyeSessions
-        .filter(s => (!s.archived || s.id.toString() === selectedSessionId || isMissingBatches(s)) && s.pans.length > 0)
+        .filter(s => (!isSessionFinished(s, batches) || s.id.toString() === selectedSessionId || isMissingBatches(s)) && s.pans.length > 0)
         .sort(byPlannedDate);
 
     // Restore the saved session if it's still active; otherwise auto-select the
@@ -108,7 +108,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const selectedSession = dyeSessions.find(s => s.id === parseInt(selectedSessionId));
     const currentPan = selectedSession?.pans[currentPanIndex];
     // A finished (archived) session is shown read-only for review + note-taking.
-    const isFinished = !!selectedSession?.archived;
+    // Batches existing counts as finished even if the archived flag got wiped.
+    const isFinished = isSessionFinished(selectedSession, batches);
     const needsPipeline = !!selectedSession && isMissingBatches(selectedSession);
 
     // --- Same-color grouping ---------------------------------------------------
@@ -721,7 +722,9 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
     const finishSession = async () => {
         if (!selectedSession) return;
-        if (selectedSession.archived) { toast('This session is already finished.', 'error'); return; }
+        // Never finish twice: that would duplicate the Pipeline batches and
+        // deduct yarn, dye and acid again.
+        if (isSessionFinished(selectedSession, batches)) { toast('This session is already finished — its batches are in Pipeline.', 'error'); return; }
         if (finishing) return;
 
         const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn, dye and acid from inventory\n- Remove this session from Dye Sessions`;
