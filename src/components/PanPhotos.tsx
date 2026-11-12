@@ -124,3 +124,21 @@ function PhotoViewer({ photos, start, alt, onClose }: { photos: Photo[]; start: 
         </div>
     );
 }
+
+// Photo types every color should have. Shown as a reminder on the dyeing
+// screen so they get taken while the pan is right there.
+export const REQUIRED_PHOTO_LABELS = ['Pan Photo', 'Skein Close-up'];
+
+export function MissingPhotos({ photos }: { photos: Photo[] }) {
+    const have = new Set(photos.map(p => p.label));
+    const missing = REQUIRED_PHOTO_LABELS.filter(l => !have.has(l));
+    if (missing.length === 0) return null;
+    return (
+        <div className="mb-4 rounded-lg border-2 border-dashed border-amber-400 bg-amber-50 px-3 py-2 text-amber-900">
+            <p className="font-semibold">📷 Remember to take: {missing.join(' and ')}</p>
+            <p className="text-xs text-amber-800 mt-0.5">
+                Add {missing.length > 1 ? 'them' : 'it'} to this recipe in Recipes and set the photo label to match.
+            </p>
+        </div>
+    );
+}
