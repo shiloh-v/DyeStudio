@@ -69,12 +69,15 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
 
     const closeForm = () => { if (guard.canClose(formData)) resetForm(); };
 
-    // Take ball bands and labels out of inventory for batches being stocked.
-    // Only for a batch's FIRST stocking: soldDate is stamped then and never
-    // cleared, so a batch moved back to Ready and re-stocked isn't charged
-    // twice. Works on copies, so state isn't changed before the save.
+    // Take ball bands and labels out of inventory when a batch is labeled (or
+    // stocked straight from Ready). Only once per batch: labelsUsedAt is
+    // stamped when it happens, and older batches stocked before the Labeled
+    // stage existed carry soldDate — neither is ever cleared, so moving a
+    // batch back and forward again doesn't charge twice. Works on copies, so
+    // state isn't changed before the save.
+    const needsLabels = (b) => !b.soldDate && !b.labelsUsedAt && b.yarnDetails?.length > 0;
     const deductBandsAndLabels = (batchesToStock) => {
-        const fresh = batchesToStock.filter(b => !b.soldDate && b.yarnDetails?.length > 0);
+        const fresh = batchesToStock.filter(needsLabels);
         if (fresh.length === 0) return;
         const updatedInventory = inventory.map(item => ({ ...item }));
         let totalSkeins = 0;
@@ -177,14 +180,18 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             // Show projected profit summary
             toast(`Stocked! List $${price.toFixed(2)} · Cost $${cost.toFixed(2)} · Projected profit $${profit.toFixed(2)} (${updatedBatch.profitMargin.toFixed(1)}%)`, 'success');
 
-            // Deduct ball bands and labels if coming from ready
+            // Deduct ball bands and labels if they weren't already taken at Labeled
             if (oldStatus === 'ready') deductBandsAndLabels([batch]);
             return;
         }
-        
+
         // Regular status update
         const now = new Date().toISOString();
-        saveBatches(batches.map(b => b.id === id ? { ...b, status: newStatus, lastMovedAt: now } : b));
+        const labeling = newStatus === 'labeled' && batch && needsLabels(batch);
+        const ok = await saveBatches(batches.map(b => b.id === id
+            ? { ...b, status: newStatus, lastMovedAt: now, ...(labeling ? { labelsUsedAt: now } : {}) }
+            : b));
+        if (ok && labeling) deductBandsAndLabels([batch]);
     };
 
     const deleteBatch = async (id) => {
@@ -194,7 +201,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
     };
 
     const moveAllBatches = async (fromStatus, toStatus) => {
-        const batchesToMove = batches.filter(b => b.status === fromStatus);
+        const fromBatch = (b) => fromStatus === 'stocked' ? isStocked(b) : b.status === fromStatus;
+        const batchesToMove = batches.filter(fromBatch);
 
         if (batchesToMove.length === 0) {
             toast('No batches to move', 'error');
@@ -253,7 +261,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
 
             // Update all batches with proportional pricing
             const updatedBatches = batches.map(b => {
-                if (b.status !== fromStatus) return b;
+                if (!fromBatch(b)) return b;
 
                 const batchSkeins = b.skeins || 0;
                 const batchCost = b.totalCost || 0;
@@ -275,7 +283,7 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             
             if (!(await saveBatches(updatedBatches))) return;
 
-            // Deduct ball bands and labels if coming from ready
+            // Deduct ball bands and labels if they weren't already taken at Labeled
             if (fromStatus === 'ready') deductBandsAndLabels(batchesToMove);
 
             toast(`${totalBatches} batches stocked! List $${price.toFixed(2)} · Cost $${totalCost.toFixed(2)} · Projected profit $${profit.toFixed(2)} (${profitMargin.toFixed(1)}%)`, 'success');
@@ -288,20 +296,249 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
         }
         
         const movedAt = new Date().toISOString();
+        const labeling = toStatus === 'labeled' ? batchesToMove.filter(needsLabels) : [];
+        const labelIds = new Set(labeling.map(b => b.id));
         const updatedBatches = batches.map(b =>
-            b.status === fromStatus ? { ...b, status: toStatus, lastMovedAt: movedAt } : b
+            fromBatch(b)
+                ? { ...b, status: toStatus, lastMovedAt: movedAt, ...(labelIds.has(b.id) ? { labelsUsedAt: movedAt } : {}) }
+                : b
         );
 
-        saveBatches(updatedBatches);
+        if (!(await saveBatches(updatedBatches))) return;
+        if (labeling.length) deductBandsAndLabels(labeling);
         toast(`Moved ${batchesToMove.length} batches to ${statusInfo.label}`, 'success');
     };
 
-    const statuses = ['dyeing', 'drying', 'ready', 'stocked'];
+    // The board shows the working stages. Stocked is the last stage too, but
+    // finished stock lives in the archive under the board, out of the way.
+    const boardStatuses = ['dyeing', 'drying', 'ready', 'labeled'];
+    const statuses = [...boardStatuses, 'stocked'];
     const statusLabels = {
         dyeing: { label: 'Dyeing', color: 'yellow', emoji: '🎨' },
         drying: { label: 'Drying', color: 'blue', emoji: '💨' },
         ready: { label: 'Ready for Labels', color: 'green', emoji: '✓' },
+        labeled: { label: 'Labeled', color: 'purple', emoji: '🏷️' },
         stocked: { label: 'Stocked', color: 'teal', emoji: '📦' }
+    };
+
+    // Sort newest on top: use lastMovedAt when present (stamped on creation +
+    // every status change); fall back to startDate (set on creation) and
+    // finally to id (Date.now()) so pre-feature batches still get a stable,
+    // recency-ish order.
+    const recency = (b) => {
+        const t = b.lastMovedAt ? Date.parse(b.lastMovedAt) : NaN;
+        if (!Number.isNaN(t)) return t;
+        const d = b.startDate ? Date.parse(b.startDate) : NaN;
+        if (!Number.isNaN(d)) return d;
+        return Number(b.id) || 0;
+    };
+    // Batch number from the batch id ("B-007" -> 7) for tie-breaking.
+    const batchNum = (b) => {
+        const m = String(b.batchId || b.batch_id || '').match(/(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+    };
+    // Most recently moved on top; batches moved together (same timestamp)
+    // then run in ascending batch-number order. Stocked also catches legacy
+    // 'sold' batches (pre-migration).
+    const batchesIn = (status) => (status === 'stocked'
+        ? batches.filter(isStocked)
+        : batches.filter(b => b.status === status)
+    ).slice().sort((a, b) => recency(b) - recency(a) || batchNum(a) - batchNum(b));
+
+    const [showArchive, setShowArchive] = useState(false);
+    const [archiveQuery, setArchiveQuery] = useState('');
+    const stocked = batchesIn('stocked');
+    const archiveQ = archiveQuery.trim().toLowerCase();
+    const archiveShown = archiveQ
+        ? stocked.filter(b => `${currentColorName(b, recipes)} ${b.batchId || ''}`.toLowerCase().includes(archiveQ))
+        : stocked;
+
+    const renderBatchCard = (batch, status) => {
+        // Get recipe image (either saved or look up from recipe)
+        let recipeImageUrl = batch.recipeImageUrl;
+        if (!recipeImageUrl && batch.recipeId) {
+            const recipe = recipes.find(r => r.id === parseInt(batch.recipeId));
+            recipeImageUrl = recipe?.photo; // Changed from imageUrl to photo
+        }
+        
+        return (
+        <div key={batch.id} className={`p-3 rounded-lg border-2 status-${status} flex gap-3`}>
+            {/* Recipe image */}
+            {recipeImageUrl && (
+                <img 
+                    src={recipeImageUrl} 
+                    alt={batch.colorway}
+                    className="rounded object-cover flex-shrink-0"
+                    style={{ width: '60px', height: '60px', minWidth: '60px', minHeight: '60px', maxWidth: '60px', maxHeight: '60px' }}
+                    onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
+                />
+            )}
+            
+            {picking && (
+                <input
+                    type="checkbox"
+                    checked={picked.has(batch.id)}
+                    onChange={() => togglePicked(batch.id)}
+                    className="mt-1 h-5 w-5 flex-shrink-0 accent-teal-600 cursor-pointer"
+                    aria-label={`Add ${currentColorName(batch, recipes)} to the packing slip`}
+                />
+            )}
+            <div className="flex-1">
+                <div className="font-medium text-sm mb-1">{currentColorName(batch, recipes)}</div>
+                {batch.batchId && (
+                    <div className="text-xs text-gray-500 mb-1">ID: {batch.batchId}</div>
+                )}
+                
+                {/* Skein details */}
+                {batch.yarnDetails && batch.yarnDetails.length > 0 ? (
+                    <div className="text-xs text-gray-600 mb-2">
+                        {(() => {
+                            const grouped = batch.yarnDetails.reduce((acc, yarn) => {
+                                const key = `${yarn.base} ${yarn.hankSize}g`;
+                                acc[key] = (acc[key] || 0) + parseInt(yarn.quantity || 1);
+                                return acc;
+                            }, {});
+                            return Object.entries(grouped).map(([key, qty]) => `${qty}x ${key}`).join(', ');
+                        })()} • {DateUtils.formatDate(batch.startDate)}
+                    </div>
+                ) : (
+                    <div className="text-xs text-gray-600 mb-2">
+                        {batch.skeins} skeins • {DateUtils.formatDate(batch.startDate)}
+                    </div>
+                )}
+                
+            {/* Skeins are dry now — time for the skein photos */}
+            {status === 'ready' && batch.recipeId && (() => {
+                const recipe = recipes.find(r => r.id === parseInt(batch.recipeId));
+                return recipe ? <MissingPhotos photos={photosOf(recipe)} required={SKEIN_PHOTO_LABELS} compact /> : null;
+            })()}
+
+            {batch.notes && (
+                <div className="text-xs text-gray-500 mb-2">📋 {batch.notes}</div>
+            )}
+            
+            {batch.experimentNotes && (
+                <div className="text-xs text-teal-600 mb-2 italic">
+                    🧪 Experiment: {batch.experimentNotes}
+                </div>
+            )}
+            
+            {/* Editable Batch Notes */}
+            <div className="mb-2">
+                <button
+                    onClick={async () => {
+                        const currentNotes = batch.batchNotes || '';
+                        const newNotes = await promptDialog({ title: 'Batch notes', message: 'Observations during dyeing/drying:', defaultValue: currentNotes });
+                        if (newNotes !== null && newNotes !== currentNotes) {
+                            // Edited notes haven't been used yet — reset the check.
+                            saveBatches(batches.map(b =>
+                                b.id === batch.id ? { ...b, batchNotes: newNotes, notesUsedAt: null } : b
+                            ));
+                        }
+                    }}
+                    className="text-xs px-2 py-1 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 text-blue-700"
+                    title="Add/edit notes about this batch"
+                >
+                    {batch.batchNotes ? '📝 Edit Notes' : '📝 Add Notes'}
+                </button>
+                {hasUnusedNotes(batch) && !isStocked(batch) && (
+                    <button
+                        onClick={() => markNotesUsed(batch.id)}
+                        className="text-xs px-2 py-1 ml-1 bg-amber-50 border border-amber-300 rounded hover:bg-amber-100 text-amber-800"
+                        title="Mark these notes as used (e.g. carried into the recipe) — required before stocking"
+                    >
+                        ✓ Notes used
+                    </button>
+                )}
+                {batch.batchNotes && batch.notesUsedAt && (
+                    <span className="text-xs text-green-700 ml-2" title={`Marked used ${new Date(batch.notesUsedAt).toLocaleString()}`}>
+                        ✓ Notes used
+                    </span>
+                )}
+                {batch.batchNotes && (
+                    <div className="text-xs text-blue-700 mt-1 pl-2 border-l-2 border-blue-300">
+                        {batch.batchNotes}
+                    </div>
+                )}
+            </div>
+
+            {/* Dye amounts — so you can see what you used right here when
+                adding notes, instead of hunting in the recipe. Computed from
+                the batch's recipe/sketch + its yarn weight. Collapsed. */}
+            {(() => {
+                const recipe = batch.recipeId ? recipes.find(r => r.id === parseInt(batch.recipeId)) : null;
+                const colorSketch = batch.colorSketch || null;
+                if (!recipe && !colorSketch) return null;
+                const weight = (batch.yarnDetails || []).reduce((s, y) => s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
+                if (!(weight > 0) || scaleIngredients(recipe, weight, colorSketch).length === 0) return null;
+                return (
+                    <details className="mb-2 text-xs">
+                        <summary className="cursor-pointer text-blue-800 font-medium select-none">
+                            🧪 Dye amounts (at {weight}g)
+                        </summary>
+                        <div className="mt-2">
+                            <ScaledAmounts recipe={recipe} colorSketch={colorSketch} weight={weight} />
+                            <p className="text-[10px] text-gray-400 mt-1">Based on the current recipe/sketch.</p>
+                        </div>
+                    </details>
+                );
+            })()}
+
+            {/* Cost breakdown — moved here from the Queue. Collapsed by default
+                so it stays out of the way until you're pricing. */}
+            {batch.costBreakdown && (
+                <details className="mb-2 text-xs">
+                    <summary className="cursor-pointer text-green-800 font-medium select-none">
+                        💰 Cost: ${(batch.totalCost || 0).toFixed(2)}
+                        {batch.costPerSkein ? ` ($${batch.costPerSkein.toFixed(2)}/skein)` : ''}
+                    </summary>
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded space-y-1">
+                        {([
+                            ['Yarn', batch.costBreakdown.yarn],
+                            ['Dye', batch.costBreakdown.dye],
+                            ['Chemicals', batch.costBreakdown.chemicals],
+                            ['Ball Bands', batch.costBreakdown.ballBands],
+                            ['Labels', batch.costBreakdown.labels],
+                        ] as [string, number][]).map(([label, val]) => (
+                            <div key={label} className="flex justify-between text-gray-700">
+                                <span>{label}:</span>
+                                <span className="font-medium">${(val || 0).toFixed(2)}</span>
+                            </div>
+                        ))}
+                        <div className="flex justify-between border-t border-green-300 pt-1 mt-1 font-semibold text-green-900">
+                            <span>Total ({batch.costBreakdown.skeins} skeins):</span>
+                            <span>${(batch.costBreakdown.total || 0).toFixed(2)}</span>
+                        </div>
+                    </div>
+                </details>
+            )}
+
+            <div className="flex gap-1 mt-2">
+                {statuses.map(s => {
+                    if (s === status) return null;
+                    const targetStatus = statusLabels[s];
+                    return (
+                        <button
+                            key={s}
+                            onClick={() => updateStatus(batch.id, s, batch.status)}
+                            className="text-xs px-2 py-1 bg-white border border-gray-300 shadow-sm rounded hover:bg-gray-50"
+                            title={`Move to ${targetStatus.label}`}
+                        >
+                            {targetStatus.emoji}
+                        </button>
+                    );
+                })}
+                <button
+                    onClick={() => deleteBatch(batch.id)}
+                    className="text-xs px-2 py-1 bg-white border border-gray-300 shadow-sm rounded hover:bg-red-50 ml-auto"
+                    title="Delete batch"
+                >
+                    🗑️
+                </button>
+            </div>
+            </div>
+        </div>
+        );
     };
 
     return (
@@ -466,31 +703,9 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
             )}
 
             {/* Pipeline View */}
-            <div className="grid md:grid-cols-4 gap-4">
-                {statuses.map(status => {
-                    // The Stocked column also catches legacy 'sold' batches (pre-migration).
-                    // Sort newest on top: use lastMovedAt when present (stamped on
-                    // creation + every status change); fall back to startDate (set on
-                    // creation) and finally to id (Date.now()) so pre-feature batches
-                    // still get a stable, recency-ish order.
-                    const recency = (b) => {
-                        const t = b.lastMovedAt ? Date.parse(b.lastMovedAt) : NaN;
-                        if (!Number.isNaN(t)) return t;
-                        const d = b.startDate ? Date.parse(b.startDate) : NaN;
-                        if (!Number.isNaN(d)) return d;
-                        return Number(b.id) || 0;
-                    };
-                    // Batch number from the batch id ("B-007" -> 7) for tie-breaking.
-                    const batchNum = (b) => {
-                        const m = String(b.batchId || b.batch_id || '').match(/(\d+)/);
-                        return m ? parseInt(m[1], 10) : 0;
-                    };
-                    // Most recently moved on top; batches moved together (same
-                    // timestamp) then run in ascending batch-number order.
-                    const batchesInStatus = (status === 'stocked'
-                        ? batches.filter(isStocked)
-                        : batches.filter(b => b.status === status)
-                    ).slice().sort((a, b) => recency(b) - recency(a) || batchNum(a) - batchNum(b));
+            <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+                {boardStatuses.map(status => {
+                    const batchesInStatus = batchesIn(status);
                     const statusInfo = statusLabels[status];
                     
                     return (
@@ -543,194 +758,8 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                             )}
                             
                             <div className="space-y-3">
-                                {batchesInStatus.map(batch => {
-                                    // Get recipe image (either saved or look up from recipe)
-                                    let recipeImageUrl = batch.recipeImageUrl;
-                                    if (!recipeImageUrl && batch.recipeId) {
-                                        const recipe = recipes.find(r => r.id === parseInt(batch.recipeId));
-                                        recipeImageUrl = recipe?.photo; // Changed from imageUrl to photo
-                                    }
-                                    
-                                    return (
-                                    <div key={batch.id} className={`p-3 rounded-lg border-2 status-${status} flex gap-3`}>
-                                        {/* Recipe image */}
-                                        {recipeImageUrl && (
-                                            <img 
-                                                src={recipeImageUrl} 
-                                                alt={batch.colorway}
-                                                className="rounded object-cover flex-shrink-0"
-                                                style={{ width: '60px', height: '60px', minWidth: '60px', minHeight: '60px', maxWidth: '60px', maxHeight: '60px' }}
-                                                onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'}
-                                            />
-                                        )}
-                                        
-                                        {picking && (
-                                            <input
-                                                type="checkbox"
-                                                checked={picked.has(batch.id)}
-                                                onChange={() => togglePicked(batch.id)}
-                                                className="mt-1 h-5 w-5 flex-shrink-0 accent-teal-600 cursor-pointer"
-                                                aria-label={`Add ${currentColorName(batch, recipes)} to the packing slip`}
-                                            />
-                                        )}
-                                        <div className="flex-1">
-                                            <div className="font-medium text-sm mb-1">{currentColorName(batch, recipes)}</div>
-                                            {batch.batchId && (
-                                                <div className="text-xs text-gray-500 mb-1">ID: {batch.batchId}</div>
-                                            )}
-                                            
-                                            {/* Skein details */}
-                                            {batch.yarnDetails && batch.yarnDetails.length > 0 ? (
-                                                <div className="text-xs text-gray-600 mb-2">
-                                                    {(() => {
-                                                        const grouped = batch.yarnDetails.reduce((acc, yarn) => {
-                                                            const key = `${yarn.base} ${yarn.hankSize}g`;
-                                                            acc[key] = (acc[key] || 0) + parseInt(yarn.quantity || 1);
-                                                            return acc;
-                                                        }, {});
-                                                        return Object.entries(grouped).map(([key, qty]) => `${qty}x ${key}`).join(', ');
-                                                    })()} • {DateUtils.formatDate(batch.startDate)}
-                                                </div>
-                                            ) : (
-                                                <div className="text-xs text-gray-600 mb-2">
-                                                    {batch.skeins} skeins • {DateUtils.formatDate(batch.startDate)}
-                                                </div>
-                                            )}
-                                            
-                                        {/* Skeins are dry now — time for the skein photos */}
-                                        {status === 'ready' && batch.recipeId && (() => {
-                                            const recipe = recipes.find(r => r.id === parseInt(batch.recipeId));
-                                            return recipe ? <MissingPhotos photos={photosOf(recipe)} required={SKEIN_PHOTO_LABELS} compact /> : null;
-                                        })()}
+                                {batchesInStatus.map(batch => renderBatchCard(batch, status))}
 
-                                        {batch.notes && (
-                                            <div className="text-xs text-gray-500 mb-2">📋 {batch.notes}</div>
-                                        )}
-                                        
-                                        {batch.experimentNotes && (
-                                            <div className="text-xs text-teal-600 mb-2 italic">
-                                                🧪 Experiment: {batch.experimentNotes}
-                                            </div>
-                                        )}
-                                        
-                                        {/* Editable Batch Notes */}
-                                        <div className="mb-2">
-                                            <button
-                                                onClick={async () => {
-                                                    const currentNotes = batch.batchNotes || '';
-                                                    const newNotes = await promptDialog({ title: 'Batch notes', message: 'Observations during dyeing/drying:', defaultValue: currentNotes });
-                                                    if (newNotes !== null && newNotes !== currentNotes) {
-                                                        // Edited notes haven't been used yet — reset the check.
-                                                        saveBatches(batches.map(b =>
-                                                            b.id === batch.id ? { ...b, batchNotes: newNotes, notesUsedAt: null } : b
-                                                        ));
-                                                    }
-                                                }}
-                                                className="text-xs px-2 py-1 bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 text-blue-700"
-                                                title="Add/edit notes about this batch"
-                                            >
-                                                {batch.batchNotes ? '📝 Edit Notes' : '📝 Add Notes'}
-                                            </button>
-                                            {hasUnusedNotes(batch) && !isStocked(batch) && (
-                                                <button
-                                                    onClick={() => markNotesUsed(batch.id)}
-                                                    className="text-xs px-2 py-1 ml-1 bg-amber-50 border border-amber-300 rounded hover:bg-amber-100 text-amber-800"
-                                                    title="Mark these notes as used (e.g. carried into the recipe) — required before stocking"
-                                                >
-                                                    ✓ Notes used
-                                                </button>
-                                            )}
-                                            {batch.batchNotes && batch.notesUsedAt && (
-                                                <span className="text-xs text-green-700 ml-2" title={`Marked used ${new Date(batch.notesUsedAt).toLocaleString()}`}>
-                                                    ✓ Notes used
-                                                </span>
-                                            )}
-                                            {batch.batchNotes && (
-                                                <div className="text-xs text-blue-700 mt-1 pl-2 border-l-2 border-blue-300">
-                                                    {batch.batchNotes}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Dye amounts — so you can see what you used right here when
-                                            adding notes, instead of hunting in the recipe. Computed from
-                                            the batch's recipe/sketch + its yarn weight. Collapsed. */}
-                                        {(() => {
-                                            const recipe = batch.recipeId ? recipes.find(r => r.id === parseInt(batch.recipeId)) : null;
-                                            const colorSketch = batch.colorSketch || null;
-                                            if (!recipe && !colorSketch) return null;
-                                            const weight = (batch.yarnDetails || []).reduce((s, y) => s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
-                                            if (!(weight > 0) || scaleIngredients(recipe, weight, colorSketch).length === 0) return null;
-                                            return (
-                                                <details className="mb-2 text-xs">
-                                                    <summary className="cursor-pointer text-blue-800 font-medium select-none">
-                                                        🧪 Dye amounts (at {weight}g)
-                                                    </summary>
-                                                    <div className="mt-2">
-                                                        <ScaledAmounts recipe={recipe} colorSketch={colorSketch} weight={weight} />
-                                                        <p className="text-[10px] text-gray-400 mt-1">Based on the current recipe/sketch.</p>
-                                                    </div>
-                                                </details>
-                                            );
-                                        })()}
-
-                                        {/* Cost breakdown — moved here from the Queue. Collapsed by default
-                                            so it stays out of the way until you're pricing. */}
-                                        {batch.costBreakdown && (
-                                            <details className="mb-2 text-xs">
-                                                <summary className="cursor-pointer text-green-800 font-medium select-none">
-                                                    💰 Cost: ${(batch.totalCost || 0).toFixed(2)}
-                                                    {batch.costPerSkein ? ` ($${batch.costPerSkein.toFixed(2)}/skein)` : ''}
-                                                </summary>
-                                                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded space-y-1">
-                                                    {([
-                                                        ['Yarn', batch.costBreakdown.yarn],
-                                                        ['Dye', batch.costBreakdown.dye],
-                                                        ['Chemicals', batch.costBreakdown.chemicals],
-                                                        ['Ball Bands', batch.costBreakdown.ballBands],
-                                                        ['Labels', batch.costBreakdown.labels],
-                                                    ] as [string, number][]).map(([label, val]) => (
-                                                        <div key={label} className="flex justify-between text-gray-700">
-                                                            <span>{label}:</span>
-                                                            <span className="font-medium">${(val || 0).toFixed(2)}</span>
-                                                        </div>
-                                                    ))}
-                                                    <div className="flex justify-between border-t border-green-300 pt-1 mt-1 font-semibold text-green-900">
-                                                        <span>Total ({batch.costBreakdown.skeins} skeins):</span>
-                                                        <span>${(batch.costBreakdown.total || 0).toFixed(2)}</span>
-                                                    </div>
-                                                </div>
-                                            </details>
-                                        )}
-
-                                        <div className="flex gap-1 mt-2">
-                                            {statuses.map(s => {
-                                                if (s === batch.status) return null;
-                                                const targetStatus = statusLabels[s];
-                                                return (
-                                                    <button
-                                                        key={s}
-                                                        onClick={() => updateStatus(batch.id, s, batch.status)}
-                                                        className="text-xs px-2 py-1 bg-white border border-gray-300 shadow-sm rounded hover:bg-gray-50"
-                                                        title={`Move to ${targetStatus.label}`}
-                                                    >
-                                                        {targetStatus.emoji}
-                                                    </button>
-                                                );
-                                            })}
-                                            <button
-                                                onClick={() => deleteBatch(batch.id)}
-                                                className="text-xs px-2 py-1 bg-white border border-gray-300 shadow-sm rounded hover:bg-red-50 ml-auto"
-                                                title="Delete batch"
-                                            >
-                                                🗑️
-                                            </button>
-                                        </div>
-                                        </div>
-                                    </div>
-                                    );
-                                })}
-                                
                                 {batchesInStatus.length === 0 && (
                                     <div className="text-center py-8 text-gray-300 text-sm">
                                         No batches
@@ -741,6 +770,40 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                     );
                 })}
             </div>
+
+            {/* Stocked archive — finished stock, off the board */}
+            {stocked.length > 0 && (
+                <div className="bg-white rounded-lg card-shadow border border-gray-200">
+                    <button
+                        onClick={() => setShowArchive(v => !v)}
+                        className="w-full flex items-center justify-between p-4 text-left bg-transparent"
+                        aria-expanded={showArchive}
+                    >
+                        <span className="font-semibold text-gray-900">
+                            {showArchive ? '▾' : '▸'} 📦 Stocked archive
+                            <span className="ml-2 text-sm font-normal text-gray-500">finished batches on the shelf</span>
+                        </span>
+                        <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-sm font-medium">{stocked.length}</span>
+                    </button>
+                    {showArchive && (
+                        <div className="px-4 pb-4 space-y-3">
+                            <input
+                                type="search"
+                                value={archiveQuery}
+                                onChange={(e) => setArchiveQuery(e.target.value)}
+                                placeholder="Search color or batch ID…"
+                                className="w-full sm:w-72 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-teal-500"
+                            />
+                            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                                {archiveShown.map(batch => renderBatchCard(batch, 'stocked'))}
+                            </div>
+                            {archiveShown.length === 0 && (
+                                <div className="text-center py-4 text-gray-400 text-sm">No stocked batches match.</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {batches.length === 0 && (
                 <div className="text-center py-12 text-gray-400">

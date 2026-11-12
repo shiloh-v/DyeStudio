@@ -59,11 +59,14 @@ export function Today({ recipes, inventory, batches, sales, kits, settings, dyeS
     const ready = batches.filter((b) => b.status === 'ready').length;
     const drying = batches.filter((b) => b.status === 'drying').length;
     const dyeing = batches.filter((b) => b.status === 'dyeing').length;
-    if (ready || drying || dyeing) {
+    const labeled = batches.filter((b) => b.status === 'labeled').length;
+    if (ready || drying || dyeing || labeled) {
         actions.push({
             icon: '🔄',
-            text: ready ? `${plural(ready, 'batch', 'batches')} ready for labels` : `${plural(drying + dyeing, 'batch', 'batches')} in the Pipeline`,
-            sub: [dyeing && `${dyeing} dyeing`, drying && `${drying} drying`, ready && `${ready} ready for labels`].filter(Boolean).join(' · '),
+            text: ready ? `${plural(ready, 'batch', 'batches')} ready for labels`
+                : labeled ? `${plural(labeled, 'batch', 'batches')} labeled, waiting for the shelf`
+                : `${plural(drying + dyeing, 'batch', 'batches')} in the Pipeline`,
+            sub: [dyeing && `${dyeing} dyeing`, drying && `${drying} drying`, ready && `${ready} ready for labels`, labeled && `${labeled} labeled`].filter(Boolean).join(' · '),
             tab: 'pipeline',
         });
     }

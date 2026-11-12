@@ -114,7 +114,9 @@ export interface Batch {
   skeins?: Num;
   // 'stocked' is the terminal stage (finished inventory). 'sold' is the legacy
   // terminal value kept for back-compat with pre-rename data; treat via isStocked().
-  status?: 'dyeing' | 'drying' | 'ready' | 'stocked' | 'sold' | string;
+  // 'labeled' = labels on, done but not on the shelf yet.
+  status?: 'dyeing' | 'drying' | 'ready' | 'labeled' | 'stocked' | 'sold' | string;
+  labelsUsedAt?: string;   // when ball bands + labels came out of inventory (once per batch)
   startDate?: string;
   notes?: string;
   batchNotes?: string;
