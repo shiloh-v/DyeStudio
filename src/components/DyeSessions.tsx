@@ -1,4 +1,5 @@
 import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { panMainPhoto } from '../lib/panPhotos';
 import { findRecipeByName, liveRecipe, currentColorName, isRetired } from '../lib/recipeMatch';
 import { DateUtils, byPlannedDate } from '../lib/dates';
 import { useFormGuard } from '../lib/useFormGuard';
@@ -533,8 +534,6 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                     name: recipe.name,
                     yarnWeight: recipe.yarnWeight,
                     ingredients: recipe.ingredients,
-                    photo: recipe.photo,
-                    photos: recipe.photos || [],
                     colorType: recipe.colorType,
                     instructions: recipe.instructions,
                     colorSolutions: recipe.colorSolutions
@@ -1613,9 +1612,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                                 <div className="w-20 h-20 rounded border flex-shrink-0 bg-amber-100 flex items-center justify-center">
                                                     <span className="text-3xl">🎲</span>
                                                 </div>
-                                            ) : pan.recipe && pan.recipe.photo ? (
+                                            ) : panMainPhoto(pan, recipes, colorSketches) ? (
                                                 <img 
-                                                    src={pan.recipe.photo} 
+                                                    src={panMainPhoto(pan, recipes, colorSketches)} 
                                                     alt={pan.colorway}
                                                     className="w-20 h-20 object-cover rounded border"
                                                 />
@@ -2229,9 +2228,9 @@ className="border-l-4 border-teal-500 bg-teal-50 rounded p-3 flex gap-3"
       </div>
     );
   })()
-) : pan.recipe && pan.recipe.photo ? (
+) : panMainPhoto(pan, recipes, colorSketches) ? (
   <img
-    src={pan.recipe.photo}
+    src={panMainPhoto(pan, recipes, colorSketches)}
     alt={pan.colorway}
     className="w-12 h-12 object-cover rounded border flex-shrink-0"
   />

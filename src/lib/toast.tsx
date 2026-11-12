@@ -27,6 +27,9 @@ function dismiss(id: number) {
 
 /** Show a toast. `toast('Saved!', 'success')`. Returns the toast id. */
 export function toast(message: string, type: ToastType = 'info', durationMs = 3500): number {
+    // Same message already showing → don't stack another copy of it.
+    const dup = items.find((t) => t.message === message && t.type === type);
+    if (dup) return dup.id;
     const id = nextId++;
     items = [...items, { id, message, type }];
     emit();

@@ -9,6 +9,42 @@ import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage } from '../lib/chemicals';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 import { PanPhotos, photosOf } from './PanPhotos';
+import { panMainPhoto, panSource } from '../lib/panPhotos';
+
+// Notes box that types locally and saves after a short pause (and on blur), so
+// a sentence is one save instead of one per keystroke.
+function DraftTextarea({ value, onSave, ...rest }: { value: string; onSave: (text: string) => void } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'>) {
+    const [draft, setDraft] = useState(value);
+    const [focused, setFocused] = useState(false);
+    const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const latest = React.useRef({ draft, value, onSave });
+    latest.current = { draft, value, onSave };
+
+    // Pick up outside changes (or a failed save being undone) while not typing.
+    useEffect(() => { if (!focused && !timer.current) setDraft(value); }, [value, focused]);
+
+    const flush = () => {
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+        const { draft, value, onSave } = latest.current;
+        if (draft !== value) onSave(draft);
+    };
+    // Save any pending text when switching pans / leaving the screen.
+    useEffect(() => () => flush(), []);
+
+    return (
+        <textarea
+            {...rest}
+            value={draft}
+            onFocus={() => setFocused(true)}
+            onBlur={() => { setFocused(false); flush(); }}
+            onChange={(e) => {
+                setDraft(e.target.value);
+                if (timer.current) clearTimeout(timer.current);
+                timer.current = setTimeout(flush, 1000);
+            }}
+        />
+    );
+}
 
 export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inventory, saveInventory, recipes, settings, colorSketches, saveColorSketches }) {
     // Catalog-aware yarn matching so old supplier-name refs still resolve.
@@ -138,20 +174,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     };
     // Thumbnail for a pan: the recipe/sketch photo if there is one, else a color
     // swatch derived from its dye (trays), else '' → caller shows an emoji tile.
-    const panPhoto = (pan) => {
-        if (!pan) return '';
-        if (pan.recipe?.photo) return pan.recipe.photo;
-        if (pan.recipeId) {
-            const r = recipes.find(r => r.id === parseInt(pan.recipeId));
-            if (r?.photo) return r.photo;
-        }
-        if (pan.colorSketch?.photo) return pan.colorSketch.photo;
-        if (pan.colorSketchId) {
-            const s = colorSketches.find(s => s.id === parseInt(pan.colorSketchId));
-            if (s?.photo) return s.photo;
-        }
-        return '';
-    };
+    const panPhoto = (pan) => panMainPhoto(pan, recipes, colorSketches);
     const panSwatch = (pan) => {
         if (!pan) return '';
         if (pan.type === 'gradientTray') return findDyeItem(inventory, pan.gradientDye)?.color || '';
@@ -202,9 +225,10 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const notesBox = (indices) => (
         <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mt-4">
             <h4 className="font-semibold text-amber-900 mb-2">📝 Dye-Day Notes{indices.length > 1 ? ' (applies to both pans)' : ''}</h4>
-            <textarea
+            <DraftTextarea
+                key={`${selectedSessionId}:${indices.join(',')}`}
                 value={noteValueFor(indices)}
-                onChange={(e) => updatePanNotes(indices, e.target.value)}
+                onSave={(text) => updatePanNotes(indices, text)}
                 className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 resize-y bg-white"
                 rows={3}
                 placeholder="Anything you changed or noticed — dye tweaks, technique, results vs. expected, what to do differently next time."
@@ -1160,7 +1184,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                     </div>
 
                                     <PanPhotos
-                                        photos={photosOf(currentRecipe || currentColorSketch)}
+                                        photos={photosOf(panSource(currentPan, recipes, colorSketches))}
                                         alt={currentColorName(currentPan, recipes, colorSketches)}
                                     />
 
