@@ -3,7 +3,7 @@ import { DateUtils } from '../lib/dates';
 import { toast } from '../lib/toast';
 import { confirmDialog } from '../lib/dialog';
 import {
-    parseOrdersCsv, parseInventoryCsv, mergeSales, salesSchemaReady, isCountable, ImportError, OWN_VENDOR,
+    parseOrdersCsv, parseInventoryCsv, mergeSales, salesSchemaReady, isCountable, isOwnBrand, ImportError, OWN_VENDOR,
     type SaleLine,
 } from '../lib/shopify';
 import {
@@ -11,13 +11,14 @@ import {
     byCombo, lastMonths, monthlyUnits, comboLabel, daysAgo, type ShopifyMapping,
 } from '../lib/demand';
 import { DEMAND_WINDOWS, demandPrefs, demandSummary } from '../lib/demandSummary';
+import { runShopifySync } from '../lib/shopifySync';
 
 
 const money = (n: number) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const money0 = (n: number) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
 
 
-export function Demand({ sales, saveSales, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, gradients = [], colorSketches = [], setActiveTab }) {
+export function Demand({ sales, saveSales, shopifySync = null, refreshShopify, batches, recipes, kits, settings, saveSettings, inventory, dyeSessions, saveDyeSessions, gradients = [], colorSketches = [], setActiveTab }) {
     const today = DateUtils.getTodayEST();
     const [schemaOk, setSchemaOk] = useState<boolean | null>(null);
     const [busy, setBusy] = useState(false);
@@ -26,6 +27,7 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
     const [showAllRank, setShowAllRank] = useState(false);
     const [trendColorway, setTrendColorway] = useState('');
     const [showMapper, setShowMapper] = useState(false);
+    const [syncing, setSyncing] = useState(false);
     const ordersInput = useRef<HTMLInputElement>(null);
     const invInput = useRef<HTMLInputElement>(null);
 
@@ -108,7 +110,11 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
             const { lines: parsed, skipped } = parseOrdersCsv(await readFile(file));
             // Merge into our own lines only, so any other-vendor rows saved by an
             // earlier version are removed from the database on this save.
-            const { sales: merged, added, updated } = mergeSales(lines, parsed);
+            // Merge into a fresh copy: the daily sync may have added lines since
+            // this page loaded, and saving a stale list would delete them.
+            const fresh = refreshShopify ? await refreshShopify() : sales;
+            const own = (fresh || []).filter((s) => s.lineKey && isOwnBrand(s.vendor, s.productTitle || s.lineName));
+            const { sales: merged, added, updated } = mergeSales(own, parsed);
             const ok = await saveSales(merged);
             if (ok === false) throw new Error('Saving to the database failed — nothing was imported.');
             const orderCount = new Set(parsed.map((p) => p.orderName)).size;
@@ -136,6 +142,22 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
         setBusy(false);
     };
 
+    const syncNow = async () => {
+        setSyncing(true);
+        try {
+            const r = await runShopifySync();
+            await refreshShopify?.();
+            const parts = [`${r.orders} order${r.orders === 1 ? '' : 's'} from the last ${r.days} days`];
+            if (r.added) parts.push(`${r.added} new line${r.added === 1 ? '' : 's'}`);
+            parts.push(`stock for ${r.variants} variants`);
+            toast(`Synced with Shopify: ${parts.join(', ')}.`, 'success', 7000);
+        } catch (err) {
+            toast(err?.message || String(err), 'error', 9000);
+            await refreshShopify?.().catch(() => {});
+        }
+        setSyncing(false);
+    };
+
     const clearSales = async () => {
         if (!(await confirmDialog({ title: 'Remove imported Shopify sales?', message: `This deletes all ${allLines.length} imported order lines from the app (your Shopify store is not touched). You can re-import any time.`, confirmText: 'Remove', danger: true }))) return;
         await saveSales((sales || []).filter((s) => !s.lineKey));
@@ -161,11 +183,14 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                 <div className="flex flex-wrap gap-2">
                     <input ref={ordersInput} type="file" accept=".csv,text/csv" className="hidden" onChange={importOrders} />
                     <input ref={invInput} type="file" accept=".csv,text/csv" className="hidden" onChange={importInventory} />
-                    <button disabled={busy} onClick={() => ordersInput.current?.click()} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-50">
-                        {busy ? 'Importing…' : '⬆ Import orders CSV'}
+                    <button disabled={syncing || busy} onClick={syncNow} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-medium disabled:opacity-50">
+                        {syncing ? 'Syncing…' : '🔄 Sync with Shopify'}
                     </button>
-                    <button disabled={busy} onClick={() => invInput.current?.click()} className="bg-white text-teal-700 border border-teal-200 px-4 py-2 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-50">
-                        ⬆ Update stock levels
+                    <button disabled={busy || syncing} onClick={() => ordersInput.current?.click()} className="bg-white text-teal-700 border border-teal-200 px-4 py-2 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-50">
+                        {busy ? 'Importing…' : '⬆ Orders CSV'}
+                    </button>
+                    <button disabled={busy || syncing} onClick={() => invInput.current?.click()} className="bg-white text-teal-700 border border-teal-200 px-4 py-2 rounded-lg hover:bg-teal-50 font-medium disabled:opacity-50">
+                        ⬆ Stock CSV
                     </button>
                     {hasData && (
                         <button onClick={() => setShowMapper(true)} className="bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium">
@@ -174,6 +199,8 @@ export function Demand({ sales, saveSales, batches, recipes, kits, settings, sav
                     )}
                 </div>
             </div>
+
+            <SyncLine status={shopifySync} />
 
             {schemaOk === false && (
                 <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg px-4 py-3">
@@ -323,6 +350,36 @@ function Kpi({ label, value, sub, accent = 'text-gray-900' }: { label: string; v
             <div className="text-sm text-gray-600 mb-1">{label}</div>
             <div className={`text-2xl md:text-3xl font-bold tabular-nums ${accent}`}>{value}</div>
             {sub && <div className="text-xs text-gray-500 mt-1">{sub}</div>}
+        </div>
+    );
+}
+
+/** "Last synced …" plus the last error, if the most recent sync failed. */
+function SyncLine({ status }) {
+    const r = status?.lastResult;
+    const ago = (iso: string) => {
+        const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+        if (mins < 2) return 'just now';
+        if (mins < 90) return `${mins} min ago`;
+        const hrs = Math.round(mins / 60);
+        if (hrs < 36) return `${hrs} hours ago`;
+        return `${Math.round(hrs / 24)} days ago`;
+    };
+    if (!status?.lastSyncAt && !r) {
+        return <p className="text-xs text-gray-500 -mt-3">Shopify sync isn't connected yet — CSV imports still work. Once it's set up, orders and stock update every morning automatically.</p>;
+    }
+    return (
+        <div className="-mt-3 space-y-2">
+            {status?.lastSyncAt && (
+                <p className="text-xs text-gray-500">
+                    Last synced with Shopify {ago(status.lastSyncAt)}{r?.ok && r.trigger === 'daily' ? ' (automatic)' : ''} · updates every morning
+                </p>
+            )}
+            {r && r.ok === false && (
+                <div className="bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-2">
+                    Last Shopify sync failed{r.at ? ` (${ago(r.at)})` : ''}: {r.error}
+                </div>
+            )}
         </div>
     );
 }

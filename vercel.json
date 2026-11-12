@@ -4,5 +4,16 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/shopify-sync",
+      "schedule": "0 10 * * *"
+    }
+  ]
 }
