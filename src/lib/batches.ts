@@ -26,3 +26,31 @@ export function stockedBatches(batches: Batch[]): Batch[] {
 export function activeBatches(batches: Batch[]): Batch[] {
     return (batches || []).filter((b) => !isStocked(b));
 }
+
+/**
+ * True when a dye session already has batches in the Pipeline, i.e. it was
+ * finished. Older batches predate `sourceSessionId`, so also match the
+ * "...session: <name>" note every finished batch carries.
+ *
+ * Use this alongside `session.archived`: the flag lives on the session row and
+ * can be wiped by a save from another tab/device holding a stale copy, but the
+ * batches are proof the session was finished — so it must never be finished
+ * (batches created, inventory deducted) a second time.
+ */
+export function sessionHasBatches(
+    session: { id?: any; name?: string } | null | undefined,
+    batches: Array<{ sourceSessionId?: any; notes?: string }>,
+): boolean {
+    if (!session) return false;
+    return (batches || []).some((b) =>
+        (b.sourceSessionId != null && String(b.sourceSessionId) === String(session.id))
+        || (!!session.name && (b.notes || '').endsWith(`session: ${session.name}`)));
+}
+
+/** A session is done if it's flagged archived OR its batches already exist. */
+export function isSessionFinished(
+    session: { id?: any; name?: string; archived?: boolean | null } | null | undefined,
+    batches: Array<{ sourceSessionId?: any; notes?: string }>,
+): boolean {
+    return !!session && (!!session.archived || sessionHasBatches(session, batches));
+}
