@@ -1,5 +1,6 @@
-// How dark a colorway dyes up, so a batch can be dyed lightest → darkest (a
-// pale color dyed after a dark one picks up whatever the pot/tools carry over).
+// How dark a colorway dyes up, so each color type in a batch can be dyed
+// lightest → darkest (a pale color dyed after a dark one picks up whatever
+// the pot/tools carry over).
 //
 // Estimate: each dye's swatch color (Inventory "color") is its look at about
 // REF_DOS % depth of shade. Depth = dye per gram of yarn — stock solution is
@@ -105,12 +106,27 @@ export function panLightness(pan: any, recipes: Recipe[], colorOf: (n: string) =
     return colorLightness(r, colorOf);
 }
 
+/** A pan's color type (recipe colorType or Color Lab sketch type), lowercased; '' if unknown. */
+function panColorType(pan: any, recipes: Recipe[], sketches: any[]): string {
+    if (pan?.type === 'colorLab') {
+        const k = pan.colorSketch || sketches.find((x) => String(x.id) === String(pan.colorSketchId));
+        return String(k?.type || '').toLowerCase();
+    }
+    const r = (pan?.recipeId && recipes.find((x) => String(x.id) === String(pan.recipeId))) || pan?.recipe;
+    return String(r?.colorType ?? r?.color_type ?? '').toLowerCase();
+}
+
+/** Dye order by color type: speckled, then variegated, then tonal (and anything else). */
+const TYPE_RANK: Record<string, number> = { speckled: 0, variegated: 1 };
+const typeRank = (t: string) => TYPE_RANK[t] ?? 2;
+
 /**
- * Pans in dye order, lightest → darkest: each colorway's pans stay together,
- * colors with unknown dyes go after the known ones (in their old order), and
- * trays (gradient / dye-square) stay last.
+ * Pans in dye order: speckled first, then variegated, then tonals; within
+ * each type, lightest → darkest. Each colorway's pans stay together, colors
+ * with unknown dyes go after the known ones of their type (in their old
+ * order), and trays (gradient / dye-square) stay last.
  */
-export function sortPansLightToDark<T extends { type?: string; colorway?: string; recipeId?: any }>(pans: T[], recipes: Recipe[], inventory: any[], sketches: any[] = []): T[] {
+export function sortPansInDyeOrder<T extends { type?: string; colorway?: string; recipeId?: any }>(pans: T[], recipes: Recipe[], inventory: any[], sketches: any[] = []): T[] {
     const colorOf = dyeColorLookup(inventory);
     const groups: T[][] = [];
     const trays: T[] = [];
@@ -120,7 +136,7 @@ export function sortPansLightToDark<T extends { type?: string; colorway?: string
         const g = groups.find((x) => `${x[0].type}|${x[0].colorway || ''}|${x[0].recipeId || ''}` === key);
         if (g) g.push(p); else groups.push([p]);
     }
-    const lit = groups.map((g, i) => ({ g, i, l: panLightness(g[0], recipes, colorOf, sketches) }));
-    lit.sort((a, b) => (a.l == null ? 1 : 0) - (b.l == null ? 1 : 0) || (b.l ?? 0) - (a.l ?? 0) || a.i - b.i);
+    const lit = groups.map((g, i) => ({ g, i, t: typeRank(panColorType(g[0], recipes, sketches)), l: panLightness(g[0], recipes, colorOf, sketches) }));
+    lit.sort((a, b) => a.t - b.t || (a.l == null ? 1 : 0) - (b.l == null ? 1 : 0) || (b.l ?? 0) - (a.l ?? 0) || a.i - b.i);
     return [...lit.flatMap((x) => x.g), ...trays];
 }
