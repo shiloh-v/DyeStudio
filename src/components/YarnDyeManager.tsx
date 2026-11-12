@@ -4,6 +4,7 @@ import { StorageManager } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
+import { loadSyncStatus, withSyncedInventory, type SyncStatus } from '../lib/shopifySync';
 
 // Code-split each tab — its JS loads on demand instead of in the initial bundle.
 const named = (p, name) => lazy(() => p().then((m) => ({ default: m[name] })));
@@ -103,7 +104,7 @@ export function YarnDyeManager() {
         try {
             // Load in parallel. Any failure aborts the whole load: the app is
             // not shown (so nothing can be saved) until every table loads.
-            const [recipesData, inventoryData, batchesData, salesData, dyeSessionsData, kitsData, colorSketchesData, gradientsData, settingsData] = await Promise.all([
+            const [recipesData, inventoryData, batchesData, salesData, dyeSessionsData, kitsData, colorSketchesData, gradientsData, settingsData, syncData] = await Promise.all([
                 StorageManager.get('recipes'),
                 StorageManager.get('inventory'),
                 StorageManager.get('batches'),
@@ -113,7 +114,9 @@ export function YarnDyeManager() {
                 StorageManager.get('color_sketches'),
                 StorageManager.get('gradients'),
                 StorageManager.get('settings'),
+                loadSyncStatus(), // never throws; null until Shopify sync is set up
             ]);
+            setShopifySync(syncData);
 
             setRecipes(recipesData);
             setInventory(inventoryData);
@@ -124,7 +127,8 @@ export function YarnDyeManager() {
             setColorSketches(colorSketchesData);
             setGradients(gradientsData);
             // null only when no settings row exists yet (a brand-new account).
-            setSettings(settingsData || {
+            // Stock levels from the Shopify sync win when newer than the last CSV upload.
+            setSettings(withSyncedInventory(settingsData, syncData) || {
                 colorTypes: ['tonal', 'variegated', 'speckled'],
                 inventoryCategories: ['dye', 'yarn base', 'chemical', 'tool', 'ball band', 'other'],
                 units: ['ml', 'g', 'oz', 'lb', 'tsp', 'tbsp'],
@@ -176,6 +180,17 @@ export function YarnDyeManager() {
     const saveBatches = (newBatches) => persist('batches', 'batches', setBatches, batches, newBatches);
 
     const saveSales = (newSales) => persist('sales', 'sales', setSales, sales, newSales);
+
+    // After a Shopify sync (which writes on the server), reload what it changed
+    // so in-memory copies never overwrite the synced rows on the next save.
+    const [shopifySync, setShopifySync] = useState<SyncStatus | null>(null);
+    const refreshShopify = async () => {
+        const [freshSales, status] = await Promise.all([StorageManager.get('sales'), loadSyncStatus()]);
+        setSales(freshSales);
+        setShopifySync(status);
+        setSettings((cur) => withSyncedInventory(cur, status));
+        return freshSales;
+    };
 
     // Apply a restored backup. Only collections present in the backup are
     // written (parseBackup drops missing ones), then the app reloads from the
@@ -444,6 +459,8 @@ export function YarnDyeManager() {
                     <Demand
                         sales={sales}
                         saveSales={saveSales}
+                        shopifySync={shopifySync}
+                        refreshShopify={refreshShopify}
                         batches={batches}
                         recipes={recipes}
                         kits={kits}
