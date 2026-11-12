@@ -8,7 +8,7 @@ import { openPullList } from '../lib/pullList';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
 import { labelItems } from '../lib/roleMatch';
-import { sortPansLightToDark } from '../lib/darkness';
+import { sortPansInDyeOrder } from '../lib/darkness';
 import { isTexturedColor, MAX_TEXTURED_PANS_PER_BATCH, LAB_TESTS_PER_BATCH } from '../lib/demand';
 import type { Pan } from '../types';
 import {
@@ -169,10 +169,10 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
         ].filter(Boolean);
     };
 
-    // Dye order: lightest colorway first, darkest last (trays at the end).
+    // Dye order: speckled, then variegated, then tonal; each lightest → darkest (trays at the end).
     const sortLightToDark = () => {
-        setFormData(prev => ({ ...prev, pans: sortPansLightToDark(prev.pans, recipes, inventory, colorSketches) }));
-        toast('Pans sorted lightest → darkest.', 'success');
+        setFormData(prev => ({ ...prev, pans: sortPansInDyeOrder(prev.pans, recipes, inventory, colorSketches) }));
+        toast('Pans sorted: speckled, variegated, then tonal, each light → dark.', 'success');
     };
 
     // Calculate oven capacity (pans count as 1, gradient trays count as 2, dye square trays count as 4)
@@ -1520,9 +1520,9 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                             type="button"
                                             onClick={sortLightToDark}
                                             className="text-sm bg-white text-teal-700 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 font-medium"
-                                            title="Dye order: lightest colorway first, darkest last (estimated from each recipe's dyes)"
+                                            title="Dye order: speckled, then variegated, then tonal; each lightest → darkest (estimated from each recipe's dyes)"
                                         >
-                                            ☀️→🌑 Sort light → dark
+                                            ☀️→🌑 Sort dye order
                                         </button>
                                     )}
                                 </div>

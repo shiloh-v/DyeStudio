@@ -15,7 +15,7 @@ import { canonicalYarnRef, matchesYarnBase } from './yarnMatch';
 import { isStocked } from './batches';
 import { isCountable, isOwnBrand, lineRevenue, type SaleLine, type InventorySnapshot } from './shopify';
 import { findRecipeByName, recipeNameList, isRetired } from './recipeMatch';
-import { sortPansLightToDark } from './darkness';
+import { sortPansInDyeOrder } from './darkness';
 
 export interface ShopifyMapping {
     kind?: 'colorway' | 'kit' | 'ignore';
@@ -1319,7 +1319,8 @@ export function planRestock(input: RestockPlanInput) {
     }
 
     // Which colorways share a batch (≤ MAX_COMBOS_PER_BATCH combos each), then
-    // each batch's pans built on just its combos, in dye order (light → dark).
+    // each batch's pans built on just its combos, in dye order (speckled, variegated, tonal;
+    // each light → dark).
     const labCombos = [...new Set(labPans.flatMap((p) => p.yarns.map((y: any) => comboOf(y.base, y.hankSize))))];
     const allCombos = ctx.catalog
         .filter((b) => b.myName && !isSpecialtyBase(b.myName, ctx.catalog))
@@ -1365,7 +1366,7 @@ export function planRestock(input: RestockPlanInput) {
             ...labPans.filter((p) => slot.labs.includes(p.colorway)),
         ];
         pans.push(...load);
-        return { slot, load: sortPansLightToDark(load, recipes, input.inventory), repeats: [] as string[] };
+        return { slot, load: sortPansInDyeOrder(load, recipes, input.inventory), repeats: [] as string[] };
     }).filter((b) => b.load.length);
     // Racks still free: a second pair of a color already planned, for a
     // base/size it needs that none of its pans dye (urgency order). A batch
@@ -1419,7 +1420,7 @@ export function planRestock(input: RestockPlanInput) {
         });
         pans.push(...extra);
         b.repeats.push(...new Set(extra.map((p: any) => p.colorway)));
-        b.load = sortPansLightToDark([...b.load, ...extra], recipes, input.inventory);
+        b.load = sortPansInDyeOrder([...b.load, ...extra], recipes, input.inventory);
     }
     // Dye what's on the shelf first: batches your undyed yarn already covers
     // (after what planned sessions use) go first, in urgency order; the rest

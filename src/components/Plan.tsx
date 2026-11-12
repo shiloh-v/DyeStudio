@@ -393,7 +393,7 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
                 </label>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, at most 2 yarn combos (base + size, e.g. Nova Fingering 20g + Luna DK 50g) per batch, plus a gradient tray while dyes still need one. Batches your undyed yarn already covers come first. Pans are listed in dye order, lightest to darkest. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
+                Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, at most 2 yarn combos (base + size, e.g. Nova Fingering 20g + Luna DK 50g) per batch, plus a gradient tray while dyes still need one. Batches your undyed yarn already covers come first. Pans are listed in dye order: speckled, then variegated, then tonal, each lightest to darkest. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
             </p>
             {plan.unplanned?.length > 0 && (
                 <div className="mb-4 border border-amber-200 bg-amber-50 rounded-lg p-4 text-sm">
