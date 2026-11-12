@@ -53,9 +53,17 @@ class HttpError extends Error {
 // ---------- Shopify ----------
 
 function storeDomain(): string {
-    const d = env('SHOPIFY_STORE_DOMAIN').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    if (!d) throw new HttpError(501, 'Shopify is not connected yet (SHOPIFY_STORE_DOMAIN is not set).');
-    return d;
+    const raw = env('SHOPIFY_STORE_DOMAIN').replace(/^["']|["']$/g, '').trim().toLowerCase();
+    if (!raw) throw new HttpError(501, 'Shopify is not connected yet (SHOPIFY_STORE_DOMAIN is not set).');
+    // Accept the admin URL ("admin.shopify.com/store/<handle>") or a bare handle too.
+    const admin = raw.match(/admin\.shopify\.com\/store\/([a-z0-9-]+)/);
+    if (admin) return `${admin[1]}.myshopify.com`;
+    const host = raw.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (/^[a-z0-9-]+$/.test(host)) return `${host}.myshopify.com`;
+    if (!host.endsWith('.myshopify.com')) {
+        throw new HttpError(500, `SHOPIFY_STORE_DOMAIN is "${host}", but it must be the store's .myshopify.com address (Shopify admin → Settings → Domains).`);
+    }
+    return host;
 }
 
 async function shopifyToken(domain: string): Promise<string> {
@@ -73,7 +81,10 @@ async function shopifyToken(domain: string): Promise<string> {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok || !body.access_token) {
-        throw new HttpError(502, `Shopify rejected the app credentials (${res.status}${body.error ? `: ${body.error_description || body.error}` : ''}).`);
+        if (res.status === 404) {
+            throw new HttpError(502, `No Shopify store found at ${domain} (404). Check SHOPIFY_STORE_DOMAIN is your .myshopify.com address.`);
+        }
+        throw new HttpError(502, `Shopify rejected the app credentials for ${domain} (${res.status}${body.error ? `: ${body.error_description || body.error}` : ''}). Check the app is installed on this store and the Client ID/secret match it.`);
     }
     return body.access_token;
 }
