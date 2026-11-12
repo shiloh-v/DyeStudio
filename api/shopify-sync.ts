@@ -228,10 +228,18 @@ async function fetchInventory(gql: Gql) {
 
 // ---------- Supabase ----------
 
+function decodeJwtPart(jwt: string): string {
+    try { return atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')); } catch { return ''; }
+}
+
 function adminClient(): SupabaseClient {
     const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
     const key = env('SUPABASE_SERVICE_ROLE_KEY');
     if (!url || !key) throw new HttpError(501, 'Server is missing SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_URL.');
+    // Name the key's format (never its value) so a wrong paste is easy to spot.
+    if (key.startsWith('sb_publishable_') || /^eyJ/.test(key) && /"role"\s*:\s*"anon"/.test(decodeJwtPart(key))) {
+        throw new HttpError(500, 'SUPABASE_SERVICE_ROLE_KEY in Vercel is the public (anon/publishable) key — use the service_role or secret key instead.');
+    }
     return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
@@ -296,8 +304,16 @@ async function authorize(req: Request, db: SupabaseClient, viaCron: boolean): Pr
         if (!secret || bearer !== secret) throw new HttpError(401, 'Unauthorized.');
         return owner;
     }
-    const { data, error } = await db.auth.getUser(bearer);
-    if (error || !data?.user) throw new HttpError(401, 'Your session expired — sign in again.');
+    // Verify the sign-in with the public key (the same one the app uses), so a
+    // bad service key shows up later as its own clear error instead of here.
+    const url = env('SUPABASE_URL') || env('VITE_SUPABASE_URL');
+    const publicKey = env('VITE_SUPABASE_ANON_KEY');
+    const verifier = publicKey ? createClient(url, publicKey, { auth: { persistSession: false, autoRefreshToken: false } }) : db;
+    const { data, error } = await verifier.auth.getUser(bearer);
+    if (error || !data?.user) {
+        console.error('getUser failed:', error?.status, error?.message);
+        throw new HttpError(401, `Couldn't confirm your sign-in with Supabase (${error?.message || 'no user'}). Try signing out and back in.`);
+    }
     if (data.user.id !== owner) throw new HttpError(403, 'Only the shop owner can sync Shopify.');
     return owner;
 }
