@@ -195,6 +195,8 @@ li { display: flex; align-items: center; gap: 8px; }
 .notes { min-height: 70px; }
 .bad { color: #b42318; font-weight: 600; } .warn { color: #a15c07; } .ok { color: #0f766e; }
 tr.short td { background: #fdecea; }
+.num { white-space: nowrap; }
+.p2name { display: none; font-weight: 400; color: #5d6e6c; }
 .sol { font-weight: 600; } .muted { color: #5d6e6c; } .foot { margin: 6px 0 0; color: #5d6e6c; font-size: 11.5px; }
 .alert { margin: 0 0 6px; color: #b42318; font-weight: 600; } .okline { margin: 0 0 6px; color: #0f766e; }
 @media print {
@@ -207,6 +209,10 @@ tr.short td { background: #fdecea; }
   .card { padding: 6px 10px 4px; }
   .pan { padding: 3px 0; }
   th, td { padding: 3px 8px; }
+  /* Page 1: yarn + dyes. Page 2: pan bundles, never split mid-card. */
+  .pans { break-before: page; page-break-before: always; }
+  .p2name { display: inline; }
+  tr { break-inside: avoid; }
   tr.short td, .card.tray { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style></head>
@@ -219,7 +225,7 @@ tr.short td { background: #fdecea; }
 <tbody>${totalRows}<tr class="sum"><td></td><td>Total</td><td class="r num">${list.skeins}</td><td class="r num">${g(list.grams)}</td><td></td></tr></tbody></table>
 </section>
 ${dyeSection(list.dyes)}
-<section><h2>Group by pan</h2><div class="cards">${cards}
+<section class="pans"><h2>Group by pan<span class="p2name"> · ${esc(session?.name || 'Dye session')}${session?.date ? ` · ${esc(date)}` : ''}</span></h2><div class="cards">${cards}
 <div class="card"><div class="head"><span class="name">Notes</span></div><div class="notes"></div></div>
 </div></section>
 </div></body></html>`;
