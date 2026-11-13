@@ -8,6 +8,7 @@ import { toast } from '../lib/toast';
 import { openPullList } from '../lib/pullList';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand, yarnBaseRef, canonicalYarnRef } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
+import { reservesBefore } from '../lib/dyeUsage';
 import { labelItems } from '../lib/roleMatch';
 import { sortPansInDyeOrder } from '../lib/darkness';
 import { isTexturedColor, MAX_TEXTURED_PANS_PER_BATCH, LAB_TESTS_PER_BATCH } from '../lib/demand';
@@ -246,15 +247,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
     const calculateCommittedNeeds = (target: { date?: any; id?: any }) => {
         const committed: { yarnNeeded: Record<string, number>; ballBandsNeeded: Record<string, number> } = { yarnNeeded: {}, ballBandsNeeded: {} };
         // Undated drafts reserve inventory LAST (after every dated session).
-        const ts = (d) => { if (!d) return Number.MAX_SAFE_INTEGER; const t = new Date(d).getTime(); return Number.isFinite(t) ? t : Number.MAX_SAFE_INTEGER; };
-        const targetTime = ts(target?.date);
-        const targetId = Number(target?.id ?? Number.MAX_SAFE_INTEGER);
-        const isBefore = (s) => {
-            if (s.archived) return false;
-            const st = ts(s.date);
-            if (st !== targetTime) return st < targetTime;
-            return Number(s.id) < targetId; // same date → earlier creation wins
-        };
+        const isBefore = (s) => reservesBefore(s, target);
         dyeSessions.forEach(s => {
             if (!isBefore(s)) return;
             const needs = calculatePanNeeds(s.pans || []);
@@ -2166,7 +2159,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     </button>
                                 )}
                                 <button
-                                    onClick={() => { if (!openPullList(session, recipes, colorSketches, settings?.yarnBases)) toast('Allow pop-ups to open the pull list', 'error'); }}
+                                    onClick={() => { if (!openPullList(session, recipes, colorSketches, settings?.yarnBases, inventory, dyeSessions)) toast('Allow pop-ups to open the pull list', 'error'); }}
                                     className="text-teal-700 hover:bg-teal-50 px-3 py-1 rounded"
                                     title="Printable list of the yarn to pull and bundle for each pan"
                                     aria-label="Yarn pull list"

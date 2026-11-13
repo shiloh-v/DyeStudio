@@ -156,7 +156,7 @@ export function Today({ recipes, inventory, batches, sales, kits, settings, dyeS
                                     Review &amp; date
                                 </button>
                             )}
-                            <button onClick={() => { if (!openPullList(next, recipes, colorSketches, settings?.yarnBases)) toast('Allow pop-ups to open the pull list', 'error'); }} className="px-4 py-3 rounded-lg font-medium text-teal-700 border border-teal-200 hover:bg-teal-50 whitespace-nowrap">
+                            <button onClick={() => { if (!openPullList(next, recipes, colorSketches, settings?.yarnBases, inventory, dyeSessions)) toast('Allow pop-ups to open the pull list', 'error'); }} className="px-4 py-3 rounded-lg font-medium text-teal-700 border border-teal-200 hover:bg-teal-50 whitespace-nowrap">
                                 🧶 Pull list
                             </button>
                             <button onClick={openQueue} className="bg-teal-600 text-white px-6 py-3 rounded-lg hover:bg-teal-700 font-semibold text-lg whitespace-nowrap">
