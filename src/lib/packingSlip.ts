@@ -11,6 +11,7 @@ import { sizeName } from './sizes';
 import { DateUtils } from './dates';
 import { comboKey, makeContext, resolveName } from './demand';
 import { isOwnBrand } from './shopify';
+import { showPrintPage } from './printView';
 
 export interface SlipLine {
     colorway: string;
@@ -181,11 +182,8 @@ ${slip.batchIds.length ? `<p class="batches">Batches: ${esc(slip.batchIds.join('
 </div></body></html>`;
 }
 
-/** Open the slip in a new tab (call from a click so it isn't blocked). */
+/** Show the slip full-screen in the app, with Print. */
 export function openPackingSlip(batches: Batch[], recipes: any[], settings: any): boolean {
     const html = packingSlipHtml(buildPackingSlip(batches, recipes, settings), settings);
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    const w = window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    return !!w;
+    return showPrintPage(html);
 }

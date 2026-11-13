@@ -7,6 +7,7 @@ import { currentColorName } from './recipeMatch';
 import { canonicalYarnRef } from './yarnMatch';
 import { DateUtils } from './dates';
 import { sessionDyeNeeds, type DyeNeed } from './dyeUsage';
+import { showPrintPage } from './printView';
 
 export interface PullLine { base: string; hankSize: number; qty: number }
 export interface PullPan { num: number; label: string; lines: PullLine[]; detail?: string }
@@ -224,11 +225,8 @@ ${dyeSection(list.dyes)}
 </div></body></html>`;
 }
 
-/** Open the pull list in a new tab (call from a click so it isn't blocked). */
+/** Show the pull list full-screen in the app, with Print. */
 export function openPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = [], sessions: any[] = []): boolean {
     const html = pullListHtml(session, buildPullList(session, recipes, sketches, catalog, inventory, sessions));
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-    const w = window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    return !!w;
+    return showPrintPage(html);
 }
