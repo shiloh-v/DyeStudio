@@ -2166,7 +2166,7 @@ export function DyeSessions({ dyeSessions, saveDyeSessions, recipes, inventory, 
                                     </button>
                                 )}
                                 <button
-                                    onClick={() => { if (!openPullList(session, recipes, colorSketches, settings?.yarnBases)) toast('Allow pop-ups to open the pull list', 'error'); }}
+                                    onClick={() => { if (!openPullList(session, recipes, colorSketches, settings?.yarnBases, inventory)) toast('Allow pop-ups to open the pull list', 'error'); }}
                                     className="text-teal-700 hover:bg-teal-50 px-3 py-1 rounded"
                                     title="Printable list of the yarn to pull and bundle for each pan"
                                     aria-label="Yarn pull list"

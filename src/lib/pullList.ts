@@ -1,10 +1,12 @@
 // Printable yarn pull list for a dye session: what to take off the shelf (totals
 // per base + size) and what to bundle into each pan. Opens as its own page so
-// the browser's Print works on it directly.
+// the browser's Print works on it directly. Also lists the dye each session
+// uses against what's on the shelf, so shortages show up before dye day.
 
 import { currentColorName } from './recipeMatch';
 import { canonicalYarnRef } from './yarnMatch';
 import { DateUtils } from './dates';
+import { sessionDyeNeeds, type DyeNeed } from './dyeUsage';
 
 export interface PullLine { base: string; hankSize: number; qty: number }
 export interface PullPan { num: number; label: string; lines: PullLine[]; detail?: string }
@@ -16,12 +18,13 @@ export interface PullList {
     totals: PullTotal[];
     skeins: number;
     grams: number;
+    dyes: DyeNeed[];
 }
 
 const int = (v: any) => parseInt(v) || 0;
 
 /** Turn a session's pans into pan-by-pan bundles plus shelf totals. */
-export function buildPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = []): PullList {
+export function buildPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = []): PullList {
     const yarn = (base: any) => canonicalYarnRef(base, catalog) || String(base || '');
     const groups: PullGroup[] = [];
     let lastKey: string | null = null;
@@ -75,11 +78,33 @@ export function buildPullList(session: any, recipes: any[], sketches: any[] = []
         totals,
         skeins: totals.reduce((s, t) => s + t.qty, 0),
         grams: totals.reduce((s, t) => s + t.qty * t.hankSize, 0),
+        dyes: sessionDyeNeeds(session, recipes, inventory),
     };
 }
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const g = (n: number) => `${n.toLocaleString()}g`;
+// Dye amounts are small: one decimal under 100 g.
+const dg = (n: number) => `${n < 100 ? n.toFixed(1) : Math.round(n).toLocaleString()}g`;
+
+function dyeSection(dyes: DyeNeed[]): string {
+    if (!dyes.length) return '';
+    const shortCount = dyes.filter((d) => d.short > 0).length;
+    const missing = dyes.filter((d) => d.onHand == null).length;
+    const status = (d: DyeNeed) => d.onHand == null ? '<span class="warn">Not in inventory</span>'
+        : d.short > 0 ? `<span class="bad">Short ${dg(d.short)}</span>`
+        : d.lowAfter ? `<span class="warn">Enough · low after (${dg(d.onHand - d.grams)} left)</span>`
+        : '<span class="ok">Enough</span>';
+    const rows = dyes.map((d) => `
+        <tr${d.short > 0 ? ' class="short"' : ''}><td class="chk"><span class="box"></span></td><td>${esc(d.name)}</td>
+        <td class="r num">${dg(d.grams)}</td><td class="r num">${d.onHand == null ? '—' : dg(d.onHand)}</td>
+        <td>${status(d)}</td><td class="to">${esc(d.pans.length === 1 ? `Pan ${d.pans[0]}` : `Pans ${d.pans.join(', ')}`)}</td></tr>`).join('');
+    const note = shortCount ? `<p class="alert">${shortCount} dye${shortCount === 1 ? ' is' : 's are'} short for this session.</p>`
+        : missing ? '' : '<p class="okline">Enough of every dye on hand.</p>';
+    return `<section class="wrap"><h2>Dyes</h2>${note}
+<table><thead><tr><th></th><th>Dye</th><th class="r">Need</th><th class="r">On hand</th><th>Status</th><th>Used in</th></tr></thead>
+<tbody>${rows}</tbody></table></section>`;
+}
 
 function panRange(nums: number[]): string {
     if (nums.length === 1) return `Pan ${nums[0]}`;
@@ -92,7 +117,8 @@ export function pullListHtml(session: any, list: PullList): string {
     const date = session?.date ? DateUtils.formatDate(session.date) : 'No date set';
     const panCount = (session?.pans || []).filter((p: any) => p.type !== 'gradientTray' && p.type !== 'dyeSquareTray').length;
     const trayCount = (session?.pans || []).length - panCount;
-    const summary = [`${panCount} pan${panCount === 1 ? '' : 's'}`, trayCount ? `${trayCount} tray${trayCount === 1 ? '' : 's'}` : '', `${g(list.grams)} undyed`]
+    const dyeShort = list.dyes.filter((d) => d.short > 0).length;
+    const summary = [`${panCount} pan${panCount === 1 ? '' : 's'}`, trayCount ? `${trayCount} tray${trayCount === 1 ? '' : 's'}` : '', `${g(list.grams)} undyed`, dyeShort ? `${dyeShort} dye${dyeShort === 1 ? '' : 's'} short` : '']
         .filter(Boolean).join(' · ');
 
     const totalRows = list.totals.map((t) => `
@@ -117,7 +143,7 @@ export function pullListHtml(session: any, list: PullList): string {
 
     return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(session?.name || 'Dye session')} · Yarn pull list</title>
+<title>${esc(session?.name || 'Dye session')} · Pull list</title>
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; background: #fff; color: #1c2626; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -154,6 +180,9 @@ li { display: flex; align-items: center; gap: 8px; }
 .sub { color: #5d6e6c; font-size: 11.5px; margin-top: 2px; }
 .none { color: #5d6e6c; font-style: italic; }
 .notes { min-height: 70px; }
+.bad { color: #b42318; font-weight: 600; } .warn { color: #a15c07; } .ok { color: #0f766e; }
+tr.short td { background: #fdecea; }
+.alert { margin: 0 0 6px; color: #b42318; font-weight: 600; } .okline { margin: 0 0 6px; color: #0f766e; }
 @media print {
   @page { size: letter; margin: 0.45in; }
   .bar { display: none; }
@@ -164,17 +193,18 @@ li { display: flex; align-items: center; gap: 8px; }
   .card { padding: 6px 10px 4px; }
   .pan { padding: 3px 0; }
   th, td { padding: 3px 8px; }
-  .card.tray { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tr.short td, .card.tray { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 </style></head>
 <body><div class="page">
 <div class="bar"><button type="button" onclick="window.print()">Print</button></div>
-<header><div><div class="label">Yarn pull list</div><h1>${esc(session?.name || 'Dye session')}</h1></div>
+<header><div><div class="label">Pull list</div><h1>${esc(session?.name || 'Dye session')}</h1></div>
 <div class="meta"><strong>${esc(date)}</strong><br>${esc(summary)}</div></header>
 <section class="wrap"><h2>Pull from the shelf</h2>
 <table><thead><tr><th></th><th>Base</th><th class="r">Skeins</th><th class="r">Weight</th><th>Goes to</th></tr></thead>
 <tbody>${totalRows}<tr class="sum"><td></td><td>Total</td><td class="r num">${list.skeins}</td><td class="r num">${g(list.grams)}</td><td></td></tr></tbody></table>
 </section>
+${dyeSection(list.dyes)}
 <section><h2>Group by pan</h2><div class="cards">${cards}
 <div class="card"><div class="head"><span class="name">Notes</span></div><div class="notes"></div></div>
 </div></section>
@@ -182,8 +212,8 @@ li { display: flex; align-items: center; gap: 8px; }
 }
 
 /** Open the pull list in a new tab (call from a click so it isn't blocked). */
-export function openPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = []): boolean {
-    const html = pullListHtml(session, buildPullList(session, recipes, sketches, catalog));
+export function openPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = []): boolean {
+    const html = pullListHtml(session, buildPullList(session, recipes, sketches, catalog, inventory));
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     const w = window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);

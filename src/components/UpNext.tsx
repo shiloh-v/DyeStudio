@@ -8,6 +8,7 @@ import { findDyeItem } from '../lib/dyeMatch';
 import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage } from '../lib/chemicals';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
+import { dyeGramsForPan } from '../lib/dyeUsage';
 import { PanPhotos, photosOf, MissingPhotos, PAN_PHOTO_LABELS } from './PanPhotos';
 import { panMainPhoto, panSource } from '../lib/panPhotos';
 import { sessionHasBatches, isSessionFinished } from '../lib/batches';
@@ -744,48 +745,6 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         // ---- Deduct consumed inventory: yarn + dye + acid ----
         const UNIT_G = { g: 1, oz: 28.3495, lb: 453.592, kg: 1000, ml: 1, L: 1000, tsp: 5, tbsp: 15 };
         const ML_PER = { ml: 1, L: 1000, oz: 29.5735, tsp: 5, tbsp: 15, g: 1 };
-
-        // Recipe amount → grams of dye powder (stock solution: ml ÷ 100).
-        const gramsFromAmount = (amount, unit) => {
-            const a = parseFloat(amount) || 0;
-            if (unit === 'ml') return a / 100;
-            if (unit === 'tsp') return a * 5;
-            if (unit === 'tbsp') return a * 15;
-            return a;
-        };
-        // Grams of each dye a pan consumes (mirrors the cost breakdown exactly).
-        const dyeGramsForPan = (pan, recipe) => {
-            const out = {};
-            const add = (name, g) => {
-                if (!name || !(g > 0)) return;
-                const k = String(name).toLowerCase().trim();
-                out[k] = (out[k] || 0) + g;
-            };
-            if (pan.type === 'gradientTray') {
-                const totalGramsYarn = (parseFloat(pan.gradientHankSize) || 0) * 10;
-                const totalDepth = (pan.depths || []).reduce((s, d) => s + (parseFloat(d) || 0), 0);
-                add(pan.gradientDye, (totalGramsYarn * totalDepth) / 100);
-            } else if (pan.type === 'dyeSquareTray') {
-                const totalMlEach = [1.25, 2.5, 5, 7.5, 10].reduce((s, a) => s + a, 0) * 5;
-                add(pan.squareColorA, totalMlEach / 100);
-                add(pan.squareColorB, totalMlEach / 100);
-            } else {
-                // Recipe pan, or a Color Lab pan whose dyes live in its color sketch.
-                const colorSketch = pan.type === 'colorLab' ? pan.colorSketch : null;
-                if (recipe || colorSketch) {
-                    const totalWeight = pan.totalWeight || (pan.yarns || []).reduce((s, y) =>
-                        s + (parseFloat(y.hankSize) || 0) * (parseInt(y.quantity) || 0), 0);
-                    const scaled = scaleIngredients(recipe, totalWeight, colorSketch);
-                    const isVar = recipe ? recipe.colorType === 'variegated' : colorSketch?.type === 'variegated';
-                    if (isVar) {
-                        scaled.forEach(sol => (sol.dyes || []).forEach(d => add(d.name, gramsFromAmount(d.scaledAmount, d.unit || 'g'))));
-                    } else {
-                        scaled.forEach(ing => add(ing.name, gramsFromAmount(ing.scaledAmount, ing.unit || 'g')));
-                    }
-                }
-            }
-            return out;
-        };
 
         const updatedInventory = inventory.map(item => ({ ...item })); // copies: edited below before saving
         let citricGrams = 0, vinegarMl = 0;
