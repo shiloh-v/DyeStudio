@@ -3,6 +3,9 @@
 // new blob: tab, because phones (iOS Safari, Android Chrome, and the installed
 // home-screen app) often won't print a blob: page or can't open one at all.
 //
+// The installed iPhone home-screen app ignores window.print(), so there the
+// page is turned into a PDF and Print opens the share sheet (which has Print).
+//
 // The page lives in a shadow root so its styles can't clash with the app's, and
 // a print stylesheet hides the app while printing.
 
@@ -24,6 +27,9 @@ const OUTER_CSS = `
 }`;
 
 let close: (() => void) | null = null;
+
+// iOS sets navigator.standalone only in a home-screen web app.
+const isIosHomeScreenApp = () => (navigator as any).standalone === true;
 
 /** Show a standalone HTML document full-screen with Close / Print. */
 export function showPrintPage(html: string): boolean {
@@ -66,7 +72,21 @@ export function showPrintPage(html: string): boolean {
         close = null;
     };
     closeBtn.onclick = () => close?.();
-    printBtn.onclick = () => window.print();
+    let pdf: File | null = null;
+    printBtn.onclick = () => {
+        if (pdf) navigator.share({ files: [pdf], title: doc.title }).catch(() => { /* cancelled */ });
+        else window.print();
+    };
+    if (isIosHomeScreenApp() && typeof navigator.canShare === 'function') {
+        // Build it up front: the share sheet must open straight from the tap.
+        printBtn.disabled = true;
+        printBtn.textContent = 'Preparing…';
+        import('./printPdf')
+            .then(({ buildPrintPdf }) => buildPrintPdf(html))
+            .then((file) => { if (navigator.canShare({ files: [file] })) pdf = file; })
+            .catch((e) => console.error('Could not build the PDF', e))
+            .finally(() => { printBtn.disabled = false; printBtn.textContent = 'Print'; });
+    }
     document.addEventListener('keydown', onKey);
 
     // The title names the PDF when "printing" to a file.

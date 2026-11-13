@@ -195,6 +195,7 @@ li { display: flex; align-items: center; gap: 8px; }
 .notes { min-height: 70px; }
 .bad { color: #b42318; font-weight: 600; } .warn { color: #a15c07; } .ok { color: #0f766e; }
 tr.short td { background: #fdecea; }
+.num { white-space: nowrap; }
 .p2name { display: none; font-weight: 400; color: #5d6e6c; }
 .sol { font-weight: 600; } .muted { color: #5d6e6c; } .foot { margin: 6px 0 0; color: #5d6e6c; font-size: 11.5px; }
 .alert { margin: 0 0 6px; color: #b42318; font-weight: 600; } .okline { margin: 0 0 6px; color: #0f766e; }
