@@ -24,7 +24,7 @@ export interface PullList {
 const int = (v: any) => parseInt(v) || 0;
 
 /** Turn a session's pans into pan-by-pan bundles plus shelf totals. */
-export function buildPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = []): PullList {
+export function buildPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = [], sessions: any[] = []): PullList {
     const yarn = (base: any) => canonicalYarnRef(base, catalog) || String(base || '');
     const groups: PullGroup[] = [];
     let lastKey: string | null = null;
@@ -78,7 +78,7 @@ export function buildPullList(session: any, recipes: any[], sketches: any[] = []
         totals,
         skeins: totals.reduce((s, t) => s + t.qty, 0),
         grams: totals.reduce((s, t) => s + t.qty * t.hankSize, 0),
-        dyes: sessionDyeNeeds(session, recipes, inventory),
+        dyes: sessionDyeNeeds(session, recipes, inventory, sessions),
     };
 }
 
@@ -87,23 +87,35 @@ const g = (n: number) => `${n.toLocaleString()}g`;
 // Dye amounts are small: one decimal under 100 g.
 const dg = (n: number) => `${n < 100 ? n.toFixed(1) : Math.round(n).toLocaleString()}g`;
 
+const ml = (n: number) => `${n < 10 ? n.toFixed(1).replace(/\.0$/, '') : Math.round(n).toLocaleString()} ml`;
+
 function dyeSection(dyes: DyeNeed[]): string {
     if (!dyes.length) return '';
+    const hasDry = dyes.some((d) => d.dryG > 0);
+    const hasReserved = dyes.some((d) => d.reserved > 0);
     const shortCount = dyes.filter((d) => d.short > 0).length;
     const missing = dyes.filter((d) => d.onHand == null).length;
     const status = (d: DyeNeed) => d.onHand == null ? '<span class="warn">Not in inventory</span>'
-        : d.short > 0 ? `<span class="bad">Short ${dg(d.short)}</span>`
-        : d.lowAfter ? `<span class="warn">Enough · low after (${dg(d.onHand - d.grams)} left)</span>`
+        : d.short > 0 ? `<span class="bad">Short ${dg(d.short)} powder</span>`
+        : d.lowAfter ? `<span class="warn">Enough · low after (${dg(Math.max(0, d.available - d.grams))} left)</span>`
         : '<span class="ok">Enough</span>';
+    const avail = (d: DyeNeed) => d.onHand == null ? '—'
+        : d.reserved > 0 ? `${dg(Math.max(0, d.available))}<div class="sub">${dg(d.onHand)} on shelf − ${dg(d.reserved)} earlier</div>`
+        : dg(d.onHand);
     const rows = dyes.map((d) => `
         <tr${d.short > 0 ? ' class="short"' : ''}><td class="chk"><span class="box"></span></td><td>${esc(d.name)}</td>
-        <td class="r num">${dg(d.grams)}</td><td class="r num">${d.onHand == null ? '—' : dg(d.onHand)}</td>
+        <td class="r num sol">${d.ml > 0 ? ml(d.ml) : '—'}</td>
+        ${hasDry ? `<td class="r num">${d.dryG > 0 ? dg(d.dryG) : '—'}</td>` : ''}
+        <td class="r num muted">${dg(d.grams)}</td><td class="r num">${avail(d)}</td>
         <td>${status(d)}</td><td class="to">${esc(d.pans.length === 1 ? `Pan ${d.pans[0]}` : `Pans ${d.pans.join(', ')}`)}</td></tr>`).join('');
-    const note = shortCount ? `<p class="alert">${shortCount} dye${shortCount === 1 ? ' is' : 's are'} short for this session.</p>`
-        : missing ? '' : '<p class="okline">Enough of every dye on hand.</p>';
+    const totalMl = dyes.reduce((s, d) => s + d.ml, 0);
+    const totalDry = dyes.reduce((s, d) => s + d.dryG, 0);
+    const note = shortCount ? `<p class="alert">${shortCount} dye${shortCount === 1 ? ' is' : 's are'} short for this session${hasReserved ? ' (after earlier planned sessions take theirs)' : ''}.</p>`
+        : missing ? '' : `<p class="okline">Enough of every dye on hand${hasReserved ? ', after earlier planned sessions' : ''}.</p>`;
     return `<section class="wrap"><h2>Dyes</h2>${note}
-<table><thead><tr><th></th><th>Dye</th><th class="r">Need</th><th class="r">On hand</th><th>Status</th><th>Used in</th></tr></thead>
-<tbody>${rows}</tbody></table></section>`;
+<table><thead><tr><th></th><th>Dye</th><th class="r">Solution</th>${hasDry ? '<th class="r">Dry</th>' : ''}<th class="r">Powder</th><th class="r">Available</th><th>Status</th><th>Used in</th></tr></thead>
+<tbody>${rows}<tr class="sum"><td></td><td>Total</td><td class="r num">${ml(totalMl)}</td>${hasDry ? `<td class="r num">${dg(totalDry)}</td>` : ''}<td></td><td></td><td></td><td></td></tr></tbody></table>
+<p class="foot">Solution is 1% stock (100 ml = 1 g powder). Powder is the total each dye uses, solution and dry, checked against the shelf.</p></section>`;
 }
 
 function panRange(nums: number[]): string {
@@ -182,6 +194,7 @@ li { display: flex; align-items: center; gap: 8px; }
 .notes { min-height: 70px; }
 .bad { color: #b42318; font-weight: 600; } .warn { color: #a15c07; } .ok { color: #0f766e; }
 tr.short td { background: #fdecea; }
+.sol { font-weight: 600; } .muted { color: #5d6e6c; } .foot { margin: 6px 0 0; color: #5d6e6c; font-size: 11.5px; }
 .alert { margin: 0 0 6px; color: #b42318; font-weight: 600; } .okline { margin: 0 0 6px; color: #0f766e; }
 @media print {
   @page { size: letter; margin: 0.45in; }
@@ -212,8 +225,8 @@ ${dyeSection(list.dyes)}
 }
 
 /** Open the pull list in a new tab (call from a click so it isn't blocked). */
-export function openPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = []): boolean {
-    const html = pullListHtml(session, buildPullList(session, recipes, sketches, catalog, inventory));
+export function openPullList(session: any, recipes: any[], sketches: any[] = [], catalog: any[] = [], inventory: any[] = [], sessions: any[] = []): boolean {
+    const html = pullListHtml(session, buildPullList(session, recipes, sketches, catalog, inventory, sessions));
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     const w = window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
