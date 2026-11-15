@@ -9,6 +9,7 @@ import { byColorway } from '../lib/demand';
 import { aliasesAfterRename } from '../lib/recipeMatch';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
+import { RecipeHistory } from './RecipeHistory';
 
 export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [], batches = [], kits = [], dyeSessions = [], gradients = [] }) {
     // Shopify sales per colorway (window set on Plan / Sales) for card badges + sorting.
@@ -763,6 +764,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
 // real hook keyed by recipe id (hooks inside .map() crash when the list changes).
 function RecipeCard({ recipe, inventory, demand, onEdit, onDelete }) {
     const [expanded, setExpanded] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     const [photoIndex, setPhotoIndex] = useState(0);
     
     // Build photos array from legacy or new format
@@ -922,6 +924,14 @@ function RecipeCard({ recipe, inventory, demand, onEdit, onDelete }) {
                 )}
             </div>
         )}
+
+        <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="w-full text-left text-sm text-teal-600 hover:text-teal-700 font-medium mt-2 mb-2"
+        >
+            {showHistory ? '▼' : '▶'} 🕘 History
+        </button>
+        {showHistory && <div className="text-xs"><RecipeHistory recipeId={recipe.id} /></div>}
 
         <p className="text-xs text-gray-400 pt-2">
             Created: {new Date(recipe.created).toLocaleDateString()}
