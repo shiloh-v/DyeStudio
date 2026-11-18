@@ -84,10 +84,60 @@ export const scaleIngredients = (recipe, targetWeight, colorSketch = null) => {
     return [];
 };
 
+// --- Speckled: base dye bath vs. dry speckle powder -------------------------
+// A speckled color is dyed in two sittings: the base bath first, then (hours
+// later, after the rest of the batch) the dry speckle powder. Color Lab sketches
+// keep the two lists apart and scaleIngredients tags them "(base)"/"(speckle)";
+// recipes mostly tag names the same way. Untagged ingredients go by unit: ml is
+// stock solution (base), g/tsp/tbsp is dry powder (speckle).
+export type SpeckledPart = 'base' | 'speckle';
+const TAG_RE = /\s*\((base|speckle)\)\s*$/i;
+export const speckledPartOf = (ing): SpeckledPart => {
+    const tag = String(ing?.name || '').match(TAG_RE);
+    if (tag) return tag[1].toLowerCase() as SpeckledPart;
+    return /^(g|tsp|tbsp)$/i.test(String(ing?.unit || '').trim()) ? 'speckle' : 'base';
+};
+const stripPartTag = (name) => String(name || '').replace(TAG_RE, '');
+
+export const isSpeckledSource = (recipe, colorSketch = null) =>
+    (colorSketch ? colorSketch.type : recipe?.colorType) === 'speckled';
+
+// True when a speckled color has BOTH a base bath and speckle powder, so the
+// Queue runs it as two steps. (Speckle-only or base-only colors stay one step.)
+export const needsSpeckleSplit = (recipe, colorSketch = null) => {
+    if (!isSpeckledSource(recipe, colorSketch)) return false;
+    const ings = scaleIngredients(recipe, 100, colorSketch)
+        .filter(i => i?.name && parseFloat(i.amount) > 0);
+    const parts = new Set(ings.map(speckledPartOf));
+    return parts.has('base') && parts.has('speckle');
+};
+
 // Render scaled dye amounts for ONE pan/batch at the given weight. Used per-pan
-// in the Queue and per-batch in the Pipeline.
-export function ScaledAmounts({ recipe, colorSketch = null, weight }) {
+// in the Queue and per-batch in the Pipeline. `part` limits a speckled color to
+// its base bath or its speckle powder (the Queue's two speckled steps).
+export function ScaledAmounts({ recipe, colorSketch = null, weight, part = null }: { recipe: any; colorSketch?: any; weight: any; part?: SpeckledPart | null }) {
     const isVar = colorSketch?.type === 'variegated' || recipe?.colorType === 'variegated';
+    if (part && !isVar) {
+        const ings = scaleIngredients(recipe, weight, colorSketch).filter(i => speckledPartOf(i) === part);
+        if (!ings.length) return <p className="text-sm text-gray-500 italic">No {part === 'base' ? 'base dyes' : 'speckle powders'} in this recipe.</p>;
+        return (
+            <div className="space-y-2">
+                {ings.map((ing, idx) => (
+                    <div key={idx} className={`flex justify-between items-center p-3 rounded ${part === 'speckle' ? 'bg-fuchsia-50' : 'bg-blue-50'}`}>
+                        <span className="font-medium text-gray-900">{stripPartTag(ing.name)}</span>
+                        <div className="text-right">
+                            <span className={`font-bold text-lg ${part === 'speckle' ? 'text-fuchsia-700' : 'text-blue-700'}`}>
+                                {ing.scaledAmount}{ing.unit}
+                            </span>
+                            <span className="text-xs text-gray-500 ml-2">
+                                (original: {ing.amount}{ing.unit})
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
     return (
         <div className="space-y-2">
             {isVar
