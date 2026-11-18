@@ -45,7 +45,6 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
         }],
         totalMl: '2400',
         stockSolutionPercent: '1',
-        citricAcidPerBatch: '1',
         instructions: '',
         photos: [],
         notes: '',
@@ -122,7 +121,6 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
             }],
             totalMl: '2400',
             stockSolutionPercent: '1',
-            citricAcidPerBatch: '1',
             instructions: '',
             photo: '',
             photos: [],
@@ -442,7 +440,7 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
                         {/* Variegated Color Solutions */}
                         {formData.colorType === 'variegated' && (
                             <div className="space-y-4">
-                                <div className="grid md:grid-cols-3 gap-4 bg-teal-50 p-4 rounded-lg">
+                                <div className="grid md:grid-cols-2 gap-4 bg-teal-50 p-4 rounded-lg">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Total ml Needed</label>
                                         <input
@@ -464,18 +462,6 @@ export function Recipes({ recipes, saveRecipes, settings, inventory, sales = [],
                                             placeholder="1"
                                         />
                                         <p className="text-xs text-gray-500 mt-1">1g powder per 100ml water</p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Citric Acid (tbsp)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={formData.citricAcidPerBatch}
-                                            onChange={(e) => setFormData({ ...formData, citricAcidPerBatch: e.target.value })}
-                                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
-                                            placeholder="1"
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">Per 300g yarn</p>
                                     </div>
                                 </div>
 
