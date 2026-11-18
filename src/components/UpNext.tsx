@@ -6,7 +6,8 @@ import { toast } from '../lib/toast';
 import { findYarnBaseItem as _findYarnBaseItem, findBallBand as _findBallBand } from '../lib/yarnMatch';
 import { findDyeItem } from '../lib/dyeMatch';
 import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
-import { panAcidUsage } from '../lib/chemicals';
+import { panAcidUsage, panCitricGrams, panUsesVinegar, chemSettings } from '../lib/chemicals';
+import { panDisposablesCost, panDisposableCounts, panSkeinCount, findDisposableItem, DISPOSABLE_ROLES } from '../lib/disposables';
 import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
 import { dyeGramsForPan } from '../lib/dyeUsage';
 import { PanPhotos, photosOf, MissingPhotos, PAN_PHOTO_LABELS } from './PanPhotos';
@@ -393,7 +394,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         // Safety check
         if (!settings) {
             return {
-                yarn: 0, dye: 0, chemicals: 0, ballBands: 0, labels: 0,
+                yarn: 0, dye: 0, chemicals: 0, disposables: 0, ballBands: 0, labels: 0,
                 total: 0, perSkein: 0, skeins: 0, skeinDetails: []
             };
         }
@@ -402,6 +403,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             yarn: 0,
             dye: 0,
             chemicals: 0,
+            disposables: 0,
             ballBands: 0,
             labels: 0,
             total: 0,
@@ -410,11 +412,18 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             skeinDetails: [] // Array of { base, hankSize, cost } for each individual skein
         };
 
-        // Citric acid cost - ~20g per pan
-        const citricAcid = findChemicalByRole(inventory, settings, 'citric');
-        if (citricAcid) {
-            const costPerGram = getCostPerGram(citricAcid);
-            costs.chemicals = costPerGram * 20; // 20g per pan
+        // Acid cost (unpadded): this pan's share of the oven's citric solution,
+        // or vinegar for Stellina bases.
+        if (panUsesVinegar(pan, inventory)) {
+            const vinegar = findChemicalByRole(inventory, settings, 'vinegar');
+            if (vinegar) {
+                const s = chemSettings(settings);
+                const ml = s.vinegarPerPanMl * (pan.deepShade ? s.deepShadeMultiplier : 1);
+                costs.chemicals = getCostPerGram(vinegar) * ml;
+            }
+        } else {
+            const citricAcid = findChemicalByRole(inventory, settings, 'citric');
+            if (citricAcid) costs.chemicals = getCostPerGram(citricAcid) * panCitricGrams(pan, settings);
         }
 
         if (pan.type === 'gradientTray') {
@@ -585,7 +594,15 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             });
         }
 
-        costs.total = costs.yarn + costs.dye + costs.chemicals + costs.ballBands + costs.labels;
+        // Disposables (gradient-tray lids, a zip tie per skein), spread evenly
+        // over the pan's skeins.
+        costs.disposables = panDisposablesCost(pan, costs.skeins, settings, inventory);
+        if (costs.skeinDetails.length) {
+            const per = costs.disposables / costs.skeinDetails.length;
+            costs.skeinDetails.forEach(d => { d.cost += per; });
+        }
+
+        costs.total = costs.yarn + costs.dye + costs.chemicals + costs.disposables + costs.ballBands + costs.labels;
         costs.perSkein = costs.skeins > 0 ? costs.total / costs.skeins : 0;
 
         return costs;
@@ -729,7 +746,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         if (isSessionFinished(selectedSession, batches)) { toast('This session is already finished — its batches are in Pipeline.', 'error'); return; }
         if (finishing) return;
 
-        const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn, dye and acid from inventory\n- Remove this session from Dye Sessions`;
+        const confirmMessage = `Finish session "${selectedSession.name}"?\n\nThis will:\n- Create batches in Pipeline for each pan\n- Deduct yarn, dye, acid, lids and zip ties from inventory\n- Remove this session from Dye Sessions`;
 
         if (!(await confirmDialog({ title: 'Finish session', message: confirmMessage, confirmText: 'Finish' }))) return;
 
@@ -748,6 +765,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
         const updatedInventory = inventory.map(item => ({ ...item })); // copies: edited below before saving
         let citricGrams = 0, vinegarMl = 0;
+        const disposablesUsed = { lid: 0, zipTie: 0 };
 
         selectedSession.pans.forEach(pan => {
             // --- Yarn ---
@@ -779,6 +797,17 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             const acid = panAcidUsage(pan, settings, updatedInventory);
             if (acid.type === 'citric') citricGrams += acid.grams;
             else vinegarMl += acid.ml;
+
+            // --- Disposables (lids, zip ties) ---
+            const used = panDisposableCounts(pan, panSkeinCount(pan), settings);
+            DISPOSABLE_ROLES.forEach(role => { disposablesUsed[role] += used[role]; });
+        });
+
+        // Deduct lids and zip ties (counted in units).
+        DISPOSABLE_ROLES.forEach(role => {
+            if (disposablesUsed[role] <= 0) return;
+            const item = findDisposableItem(updatedInventory, settings, role);
+            if (item) item.quantity = Math.max(0, (parseFloat(item.quantity) || 0) - disposablesUsed[role]);
         });
 
         // Deduct citric acid, keeping its own unit.
@@ -815,7 +844,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         setCurrentPanIndex(0);
         setFinishing(false);
 
-        toast('Session finished! Batches added to Pipeline; yarn, dye and acid deducted. Add any more notes on its batches in Pipeline.', 'success');
+        toast('Session finished! Batches added to Pipeline; yarn, dye, acid and disposables deducted. Add any more notes on its batches in Pipeline.', 'success');
     };
 
     return (

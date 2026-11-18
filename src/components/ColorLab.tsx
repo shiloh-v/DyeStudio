@@ -181,7 +181,6 @@ export function ColorLab({ colorSketches, saveColorSketches, settings, inventory
                 })) : [],
                 totalMl: '2400',
                 stockSolutionPercent: '1',
-                citricAcidPerBatch: '1',
                 instructions: sketch.notes || '',
                 photo: sketch.photo || '',
                 photos: sketch.photo ? [{ id: Date.now(), data: sketch.photo, label: 'Photo' }] : [],

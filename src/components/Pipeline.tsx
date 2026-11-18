@@ -497,9 +497,10 @@ export function Pipeline({ batches, saveBatches, recipes, inventory, saveInvento
                             ['Yarn', batch.costBreakdown.yarn],
                             ['Dye', batch.costBreakdown.dye],
                             ['Chemicals', batch.costBreakdown.chemicals],
+                            ['Disposables', batch.costBreakdown.disposables],
                             ['Ball Bands', batch.costBreakdown.ballBands],
                             ['Labels', batch.costBreakdown.labels],
-                        ] as [string, number][]).map(([label, val]) => (
+                        ] as [string, number | undefined][]).filter(([label, val]) => label !== 'Disposables' || val != null).map(([label, val]) => (
                             <div key={label} className="flex justify-between text-gray-700">
                                 <span>{label}:</span>
                                 <span className="font-medium">${(val || 0).toFixed(2)}</span>

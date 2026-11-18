@@ -534,6 +534,7 @@ export function YarnDyeManager() {
                             settings={settings}
                             saveSettings={saveSettings}
                             inventory={inventory}
+                            saveInventory={saveInventory}
                             darkMode={darkMode}
                             toggleDark={toggleDark}
                         />

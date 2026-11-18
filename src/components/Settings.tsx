@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { confirmDialog } from '../lib/dialog';
 import { toast } from '../lib/toast';
-import { chemSettings } from '../lib/chemicals';
+import { chemSettings, OVEN_SPACES } from '../lib/chemicals';
+import { disposableUsage, findDisposableItem, DISPOSABLE_ROLES, DISPOSABLE_NEW_ITEM, DISPOSABLE_LABEL } from '../lib/disposables';
 
-export function Settings({ settings, saveSettings, inventory, darkMode, toggleDark }) {
+export function Settings({ settings, saveSettings, inventory, saveInventory, darkMode, toggleDark }) {
     const [activeSection, setActiveSection] = useState('colorTypes');
     const [newItem, setNewItem] = useState('');
     const [newSizeMapping, setNewSizeMapping] = useState({ grams: '', name: '' });
@@ -11,6 +12,30 @@ export function Settings({ settings, saveSettings, inventory, darkMode, toggleDa
     const chem = chemSettings(settings);
     const setChem = (field, value) =>
         saveSettings({ ...settings, chemicals: { ...(settings.chemicals || {}), [field]: value } });
+    const disp = disposableUsage(settings);
+    const setDisp = (field, value) =>
+        saveSettings({ ...settings, disposables: { ...(settings.disposables || {}), [field]: value } });
+
+    // Create a disposable as an inventory item (cost per item from the pack
+    // price), then pin it so renaming it never breaks costing or deductions.
+    const addDisposableItem = async (role) => {
+        const d = DISPOSABLE_NEW_ITEM[role];
+        const id = Date.now();
+        const item = {
+            id,
+            name: d.name,
+            category: 'tool',
+            unit: 'units',
+            quantity: '0',
+            cost: (d.packPrice / d.packCount).toFixed(4),
+            lowStockThreshold: String(d.lowStockThreshold),
+            notes: `$${d.packPrice.toFixed(2)} for ${d.packCount}`,
+        };
+        if (await saveInventory([...(inventory || []), item])) {
+            setDisp(role + 'ItemId', String(id));
+            toast(`Added “${d.name}” to Inventory. Set how many you have on hand there.`, 'success');
+        }
+    };
 
     const sections = {
         colorTypes: { label: 'Color Types', key: 'colorTypes' },
@@ -115,14 +140,16 @@ export function Settings({ settings, saveSettings, inventory, darkMode, toggleDa
                 </p>
                 <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Citric acid per pan (g)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Citric acid per full oven (g)</label>
                         <input
-                            type="number" step="1" min="0"
-                            value={chem.citricAcidPerPanG}
-                            onChange={(e) => setChem('citricAcidPerPanG', e.target.value)}
+                            type="number" step="10" min="0"
+                            value={chem.citricAcidPerOvenG}
+                            onChange={(e) => setChem('citricAcidPerOvenG', e.target.value)}
                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                         />
-                        <p className="text-xs text-gray-400 mt-1">≈ 1 heaping tbsp ≈ 20 g</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                            One solution for all {OVEN_SPACES} spaces ≈ {(chem.citricAcidPerOvenG / OVEN_SPACES).toFixed(1)} g per pan (gradient tray ×2, dye square ×4)
+                        </p>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Vinegar per pan (ml)</label>
@@ -142,7 +169,7 @@ export function Settings({ settings, saveSettings, inventory, darkMode, toggleDa
                             onChange={(e) => setChem('deepShadeMultiplier', e.target.value)}
                             className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
                         />
-                        <p className="text-xs text-gray-400 mt-1">Extra acid for pans marked “deep shade”</p>
+                        <p className="text-xs text-gray-400 mt-1">Extra vinegar for pans marked “deep shade”</p>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Safety padding (%)</label>
@@ -182,6 +209,67 @@ export function Settings({ settings, saveSettings, inventory, darkMode, toggleDa
                         </select>
                         <p className="text-xs text-gray-400 mt-1">For Stellina bases</p>
                     </div>
+                </div>
+            </div>
+
+            {/* Disposables (lids, zip ties) — inventory items */}
+            <div className="bg-white rounded-lg card-shadow p-6">
+                <h3 className="text-lg font-semibold mb-1">Disposables</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Lids and zip ties are inventory items: their cost per item is added to each
+                    batch, finishing a session deducts what was used, and they show a low-stock
+                    warning like any other supply. Edit price, count and warning level in Inventory.
+                </p>
+                <div className="space-y-4">
+                    {DISPOSABLE_ROLES.map((role) => {
+                        const item = findDisposableItem(inventory, settings, role);
+                        const usageKey = role === 'lid' ? 'lidsPerGradientTray' : 'zipTiesPerSkein';
+                        return (
+                            <div key={role} className="grid sm:grid-cols-3 gap-4 items-start border-t border-gray-100 pt-4 first:border-t-0 first:pt-0">
+                                <div className="sm:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{DISPOSABLE_LABEL[role]} item</label>
+                                    <select
+                                        value={settings.disposables?.[role + 'ItemId'] || ''}
+                                        onChange={(e) => setDisp(role + 'ItemId', e.target.value)}
+                                        className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-teal-500"
+                                    >
+                                        <option value="">Auto-detect (name contains “{role === 'lid' ? 'lid' : 'zip tie'}”)</option>
+                                        {(inventory || []).filter(i => i.category !== 'dye' && i.category !== 'yarn base').map(i => (
+                                            <option key={i.id} value={i.id}>{i.name}</option>
+                                        ))}
+                                    </select>
+                                    {item ? (
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Using “{item.name}”: ${(parseFloat(item.cost) || 0).toFixed(3)} each, {parseFloat(item.quantity) || 0} on hand
+                                        </p>
+                                    ) : (
+                                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            <span className="text-xs text-amber-700">Not in inventory, so not costed or deducted.</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => addDisposableItem(role)}
+                                                className="text-xs bg-teal-600 text-white px-3 py-1 rounded-lg hover:bg-teal-700 font-medium"
+                                            >
+                                                Add to inventory (${DISPOSABLE_NEW_ITEM[role].packPrice.toFixed(2)} for {DISPOSABLE_NEW_ITEM[role].packCount})
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {role === 'lid' ? 'Lids per gradient tray' : 'Zip ties per skein'}
+                                    </label>
+                                    <input
+                                        type="number" step="1" min="0"
+                                        value={disp[usageKey]}
+                                        onChange={(e) => setDisp(usageKey, e.target.value)}
+                                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500"
+                                    />
+                                    {role === 'lid' && <p className="text-xs text-gray-400 mt-1">One per depth of shade</p>}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
