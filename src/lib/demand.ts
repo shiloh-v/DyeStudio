@@ -757,6 +757,23 @@ export const isTexturedColor = (x: any) => /variegated|speckled/i.test(String(x?
  */
 export const MAX_COMBOS_PER_BATCH = 2;
 const comboOf = (base: string, hankSize: number) => `${base}||${hankSize}`;
+/**
+ * How much undyed yarn on hand steers the plan's flexible choices (which second
+ * combo a batch dyes, top-up skeins, spare-rack colors). Demand always decides
+ * which colors are dyed and the skeins they need.
+ *   demand   — sales only (yarn on hand just orders the batches)
+ *   balanced — prefer yarn on hand when the choices are close (default)
+ *   stock    — use yarn on hand wherever demand leaves room
+ */
+export type StockBias = 'demand' | 'balanced' | 'stock';
+export const STOCK_BIAS_WEIGHT: Record<StockBias, number> = { demand: 0, balanced: 1, stock: 3 };
+export const STOCK_BIAS_LABEL: Record<StockBias, string> = { demand: 'Demand first', balanced: 'Balanced', stock: 'Use my yarn' };
+/** Share of a full pair (2 × 300g) the shelf holds of a combo, 0–1. */
+const shelfPairShare = (shelf: Map<string, number> | undefined, k: string) => {
+    const h = Number(k.split('||')[1]) || 0;
+    return Math.max(0, Math.min(1, ((shelf?.get(k) || 0) * h) / (2 * PAN_GRAMS)));
+};
+
 export const comboName = (k: string) => { const [b, h] = k.split('||'); return `${b} ${h}g`; };
 
 /** One colorway as the batch planner sees it: combo → weight (sales need first, then its sales mix). */
@@ -778,6 +795,9 @@ export interface AssignOptions {
     allCombos?: string[];                     // every default-base combo (to complete a batch's pair)
     feasible?: (combos: string[]) => boolean; // can these combos alone fill a 2 × 300g pair?
     prior?: (combo: string) => number;        // shop-wide share (tie-break for a combo nobody here needs)
+    canPair?: (combos: string[], need: string, qty: number) => boolean; // can `qty` of `need` make a full pair with these combos?
+    shelf?: Map<string, number>;              // spare undyed skeins per combo (base||size)
+    shelfWeight?: number;                     // STOCK_BIAS_WEIGHT: how much yarn on hand sways the combo choice
 }
 
 /**
@@ -804,6 +824,60 @@ export function assignBatches(
 ): { slots: BatchSlot[]; noCombo: string[] } {
     const feasible = o.feasible || (() => true);
     const prior = o.prior || (() => 0);
+    const shelfWeight = o.shelfWeight || 0;
+    // Yarn left on the shelf as batches claim it. Mirrors how the pair gets
+    // built: needs in this batch's combos, raised to the size's minimum, kept
+    // in order while they fit 2 × 300g; the rest of the pair is topped up in
+    // the first kept combo (or split over the combos when nothing was needed).
+    const shelf = new Map(o.shelf || []);
+    const use = (k: string, grams: number) => {
+        const h = Number(k.split('||')[1]) || 1;
+        shelf.set(k, (shelf.get(k) || 0) - grams / h);
+    };
+    const claim = (combos: string[], got: BatchCandidate[]) => {
+        for (const c of got) {
+            let used = 0;
+            const kept: string[] = [];
+            c.weights.forEach((w, k) => {
+                if (!combos.includes(k)) return;
+                const h = Number(k.split('||')[1]) || 1;
+                const qty = Math.floor(w / 1000 / h);
+                if (qty <= 0) return;
+                const b = sizeBounds(h);
+                const g = Math.min(b.max, Math.max(b.min, qty)) * h;
+                if (used + g > 2 * PAN_GRAMS) return;
+                used += g; kept.push(k); use(k, g);
+            });
+            const rest = 2 * PAN_GRAMS - used;
+            if (rest <= 0) continue;
+            if (kept.length) use(kept[0], rest);
+            else combos.forEach((k) => use(k, rest / combos.length));
+        }
+    };
+    // A color that needs several base/sizes is placed by its most-needed one;
+    // with yarn on hand counting, a size the shelf covers moves ahead of one
+    // that has to be ordered (that one waits for a later batch).
+    const top = (c: BatchCandidate) => {
+        if (!shelfWeight || !c.needBased) return topCombo(c);
+        let best: string | undefined, bestW = -1;
+        c.weights.forEach((w, k) => {
+            const sh = shelfPairShare(shelf, k);
+            const eff = (w * (1 + shelfWeight * sh)) / (1 + shelfWeight * (1 - sh));
+            if (eff > bestW) { bestW = eff; best = k; }
+        });
+        return best;
+    };
+    // …and only joins a batch whose combos can make a full pair around that
+    // need (e.g. 50g skeins can't share a pair with 100g ones — SIZE_BOUNDS).
+    const fits = (c: BatchCandidate, combos: string[]) => {
+        if (!c.needBased) return coverage(c, combos) > 0;
+        const k = top(c)!;
+        if (!combos.includes(k)) return false;
+        const h = Number(k.split('||')[1]) || 1;
+        return !o.canPair || o.canPair(combos, k, Math.floor((c.weights.get(k) || 0) / 1000 / h));
+    };
+    const shelfBonus = (add: string[], got: BatchCandidate[]) => shelfWeight * 0.5 * add.reduce((t, k) =>
+        t + shelfPairShare(shelf, k) * Math.min(1, got.filter((c) => (c.weights.get(k) || 0) > 0).length / 2), 0);
     const slots: BatchSlot[] = [];
     const noCombo = colorways.filter((c) => !topCombo(c)).map((c) => c.colorway);
     let rest = colorways.filter((c) => topCombo(c));
@@ -830,7 +904,7 @@ export function assignBatches(
             let textured = texturedPans(s);
             for (const c of pool) {
                 if (out.length >= room) break;
-                if (!anyCombo && !fitsCombos(c, combos)) continue;
+                if (!anyCombo && !fits(c, combos)) continue;
                 // A textured color past the batch's limit waits for a later batch.
                 if (c.textured && textured + 2 > MAX_TEXTURED_PANS_PER_BATCH) continue;
                 if (c.textured) textured += 2;
@@ -851,11 +925,13 @@ export function assignBatches(
             const got = pick(combos);
             // Fewer combos win a tie; then the combo the shop sells more of.
             const score = (ok ? 1e6 : 0) + got.reduce((t, c) => t + coverage(c, combos), 0)
+                + shelfBonus(add, got)
                 + add.reduce((t, k) => t + prior(k), 0) * 1e-4 - add.length * 1e-6;
             if (!best || score > best.score + 1e-9) best = { combos, got, score };
         }
         s.combos = best!.combos;
         s.colorways.push(...best!.got.map((c) => c.colorway));
+        claim(s.combos, best!.got);
         texturedIn.set(s, (texturedIn.get(s) || 0) + 2 * best!.got.filter((c) => c.textured).length);
         return best!.got;
     };
@@ -866,7 +942,7 @@ export function assignBatches(
             s.combos = [...labCombos];
         } else {
             // The most urgent colorway left always makes this batch.
-            s.combos = [topCombo(rest[0])!];
+            s.combos = [top(rest[0])!];
         }
         const got = fillSlot(s, rest);
         rest = rest.filter((c) => !got.includes(c));
@@ -935,7 +1011,8 @@ export interface RestockOptions {
     mix?: (colorway: string) => { base: string; hankSize: number; share: number }[]; // colorway's sales mix
     globalMix?: { base: string; hankSize: number; share: number }[];                  // shop-wide mix (tie-breaks)
     sizesFor?: (base: string) => number[];                                             // catalog sizes of a base
-    stock?: Map<string, number>;                         // (unused; kept for callers)
+    stock?: Map<string, number>;                         // spare undyed skeins per base||size (top-ups use it up)
+    stockWeight?: number;                                // STOCK_BIAS_WEIGHT: prefer top-ups from `stock`
     isSpecialty?: (base: string) => boolean;             // bases never used automatically
     combos?: string[];                                   // only these base||size combos (the batch's two)
 }
@@ -1001,11 +1078,11 @@ export function buildRestockPans(
             // two combos, exactly those two. A color that only sells on a
             // specialty base is planned in the shop's overall default-base mix.
             const mix = fillMix(colorway, opts, special).filter((m) => !opts.combos || opts.combos.includes(comboOf(m.base, m.hankSize)));
-            const cand = new Map<string, { key: string; base: string; hankSize: number; share: number; need: number; global: number }>();
+            const cand = new Map<string, { key: string; base: string; hankSize: number; share: number; need: number; global: number; shelf: number }>();
             const globalShare = new Map((opts.globalMix || []).map((m) => [`${m.base}||${m.hankSize}`, m.share]));
             const add = (base: string, hankSize: number, share: number) => {
                 const key = `${base}||${hankSize}`;
-                if (!cand.has(key)) cand.set(key, { key, base, hankSize, share, need: need.get(key)?.need || 0, global: globalShare.get(key) || 0 });
+                if (!cand.has(key)) cand.set(key, { key, base, hankSize, share, need: need.get(key)?.need || 0, global: globalShare.get(key) || 0, shelf: opts.stock?.get(key) || 0 });
             };
             need.forEach((v) => add(v.base, v.hankSize, 0));
             mix.forEach((m) => { const c = cand.get(`${m.base}||${m.hankSize}`); if (c) c.share = m.share; else add(m.base, m.hankSize, m.share); });
@@ -1021,7 +1098,7 @@ export function buildRestockPans(
             // urgent need and try again.
             let opts2 = options;
             for (;;) {
-                const solved = solvePairCounts(opts2, 2, capacity);
+                const solved = solvePairCounts(opts2, 2, capacity, opts.stockWeight || 0);
                 if (solved) { counts = solved.counts; split = solved.split; break; }
                 const needed = opts2.filter((o) => o.need > 0);
                 if (!needed.length) break;
@@ -1060,6 +1137,8 @@ export function buildRestockPans(
             const e = Math.max(0, c - raw);
             if (e > 0) extraLeft.set(k, e);
             topUps += e;
+            // This pair's skeins come off the shelf for the batches after it.
+            if (opts.stock) opts.stock.set(k, (opts.stock.get(k) || 0) - c);
         });
         for (const pan of split) {
             const yarns = pan.filter((y) => y.n > 0).map((y) => ({ base: y.base, hankSize: y.hankSize, quantity: y.n }));
@@ -1097,9 +1176,10 @@ export function buildRestockPans(
  * extra, and fewer distinct base/sizes is slightly preferred).
  */
 export function solvePairCounts(
-    options: { key: string; base: string; hankSize: number; share: number; need: number; global?: number }[],
+    options: { key: string; base: string; hankSize: number; share: number; need: number; global?: number; shelf?: number }[],
     nPans: number,
-    capacity: number
+    capacity: number,
+    shelfWeight = 0
 ): { counts: Map<string, number>; split: { key: string; base: string; hankSize: number; n: number }[][] } | null {
     const total = nPans * capacity;
     const opts = [...options].sort((a, b) => b.need - a.need || b.share - a.share || b.hankSize - a.hankSize);
@@ -1127,6 +1207,9 @@ export function solvePairCounts(
                 // buys that base/size at all (e.g. Nova Fingering 50g).
                 if (o.share === 0 && o.need === 0) score += (o.global ? 0.5 : 1) * c[k] * o.hankSize;
                 if (c[k] > 0) score += 5;
+                // Top-up skeins (beyond the need) the shelf can't cover have
+                // to be ordered.
+                if (shelfWeight > 0) score += shelfWeight * 0.5 * Math.max(0, c[k] - Math.max(o.need, o.shelf || 0)) * o.hankSize;
             });
             if (best && score >= best.score) return;
             const split = splitIntoPans(opts.map((o, k) => ({ key: o.key, base: o.base, hankSize: o.hankSize, n: c[k] })), nPans, capacity);
@@ -1189,6 +1272,7 @@ export interface RestockPlanInput {
     windowDays?: number;
     labTests?: any[];               // Color Lab sketches to test (each as a pair of colorLab pans)
     forceBatch?: boolean;           // plan a batch even if nothing is running low
+    stockBias?: StockBias;          // how much yarn on hand steers the plan (default balanced)
 }
 
 /**
@@ -1254,13 +1338,12 @@ export function planRestock(input: RestockPlanInput) {
 
     const gradientDyes = dyesNeedingGradient(input.inventory, input.gradients, input.sessions);
     const trayYarn = gradientTrayYarn(input.sessions, ctx);
-    // Spare undyed yarn (for odd gaps) = Inventory − minimums − planned − picks − trays.
-    const free = undyedStock(input.inventory, ctx, true);
-    const take = (k: string, q: number) => free.set(k, (free.get(k) || 0) - q);
-    input.plannedByBaseSize.forEach((q, k) => take(k, q));
-    chosen.forEach((c) => take(`${c.base}||${c.hankSize}`, c.qty));
-    take(`${trayYarn.base}||${trayYarn.hankSize}`, Math.min(gradientDyes.length, Math.ceil(new Set(base.map((c) => c.colorway)).size / 8)) * 10);
-
+    // Undyed yarn on the shelf = Inventory − minimums − already-planned
+    // sessions. Batches use it up in order (needs, then top-ups), so the
+    // first batches lean on what you have and later ones show what to order.
+    const stockWeight = STOCK_BIAS_WEIGHT[input.stockBias || 'balanced'] ?? 1;
+    const shelfAtStart = undyedStock(input.inventory, ctx, true);
+    input.plannedByBaseSize.forEach((q, k) => shelfAtStart.set(k, (shelfAtStart.get(k) || 0) - q));
     const restockOpts: RestockOptions = {
         capacity: PAN_GRAMS,
         fill: input.fill,
@@ -1268,7 +1351,8 @@ export function planRestock(input: RestockPlanInput) {
         globalMix: salesMix('', input.inWindow, input.units),
         sizesFor: (b) => (ctx.catalog.find((x) => x.myName === b)?.sizes || []).map((z) => Number(z.amount)).filter((n) => n > 0),
         isSpecialty: (b) => isSpecialtyBase(b, ctx.catalog),
-        stock: free,
+        stock: new Map(shelfAtStart),
+        stockWeight,
     };
     const itemsOf = (list: typeof base, c: string) => list.filter((x) => x.colorway === c);
     const candidates = (list: typeof base) =>
@@ -1301,15 +1385,21 @@ export function planRestock(input: RestockPlanInput) {
         });
         addHave(input.supply?.onHand);
         addHave(input.supply?.coming);
+        // With yarn on hand counting, a seller whose mix the shelf covers
+        // moves up by up to 2 (balanced) or 6 (use my yarn) weeks of stock.
+        const shelfFit = (c: string) => fillMix(c, restockOpts, restockOpts.isSpecialty!)
+            .reduce((t, m) => t + m.share * shelfPairShare(shelfAtStart, comboOf(m.base, m.hankSize)), 0);
         const cover = (c: string) => {
             const perWeek = (sold.get(c) || 0) / weeks;
-            return perWeek > 0 ? (have.get(c) || 0) / perWeek : Infinity;
+            const weeksLeft = perWeek > 0 ? (have.get(c) || 0) / perWeek : Infinity;
+            return stockWeight > 0 && weeksLeft < Infinity ? weeksLeft - 2 * stockWeight * shelfFit(c) : weeksLeft;
         };
+        const byCover = (a: string, b: string) => { const x = cover(a), y = cover(b); return x === y ? 0 : x - y; };
         const allTime = new Map(byColorway(input.units).map((a) => [a.colorway!, a.units]));
         const ok = (c: string) => c && !taken.has(c) && !removed.has(c) && recipes.some((r) => r.name === c) && !retired(c);
         fillerNames = [...new Set([...byColorway(input.inWindow), ...byColorway(input.units)].map((a) => a.colorway!))]
             .filter(ok)
-            .sort((a, b) => cover(a) - cover(b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0));
+            .sort((a, b) => byCover(a, b) || (sold.get(b) || 0) - (sold.get(a) || 0) || (allTime.get(b) || 0) - (allTime.get(a) || 0));
         // Once the sellers run out, any other active color (least stock first)
         // so the last batch still fills every rack.
         const sellers = new Set(fillerNames);
@@ -1334,6 +1424,19 @@ export function planRestock(input: RestockPlanInput) {
         }
         return feasibleCache.get(key)!;
     };
+    const pairCache = new Map<string, boolean>();
+    const canPair = (combos: string[], need: string, qty: number) => {
+        const key = [...combos].sort().join('|') + '#' + need + '#' + qty;
+        if (!pairCache.has(key)) {
+            const opts = combos.map((k) => {
+                const [b, h] = k.split('||');
+                const bd = sizeBounds(Number(h));
+                return { key: k, base: b, hankSize: Number(h), share: 1, need: k === need ? Math.min(bd.max, Math.max(bd.min, qty)) : 0 };
+            });
+            pairCache.set(key, !!solvePairCounts(opts, 2, PAN_GRAMS));
+        }
+        return pairCache.get(key)!;
+    };
     const priorShare = new Map((restockOpts.globalMix || []).map((m) => [comboOf(m.base, m.hankSize), m.share]));
     const { slots, noCombo } = assignBatches(
         candidates(base),
@@ -1343,7 +1446,8 @@ export function planRestock(input: RestockPlanInput) {
         gradientDyes.length,
         !!input.forceBatch,
         {
-            allCombos, feasible, prior: (k) => priorShare.get(k) || 0,
+            allCombos, feasible, canPair, prior: (k) => priorShare.get(k) || 0,
+            shelf: shelfAtStart, shelfWeight: stockWeight,
             texturedLabs: new Set([...labByName.entries()].filter(([, k]) => isTexturedColor(k)).map(([n]) => n)),
         }
     );
