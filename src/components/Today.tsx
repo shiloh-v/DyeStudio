@@ -33,7 +33,13 @@ export function Today({ recipes, inventory, batches, sales, kits, settings, dyeS
     // The one the Queue is partway through wins; otherwise the next dated session.
     const live = (dyeSessions || []).filter((s) => !isSessionFinished(s, batches) && (s.pans || []).length);
     const savedId = localStorage.getItem('queue_session') || '';
-    const doneCount = (id: any): number => { try { return JSON.parse(localStorage.getItem('queue_done_' + id) || '[]').length; } catch { return 0; } };
+    // Pans dyed, plus speckled bases waiting on their speckles.
+    const doneCount = (id: any): number => {
+        let n = 0;
+        try { n += JSON.parse(localStorage.getItem('queue_done_' + id) || '[]').length; } catch { /* ignore */ }
+        try { n += Object.keys(JSON.parse(localStorage.getItem('queue_base_' + id) || '{}') || {}).length; } catch { /* ignore */ }
+        return n;
+    };
     const inProgress = live.find((s) => String(s.id) === savedId && doneCount(s.id) > 0);
     // Falls back to an undated draft: the Queue can still run it.
     const next = inProgress
@@ -43,7 +49,7 @@ export function Today({ recipes, inventory, batches, sales, kits, settings, dyeS
     const openQueue = () => {
         if (next && String(next.id) !== savedId) {
             localStorage.setItem('queue_session', String(next.id));
-            localStorage.setItem('queue_pan', '0');
+            localStorage.setItem('queue_step', '0');
         }
         setActiveTab('queue');
     };

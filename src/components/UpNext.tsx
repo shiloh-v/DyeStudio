@@ -8,7 +8,7 @@ import { findDyeItem } from '../lib/dyeMatch';
 import { findLabelItem, findChemicalByRole } from '../lib/roleMatch';
 import { panAcidUsage, panCitricGrams, panUsesVinegar, chemSettings } from '../lib/chemicals';
 import { panDisposablesCost, panDisposableCounts, panSkeinCount, findDisposableItem, DISPOSABLE_ROLES } from '../lib/disposables';
-import { scaleIngredients, ScaledAmounts } from '../lib/dyeScale';
+import { scaleIngredients, ScaledAmounts, needsSpeckleSplit } from '../lib/dyeScale';
 import { dyeGramsForPan } from '../lib/dyeUsage';
 import { PanPhotos, photosOf, MissingPhotos, PAN_PHOTO_LABELS } from './PanPhotos';
 import { panMainPhoto, panSource } from '../lib/panPhotos';
@@ -55,9 +55,12 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     const findYarnBaseItem = (inv, ref, hank?) => _findYarnBaseItem(inv, ref, hank, _yarnCatalog);
     const findBallBand = (inv, ref, hank?) => _findBallBand(inv, ref, hank, _yarnCatalog);
     const [selectedSessionId, setSelectedSessionId] = useState(() => localStorage.getItem('queue_session') || '');
-    const [currentPanIndex, setCurrentPanIndex] = useState(() => Number(localStorage.getItem('queue_pan')) || 0);
+    // Position in the session's list of steps (see `steps` below).
+    const [stepPos, setStepPos] = useState(() => Number(localStorage.getItem('queue_step')) || 0);
     // Pan indices marked "dyed" this session (fills the progress dots).
     const [completedPans, setCompletedPans] = useState(() => new Set<number>());
+    // Speckled pans whose base bath is done (pan index → when), waiting on speckles.
+    const [baseDone, setBaseDone] = useState<Record<number, string>>({});
     // In-flight lock so a double-tap on "Finish" can't deduct/create twice.
     const [finishing, setFinishing] = useState(false);
 
@@ -101,7 +104,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         if (!stillActive) {
             if (upcomingSessions.length > 0) {
                 setSelectedSessionId(upcomingSessions[0].id.toString());
-                setCurrentPanIndex(0);
+                setStepPos(0);
             } else if (selectedSessionId) {
                 setSelectedSessionId('');
             }
@@ -109,7 +112,6 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     }, [upcomingSessions.length, selectedSessionId]);
 
     const selectedSession = dyeSessions.find(s => s.id === parseInt(selectedSessionId));
-    const currentPan = selectedSession?.pans[currentPanIndex];
     // A finished (archived) session is shown read-only for review + note-taking.
     // Batches existing counts as finished even if the archived flag got wiped.
     const isFinished = isSessionFinished(selectedSession, batches);
@@ -120,6 +122,9 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
     // a color collapse into one "step": plain pans by recipe + colorway, Color Lab
     // pans by their sketch. Trays and ad-hoc pans always stand alone (null key).
     // Prefixed keys keep the two types from ever grouping with each other.
+    const recipeFor = (pan) => pan?.recipeId
+        ? recipes.find(r => r.id === parseInt(pan.recipeId))
+        : (pan?.recipe || null);
     const groupKeyFor = (pan) => {
         if (!pan) return null;
         if (pan.type === 'pan') return `pan|${pan.recipeId || ''}|${(pan.colorway || '').trim().toLowerCase()}`;
@@ -141,11 +146,31 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
             groups.push({ indices, key });
             i = j;
         }
-        return groups;
+        // Speckled colors with a base bath AND speckle powder take two steps:
+        // A (base) stays in its place — speckled pans are dyed first — and
+        // B (speckles) moves to the very end, after everything else has gone in,
+        // since the base has to sit and be drained before the powder goes on.
+        type Step = { indices: number[]; key: string | null; phase: 'all' | 'base' | 'speckle' };
+        const steps: Step[] = [];
+        const speckleSteps: Step[] = [];
+        groups.forEach(g => {
+            const p = pans[g.indices[0]];
+            const split = (p?.type === 'pan' || p?.type === 'colorLab')
+                && needsSpeckleSplit(recipeFor(p), p.type === 'colorLab' ? p.colorSketch : null);
+            if (split) {
+                steps.push({ ...g, phase: 'base' });
+                speckleSteps.push({ ...g, phase: 'speckle' });
+            } else steps.push({ ...g, phase: 'all' });
+        });
+        return [...steps, ...speckleSteps];
     })();
-    const currentGroup = panGroups.find(g => g.indices.includes(currentPanIndex)) || panGroups[0];
-    const currentGroupPos = currentGroup ? panGroups.indexOf(currentGroup) : 0;
-    const groupIsDone = (g) => !!g && g.indices.every(i => completedPans.has(i));
+    const currentGroupPos = Math.min(stepPos, Math.max(0, panGroups.length - 1));
+    const currentGroup = panGroups[currentGroupPos];
+    const currentPanIndex = currentGroup ? currentGroup.indices[0] : 0;
+    const currentPan = selectedSession?.pans[currentPanIndex];
+    const phase = currentGroup?.phase || 'all';
+    const groupIsDone = (g) => !!g && g.indices.every(i =>
+        completedPans.has(i) || (g.phase === 'base' && !!baseDone[i]));
     // Derived view of the current step's pans (used by the regular-pan card so a
     // same-color group shows combined weight + each pan's yarns).
     const groupIndices = currentGroup ? currentGroup.indices : (currentPan ? [currentPanIndex] : []);
@@ -247,52 +272,83 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
 
     // Persist the Queue position so it survives navigating away/back.
     useEffect(() => { localStorage.setItem('queue_session', selectedSessionId); }, [selectedSessionId]);
-    useEffect(() => { localStorage.setItem('queue_pan', String(currentPanIndex)); }, [currentPanIndex]);
-    // Clamp a stale pan index (e.g. a saved index beyond a now-shorter session).
+    useEffect(() => { localStorage.setItem('queue_step', String(stepPos)); }, [stepPos]);
+    // Clamp a stale step (e.g. a saved position beyond a now-shorter session).
     useEffect(() => {
-        if (selectedSession && currentPanIndex >= selectedSession.pans.length) setCurrentPanIndex(0);
-    }, [selectedSessionId, selectedSession, currentPanIndex]);
+        if (selectedSession && stepPos >= panGroups.length) setStepPos(0);
+    }, [selectedSessionId, selectedSession, stepPos, panGroups.length]);
 
     // Load which pans are marked dyed for this session (persisted per session).
     useEffect(() => {
         try {
             setCompletedPans(new Set(JSON.parse(localStorage.getItem('queue_done_' + selectedSessionId) || '[]')));
         } catch { setCompletedPans(new Set()); }
+        try {
+            setBaseDone(JSON.parse(localStorage.getItem('queue_base_' + selectedSessionId) || '{}') || {});
+        } catch { setBaseDone({}); }
     }, [selectedSessionId]);
 
     const saveCompleted = (set) =>
         localStorage.setItem('queue_done_' + selectedSessionId, JSON.stringify([...set]));
-
-    // Mark every pan in the current step dyed (fills its dot) and advance.
-    const completeGroup = () => {
-        const next = new Set(completedPans);
-        (currentGroup?.indices || [currentPanIndex]).forEach(i => next.add(i));
-        setCompletedPans(next);
-        saveCompleted(next);
-        if (currentGroupPos < panGroups.length - 1) {
-            setCurrentPanIndex(panGroups[currentGroupPos + 1].indices[0]);
-        }
+    const saveBaseDone = (map) => {
+        setBaseDone(map);
+        localStorage.setItem('queue_base_' + selectedSessionId, JSON.stringify(map));
     };
 
-    // Undo "dyed" for the whole current step (no navigation).
+    // Mark every pan in the current step dyed (fills its dot) and advance.
+    // A speckled step A only records the base as done; the pan counts as dyed
+    // once its speckles (step B) are on.
+    const completeGroup = () => {
+        const indices = currentGroup?.indices || [currentPanIndex];
+        if (phase === 'base') {
+            const now = new Date().toISOString();
+            const next = { ...baseDone };
+            indices.forEach(i => { if (!next[i]) next[i] = now; });
+            saveBaseDone(next);
+        } else {
+            const next = new Set(completedPans);
+            indices.forEach(i => next.add(i));
+            setCompletedPans(next);
+            saveCompleted(next);
+        }
+        if (currentGroupPos < panGroups.length - 1) setStepPos(currentGroupPos + 1);
+    };
+
+    // Undo "dyed" for the whole current step (no navigation). Undoing a base
+    // also undoes its speckles.
     const unmarkGroup = () => {
+        const indices = currentGroup?.indices || [currentPanIndex];
+        if (phase === 'base') {
+            const nextBase = { ...baseDone };
+            indices.forEach(i => { delete nextBase[i]; });
+            saveBaseDone(nextBase);
+        }
         const next = new Set(completedPans);
-        (currentGroup?.indices || [currentPanIndex]).forEach(i => next.delete(i));
+        indices.forEach(i => next.delete(i));
         setCompletedPans(next);
         saveCompleted(next);
     };
 
     const goToPreviousGroup = () => {
-        if (currentGroupPos > 0) setCurrentPanIndex(panGroups[currentGroupPos - 1].indices[0]);
+        if (currentGroupPos > 0) setStepPos(currentGroupPos - 1);
     };
     const goToNextGroup = () => {
-        if (currentGroupPos < panGroups.length - 1) setCurrentPanIndex(panGroups[currentGroupPos + 1].indices[0]);
+        if (currentGroupPos < panGroups.length - 1) setStepPos(currentGroupPos + 1);
     };
 
-    // Label for a step's dot / heading: "3" for one pan, "3-4" for a group.
-    const groupLabel = (g) => g.indices.length > 1
+    // Label for a step's dot / heading: "3" for one pan, "3-4" for a group;
+    // speckled steps add A (base) / B (speckles).
+    const groupLabel = (g) => (g.indices.length > 1
         ? `${g.indices[0] + 1}-${g.indices[g.indices.length - 1] + 1}`
-        : `${g.indices[0] + 1}`;
+        : `${g.indices[0] + 1}`) + (g.phase === 'base' ? 'A' : g.phase === 'speckle' ? 'B' : '');
+    // "9:42 AM (3h 10m ago)" for when a speckled base went in.
+    const baseDoneAt = (indices) => {
+        const t = indices.map(i => baseDone[i]).filter(Boolean).sort()[0];
+        if (!t) return '';
+        const mins = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 60000));
+        const ago = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        return `${new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} (${ago} ago)`;
+    };
 
     // Shared step navigation (Back / Skip / Mark Dyed + jump dots + unmark),
     // used by every pan type. Steps over groups, not individual pans. A finished
@@ -322,6 +378,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     >
                         {groupIsDone(currentGroup)
                             ? 'Next →'
+                            : phase === 'base' ? '✓ Base Done — Speckle Later'
+                            : phase === 'speckle' ? '✓ Speckles Done'
                             : (currentGroup?.indices.length > 1 ? '✓ Mark Both Dyed' : '✓ Mark Dyed')}
                     </button>
                 </div>
@@ -330,8 +388,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                 {panGroups.map((g, gi) => (
                     <button
                         key={gi}
-                        onClick={() => setCurrentPanIndex(g.indices[0])}
-                        title={`${g.indices.length > 1 ? 'Pans' : 'Pan'} ${groupLabel(g)}${groupIsDone(g) ? ' — dyed' : ''}`}
+                        onClick={() => setStepPos(gi)}
+                        title={`${g.indices.length > 1 ? 'Pans' : 'Pan'} ${groupLabel(g)}${g.phase === 'base' ? ' — base' : g.phase === 'speckle' ? ' — speckles' : ''}${groupIsDone(g) ? ' — done' : ''}`}
                         className={`flex-shrink-0 min-w-9 h-9 px-2 rounded-full text-sm font-semibold transition-colors ${
                             groupIsDone(g)
                                 ? 'bg-teal-600 text-white'
@@ -347,16 +405,14 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                     onClick={unmarkGroup}
                     className="mt-2 text-sm text-gray-500 hover:text-gray-700 underline bg-transparent"
                 >
-                    ↩ Unmark {currentGroup?.indices.length > 1 ? 'these pans' : 'this pan'} as dyed
+                    ↩ Unmark {phase === 'base' ? 'base' : phase === 'speckle' ? 'speckles' : (currentGroup?.indices.length > 1 ? 'these pans' : 'this pan')} as {phase === 'all' ? 'dyed' : 'done'}
                 </button>
             )}
         </>
     );
     
     // Get fresh recipe data if pan has a recipe OR color sketch
-    const currentRecipe = currentPan?.recipeId 
-        ? recipes.find(r => r.id === parseInt(currentPan.recipeId))
-        : (currentPan?.recipe || null);
+    const currentRecipe = recipeFor(currentPan);
     
     // Get color sketch if this is a Color Lab pan
     const currentColorSketch = currentPan?.type === 'colorLab' && currentPan?.colorSketch 
@@ -841,7 +897,8 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
         // The finished session drops out of the Queue; the effect above moves on
         // to the next session.
         localStorage.removeItem('queue_done_' + selectedSession.id);
-        setCurrentPanIndex(0);
+        localStorage.removeItem('queue_base_' + selectedSession.id);
+        setStepPos(0);
         setFinishing(false);
 
         toast('Session finished! Batches added to Pipeline; yarn, dye, acid and disposables deducted. Add any more notes on its batches in Pipeline.', 'success');
@@ -870,7 +927,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                     value={selectedSessionId}
                                     onChange={(e) => {
                                         setSelectedSessionId(e.target.value);
-                                        setCurrentPanIndex(0);
+                                        setStepPos(0);
                                     }}
                                     className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-teal-500 text-lg font-medium"
                                 >
@@ -1153,12 +1210,31 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                 ) : (
                                     // Regular Pan Display
                                     <>
+                                {phase !== 'all' && (
+                                    <div className={`mb-4 rounded-lg px-4 py-3 border-2 ${phase === 'base' ? 'bg-blue-50 border-blue-300 text-blue-900' : 'bg-fuchsia-50 border-fuchsia-300 text-fuchsia-900'}`}>
+                                        {phase === 'base' ? (
+                                            <>
+                                                <div className="font-bold text-lg">Step A · Base bath</div>
+                                                <div className="text-sm">Dye the base and let it drain. The speckle powder is step {groupLabel(panGroups.find(g => g.phase === 'speckle' && g.indices[0] === currentGroup.indices[0]) || currentGroup).replace(/A$/, 'B')}, at the end of the queue.</div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="font-bold text-lg">Step B · Speckles</div>
+                                                <div className="text-sm">
+                                                    {baseDoneAt(currentGroup.indices)
+                                                        ? <>Base went in at {baseDoneAt(currentGroup.indices)}. Add the dry powder to the drained yarn.</>
+                                                        : <>Base not marked done yet (step {groupLabel(currentGroup).replace(/B$/, 'A')}). Add the dry powder to the drained yarn.</>}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="mb-4">
                                     <div className="flex justify-between items-start gap-4 mb-4">
                                         <div className="flex gap-4 items-start flex-1">
                                             <div className="flex-1">
                                                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
-                                                    🎨 {currentColorName(currentPan, recipes, colorSketches)}
+                                                    {phase === 'speckle' ? '✨' : '🎨'} {currentColorName(currentPan, recipes, colorSketches)}
                                                 </h3>
                                                 <p className="text-teal-700 font-medium mb-2">
                                                     {isMultiPan
@@ -1196,20 +1272,22 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                             {currentColorSketch
                                                 ? <>🧪 Color Lab: {currentColorSketch.colorId}{currentColorSketch.customName ? ' - ' + currentColorSketch.customName : ''}</>
                                                 : <>Recipe: {currentRecipe.name}</>}
+                                            {phase === 'base' && <span className="text-blue-700"> — base dyes only</span>}
+                                            {phase === 'speckle' && <span className="text-fuchsia-700"> — speckle powder only</span>}
                                         </h4>
                                         {!isMultiPan ? (
                                             <>
                                                 <p className="text-sm text-gray-500 mb-2">
                                                     Scaled from {currentColorSketch ? currentColorSketch.yarnWeight : currentRecipe.yarnWeight}g to {currentPan.totalWeight}g
                                                 </p>
-                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={currentPan.totalWeight} />
+                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={currentPan.totalWeight} part={phase === 'all' ? null : phase} />
                                             </>
                                         ) : uniformWeight != null ? (
                                             <>
                                                 <p className="text-sm text-amber-700 font-medium mb-2">
                                                     ⚠️ Mix this amount for EACH pan separately — {groupPans.length} pans, {uniformWeight}g each.
                                                 </p>
-                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={uniformWeight} />
+                                                <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={uniformWeight} part={phase === 'all' ? null : phase} />
                                             </>
                                         ) : (
                                             <div className="space-y-4">
@@ -1221,7 +1299,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                         <div className="font-semibold text-gray-700 mb-2">
                                                             Pan #{groupIndices[gi] + 1} — {p.totalWeight}g
                                                         </div>
-                                                        <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={parseFloat(p.totalWeight) || 0} />
+                                                        <ScaledAmounts recipe={currentRecipe} colorSketch={currentColorSketch} weight={parseFloat(p.totalWeight) || 0} part={phase === 'all' ? null : phase} />
                                                     </div>
                                                 ))}
                                             </div>
@@ -1306,7 +1384,7 @@ export function UpNext({ dyeSessions, saveDyeSessions, batches, saveBatches, inv
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex justify-between items-start gap-2">
                                                             <span className="font-medium text-gray-900">
-                                                                {g.indices.length > 1 ? `Pans ${groupLabel(g)}` : `Pan #${g.indices[0] + 1}`}: {panTitle(gp[0])}
+                                                                {g.indices.length > 1 ? `Pans ${groupLabel(g)}` : `Pan #${groupLabel(g)}`}: {g.phase === 'speckle' ? '✨ ' : ''}{panTitle(gp[0])}{g.phase === 'base' ? ' — base' : g.phase === 'speckle' ? ' — speckles' : ''}
                                                             </span>
                                                             <span className="text-sm text-gray-500 whitespace-nowrap">{wt}g</span>
                                                         </div>
