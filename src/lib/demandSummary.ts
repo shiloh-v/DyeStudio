@@ -8,7 +8,7 @@ import { isCountable, isOwnBrand, lineRevenue, type SaleLine } from './shopify';
 import {
     makeContext, allUnits, windowUnits, byCombo, byColorway, computeSupply, dyeNext, costLookup,
     plannedSkeins, yarnToOrder, daysAgo, planRestock, dyeCadence, projectedBatchYarn, salesMix,
-    labTestCandidates, gradientTrayYarn, comboKey, isSpecialtyBase, withComboMinimum, type Unit,
+    labTestCandidates, gradientTrayYarn, comboKey, isSpecialtyBase, withComboMinimum, type Unit, type StockBias,
 } from './demand';
 
 export const DEMAND_WINDOWS: { label: string; days: number | null }[] = [
@@ -27,6 +27,7 @@ export interface PlanEdits {
     fill: boolean;          // top pans to 300g + fill a short batch
     labTests?: string[];    // Color Lab sketch ids to test in the plan
     forceBatch?: boolean;   // plan a batch even when nothing is running low
+    stockBias?: StockBias;  // how much yarn on hand steers the plan
 }
 export const demandPrefs = {
     windowIdx: (): number => read('demand_window', 1),
@@ -129,6 +130,7 @@ export function demandSummary(input: DemandInput) {
             .map((id) => (input.colorSketches || []).find((k) => String(k.id) === String(id)))
             .filter(Boolean),
         forceBatch: !!edits.forceBatch,
+        stockBias: edits.stockBias || 'balanced',
     });
     // Stock up for the next N months of dyeing: batches at your pace, minus
     // the ones already planned (sessions) or in this plan; the rest are

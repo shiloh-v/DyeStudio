@@ -2,8 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { DateUtils } from '../lib/dates';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
-import { PAN_GRAMS, LAB_TESTS_PER_BATCH, comboLabel } from '../lib/demand';
+import { PAN_GRAMS, LAB_TESTS_PER_BATCH, comboLabel, STOCK_BIAS_LABEL, type StockBias } from '../lib/demand';
 import { DEMAND_WINDOWS, demandPrefs, demandSummary, type PlanEdits } from '../lib/demandSummary';
+
+const STOCK_BIASES: StockBias[] = ['demand', 'balanced', 'stock'];
+const STOCK_BIAS_HELP: Record<StockBias, string> = {
+    demand: 'Demand first: combos and top-ups follow sales only; missing yarn goes on the order.',
+    balanced: 'Balanced: sales decide the colors and skeins they need; when choices are close, yarn you already have wins.',
+    stock: 'Use my yarn: sales still decide the colors and skeins they need; everything else leans on yarn you have so you order less.',
+};
 
 const money = (n: number) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -54,7 +61,7 @@ export function Plan({ sales, batches, recipes, kits, settings, inventory, dyeSe
     }));
     const edited = edits.removed.length > 0 || edits.added.length > 0 || labIds.length > 0 || !!edits.forceBatch;
     const resetPlan = () => {
-        const fresh = { removed: [], added: [], fill: edits.fill, labTests: [], forceBatch: false };
+        const fresh = { removed: [], added: [], fill: edits.fill, labTests: [], forceBatch: false, stockBias: edits.stockBias };
         // Save now: drafting navigates away before the effect would persist it.
         demandPrefs.set('demand_plan_edits', fresh);
         setEdits(fresh);
@@ -387,11 +394,29 @@ function PlanPreview({ plan, planColorways, edits, setEdits, edited, resetPlan, 
         <div className="bg-white rounded-lg card-shadow p-6">
             <div className="flex flex-wrap justify-between items-center gap-3 mb-1">
                 <h3 className="text-lg font-semibold">📋 Batch plan</h3>
-                <label className="text-sm text-gray-600 flex items-center gap-2" title="Top each pan up to 300g in the bases/sizes that colorway sells in, and fill a short last batch with your next best sellers.">
-                    <input type="checkbox" checked={edits.fill} onChange={(e) => setEdits((x) => ({ ...x, fill: e.target.checked }))} />
-                    Fill pans to 300g
-                </label>
+                <div className="flex flex-wrap items-center gap-4">
+                    <div className="text-sm text-gray-600 flex items-center gap-2" title="How much your undyed yarn on hand steers the plan. Demand always decides which colors get dyed and the skeins they need; this sways the rest: each batch's second yarn combo, the top-up skeins that fill pans to 300g, and which best sellers take spare racks.">
+                        <span>Plan for</span>
+                        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden" role="group" aria-label="Demand vs yarn on hand">
+                            {STOCK_BIASES.map((b) => {
+                                const on = (edits.stockBias || 'balanced') === b;
+                                return (
+                                    <button key={b} type="button" aria-pressed={on}
+                                        onClick={() => setEdits((x) => ({ ...x, stockBias: b }))}
+                                        className={`px-2.5 py-1 text-xs border-l first:border-l-0 border-gray-300 ${on ? 'bg-teal-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+                                        {STOCK_BIAS_LABEL[b]}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    <label className="text-sm text-gray-600 flex items-center gap-2" title="Top each pan up to 300g in the bases/sizes that colorway sells in, and fill a short last batch with your next best sellers.">
+                        <input type="checkbox" checked={edits.fill} onChange={(e) => setEdits((x) => ({ ...x, fill: e.target.checked }))} />
+                        Fill pans to 300g
+                    </label>
+                </div>
             </div>
+            <p className="text-xs text-gray-500 mb-2">{STOCK_BIAS_HELP[edits.stockBias || 'balanced']}</p>
             <p className="text-sm text-gray-500 mb-4">
                 Built automatically from Dye next: each colorway as 2 × 300g pans, 9 racks per batch, at most 2 yarn combos (base + size, e.g. Nova Fingering 20g + Luna DK 50g) per batch, plus a gradient tray while dyes still need one. Batches your undyed yarn already covers come first. Pans are listed in dye order: speckled, then variegated, then tonal, each lightest to darkest. Remove or add colorways, then create the drafts. Everything stays editable in Dye Sessions.
             </p>
