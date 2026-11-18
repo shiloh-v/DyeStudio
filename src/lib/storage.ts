@@ -1,4 +1,5 @@
 import { supabase, getUserId } from './supabase';
+import { recordHistory } from './recipeHistory';
 
 // Collections backed by their own table. `settings` is handled specially.
 export type CollectionKey =
@@ -387,7 +388,10 @@ export const StorageManager = {
       if (prev !== undefined) {
         if (key === 'settings') return await saveSettingsChanges(prev, value, userId);
         if (!Array.isArray(value) || !Array.isArray(prev)) return false;
-        return await saveChanges(key, prev, value, userId);
+        const ok = await saveChanges(key, prev, value, userId);
+        // Log notes / recipe edits to the recipe history (fire-and-forget).
+        if (ok) void recordHistory(key, prev, value);
+        return ok;
       }
       if (key === 'settings') {
         const { error } = await supabase
