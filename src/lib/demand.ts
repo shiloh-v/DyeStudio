@@ -747,8 +747,8 @@ export function gradientTrayYarn(sessions: any[], ctx: DemandContext): { base: s
 }
 
 export const LAB_TESTS_PER_BATCH = 2;
-/** Most variegated/speckled pans in one batch (3 colorway pairs) — they take the longest to dye. */
-export const MAX_TEXTURED_PANS_PER_BATCH = 6;
+/** Most variegated/speckled pans in one batch (2 colorway pairs) — they take the longest to dye. */
+export const MAX_TEXTURED_PANS_PER_BATCH = 4;
 /** Variegated or speckled (colorway recipe colorType / Color Lab sketch type). */
 export const isTexturedColor = (x: any) => /variegated|speckled/i.test(String(x?.colorType || x?.type || ''));
 /**
